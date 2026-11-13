@@ -1,5 +1,7 @@
 -- Demo reservation/operations seed for ReservationDb.
 -- site_capacity_pools has no natural unique constraint, so use explicit existence checks.
+-- Match the Facility seed's 48 car spaces and 2 motorcycle capacity units.
+-- Reservation quotas are intentionally lower for cars. Preserve existing operational configurations.
 BEGIN;
 
 INSERT INTO site_capacity_pools (
@@ -11,7 +13,7 @@ SELECT
     :'site_id'::uuid,
     NULL,
     'CAR',
-    6,
+    48,
     4
 WHERE NOT EXISTS (
     SELECT 1
@@ -51,7 +53,7 @@ SELECT
     :'site_id'::uuid,
     NULL,
     'CAR',
-    6,
+    48,
     4,
     TRUE
 WHERE NOT EXISTS (

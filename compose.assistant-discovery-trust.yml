@@ -1,0 +1,9 @@
+# Public CA only; the Assistant never receives the owners' TLS private keys.
+services:
+  assistant:
+    entrypoint:
+      - /bin/sh
+      - -c
+      - update-ca-certificates > /dev/null && exec dotnet SmartParking.IoTService.API.dll
+    volumes:
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY:?Initialize discovery Docker}/discovery-ca.crt:/usr/local/share/ca-certificates/smartpark-discovery.crt:ro

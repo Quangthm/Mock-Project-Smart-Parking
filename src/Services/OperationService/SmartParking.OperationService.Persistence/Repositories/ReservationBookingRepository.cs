@@ -29,8 +29,9 @@ public sealed partial class ReservationRepository
         db.Reservations.AsNoTracking().SingleOrDefaultAsync(r => r.AccountId == accountId && r.Id == id && r.RequestId != null, ct);
 
     public async Task<IReadOnlyList<ReservationRow>> ListOwnBookingsAsync(Guid accountId, int take,
-        DateTimeOffset? before, Guid? beforeId, CancellationToken ct) =>
+        DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null) =>
         await db.Reservations.AsNoTracking().Where(r => r.AccountId == accountId && r.RequestId != null &&
+            (from == null || r.ExpectedStartTime < to && r.ExpectedEndTime > from) &&
             (before == null || r.CreatedAt < before || r.CreatedAt == before && r.Id.CompareTo(beforeId!.Value) < 0))
             .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(take).ToListAsync(ct);
 

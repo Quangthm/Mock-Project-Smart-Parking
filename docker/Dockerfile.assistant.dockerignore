@@ -1,0 +1,17 @@
+*
+!SmartParking.IoTService.API
+!SmartParking.IoTService.API/**
+!SmartParking.IoTService.Application
+!SmartParking.IoTService.Application/**
+!SmartParking.IoTService.Infrastructure
+!SmartParking.IoTService.Infrastructure/**
+!SmartParking.IoTService.Persistence
+!SmartParking.IoTService.Persistence/**
+**/bin
+**/obj
+**/.env
+**/.env.*
+**/.cache
+**/*.pem
+**/*.pfx
+**/*.key

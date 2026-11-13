@@ -19,6 +19,16 @@ let logoutInProgress = false
 // A refresh rotates credentials within a login; login/logout changes its identity.
 let sessionGeneration = 0
 export const getSessionGeneration = () => sessionGeneration
+const sessionListeners = new Set<() => void>()
+export const getAuthSessionGeneration = getSessionGeneration
+export function subscribeAuthSession(listener: () => void) {
+  sessionListeners.add(listener)
+  return () => { sessionListeners.delete(listener) }
+}
+function advanceSessionGeneration() {
+  sessionGeneration++
+  sessionListeners.forEach(listener => listener())
+}
 
 function requireSessionGeneration(expected: number) {
   if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")
@@ -125,7 +135,7 @@ function toUser(account: ApiUser): User {
 }
 
 function clearSession() {
-  sessionGeneration++
+  advanceSessionGeneration()
   sessionStorage.removeItem(tokenKey)
 
   sessionStorage.removeItem(refreshKey)
@@ -139,7 +149,7 @@ function saveLoginSession(response: ApiResponse<LoginSession>, isRefresh = false
     throw new Error("Invalid sign-in response.")
 
   const user = toUser(response.data.user)
-  if (!isRefresh) sessionGeneration++
+  if (!isRefresh) advanceSessionGeneration()
   sessionStorage.setItem(tokenKey, response.data.accessToken)
   sessionStorage.setItem(refreshKey, response.data.refreshToken)
   sessionStorage.setItem(expiryKey, String(Date.now() + response.data.expiresIn * 1000))
@@ -192,6 +202,14 @@ export async function ensureAccessToken(): Promise<string> {
   return sessionStorage.getItem(tokenKey) ?? ""
 }
 
+type AuthRequestOptions = {
+  expireSessionOnUnauthorized?: boolean
+  timeoutMs?: number
+  signal?: AbortSignal
+  redirect?: RequestRedirect
+  credentials?: RequestCredentials
+}
+
 export class ApiConnectionError extends Error {
   constructor() {
     super("Cannot reach the authentication server. Please try again.")
@@ -205,8 +223,10 @@ export async function request<T>(
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
   extraHeaders?: Record<string, string>,
-  responseFormat: "json" | "blob" = "json",
+  responseFormatOrOptions: "json" | "blob" | AuthRequestOptions = "json",
 ): Promise<T> {
+  const responseFormat = typeof responseFormatOrOptions === "string" ? responseFormatOrOptions : "json"
+  const options = typeof responseFormatOrOptions === "string" ? {} : responseFormatOrOptions
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
     await ensureAccessToken()
@@ -216,12 +236,17 @@ export async function request<T>(
 
   let response: Response
   const multipart = typeof FormData !== "undefined" && body instanceof FormData
+  const timeoutMs = options.timeoutMs ?? (multipart ? 60_000 : 10_000)
 
   try {
     response = await fetch(serverUrl + apiPrefix + path, {
       method,
       cache: "no-store",
-      signal: AbortSignal.timeout(multipart ? 60_000 : 10_000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs),
+      ...(options.redirect ? { redirect: options.redirect } : {}),
+      ...(options.credentials ? { credentials: options.credentials } : {}),
 
       headers: {
         ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
@@ -234,6 +259,7 @@ export async function request<T>(
       ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
+    if (options.signal?.aborted) throw new DOMException("Request cancelled.", "AbortError")
     throw new ApiConnectionError()
   }
 
@@ -251,6 +277,7 @@ export async function request<T>(
     const verificationFailed = isMfaManagement && ["AUTH_FAILED", "MFA_INVALID", "MFA_REQUIRED"].includes(payload?.code)
     if (
       response.status === 401 &&
+      options.expireSessionOnUnauthorized !== false &&
       token &&
       !anonymousPath(path, apiPrefix) && path !== "/logout" &&
       !verificationFailed &&

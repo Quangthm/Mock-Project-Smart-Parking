@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification')][string]$Service
+    [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification','Assistant')][string]$Service
 )
 $ErrorActionPreference = 'Stop'
 # Parking remains an alias so existing scripts and configuration continue to work.
@@ -22,6 +22,65 @@ if (!(Test-Path -LiteralPath $envFile -PathType Leaf)) {
 # Only UserService may receive raw or mapped private signing material.
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -IncludeUserServiceSigningSecrets:($Service -eq 'User')
 
+function Resolve-AssistantPath([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+    if ([IO.Path]::IsPathRooted($Value)) { return $Value }
+    return Join-Path (Split-Path -Parent (Resolve-Path -LiteralPath $envFile).Path) $Value
+}
+
+if ($Service -eq 'Assistant') {
+    foreach ($name in @('Assistant__Jwt__PublicKeyFile','Assistant__Management__KeyDirectory',
+        'Assistant__Guest__KnowledgeDirectory','Assistant__Management__KeyEncryptionCertificatePath')) {
+        $configuredPath = [string]$settings[$name]
+        if (!$configuredPath) { continue }
+        $resolvedPath = Resolve-AssistantPath $configuredPath
+        if ($name -in @('Assistant__Management__KeyDirectory','Assistant__Guest__KnowledgeDirectory')) {
+            if (!(Test-Path -LiteralPath $resolvedPath -PathType Container)) {
+                throw "$name must point to an existing directory."
+            }
+        } elseif (!(Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
+            throw "$name must point to an existing file."
+        }
+        $settings[$name] = $resolvedPath
+        [Environment]::SetEnvironmentVariable($name, $resolvedPath, 'Process')
+    }
+    if ($settings['Assistant__Jwt__PublicKeyFile']) {
+        $publicKey = [IO.File]::ReadAllText([string]$settings['Assistant__Jwt__PublicKeyFile'])
+        if ($publicKey -match 'PRIVATE KEY' -or
+            $publicKey -notmatch '(?s)\A\s*-----BEGIN (RSA |)PUBLIC KEY-----\s+[A-Za-z0-9+/=\r\n]+-----END \1PUBLIC KEY-----\s*\z') {
+            throw 'Assistant__Jwt__PublicKeyFile must contain exactly one public RSA PEM.'
+        }
+        [Environment]::SetEnvironmentVariable('Assistant__Jwt__PublicKeyPem', $publicKey, 'Process')
+        $settings['Assistant__Jwt__PublicKeyPem'] = $publicKey
+    }
+    foreach ($owner in @('User','Operations','Search')) {
+        $enabledName = "Assistant__Reads__${owner}__Enabled"
+        $originName = "Assistant__Reads__${owner}__Origin"
+        $enabled = [string]$settings[$enabledName]
+        if (!$enabled) { $enabled = 'false' }
+        if ($enabled -notin @('true','false')) { throw "$enabledName must be true or false." }
+        if ($enabled -eq 'true') {
+            $origin = $null
+            $originValue = [string]$settings[$originName]
+            if (![Uri]::TryCreate($originValue, [UriKind]::Absolute, [ref]$origin) -or
+                $origin.Scheme -ne 'https' -or $origin.UserInfo -or
+                $origin.AbsolutePath -ne '/' -or $origin.Query -or $origin.Fragment) {
+                throw "$originName must be a fixed HTTPS origin without a path, query or fragment."
+            }
+        }
+    }
+    if ([string]$settings['Assistant__Reads__Search__Enabled'] -eq 'true') {
+        $maxAge = 0
+        $clockSkew = 0
+        if (![int]::TryParse($settings['Assistant__Reads__Search__MaxAgeSeconds'], [ref]$maxAge) -or
+            $maxAge -lt 1 -or $maxAge -gt 3600 -or
+            ![int]::TryParse($settings['Assistant__Reads__Search__ClockSkewSeconds'], [ref]$clockSkew) -or
+            $clockSkew -lt 0 -or $clockSkew -gt 60) {
+            throw 'Enabled Assistant search requires MaxAgeSeconds 1-3600 and ClockSkewSeconds 0-60.'
+        }
+    }
+}
+
 # Read the parsed file, not inherited variables: removed keys must clear stale
 # raw settings and override saved user-secrets for this launch. Whitespace is
 # deliberately unconfigured and survives Windows PowerShell 5.1 environment IO.
@@ -40,11 +99,21 @@ if ($Service -eq 'User') {
     [Environment]::SetEnvironmentVariable('SMARTPARK_USER_MEDIA_ENABLED', $null, 'Process')
 }
 
-if ([string]::IsNullOrWhiteSpace($env:SMARTPARK_DEV_PASSWORD)) {
+$devPassword = [string]$settings['SMARTPARK_DEV_PASSWORD']
+$serviceKey = [string]$settings['SMARTPARK_SERVICE_KEY']
+if ([string]::IsNullOrWhiteSpace($devPassword)) {
     throw 'SMARTPARK_DEV_PASSWORD is empty in .env. Run setup.ps1 first.'
 }
-if ([string]::IsNullOrWhiteSpace($env:SMARTPARK_SERVICE_KEY) -or $env:SMARTPARK_SERVICE_KEY.Length -lt 32) {
+if ([string]::IsNullOrWhiteSpace($serviceKey) -or $serviceKey.Length -lt 32) {
     throw 'SMARTPARK_SERVICE_KEY must exist in .env and be at least 32 characters. Run setup.ps1 first.'
+}
+if ($Service -eq 'Assistant' -and [string]::IsNullOrWhiteSpace([string]$settings['ConnectionStrings__IoT'])) {
+    throw 'ConnectionStrings__IoT is required in .env when running the Assistant host runner.'
+}
+[Environment]::SetEnvironmentVariable('SMARTPARK_DEV_PASSWORD', $devPassword, 'Process')
+[Environment]::SetEnvironmentVariable('SMARTPARK_SERVICE_KEY', $serviceKey, 'Process')
+if ($Service -eq 'Assistant') {
+    [Environment]::SetEnvironmentVariable('ConnectionStrings__IoT', [string]$settings['ConnectionStrings__IoT'], 'Process')
 }
 
 function Assert-DevPassword([string]$Name, [string]$Value) {
@@ -54,8 +123,12 @@ function Assert-DevPassword([string]$Name, [string]$Value) {
     }
 }
 
+# Keep both host environment names aligned. A shell previously used for the
+# isolated Assistant Demo may leave DOTNET_ENVIRONMENT=Demo behind; the normal
+# schema runner must always launch services under the Development profile.
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
-$env:Services__Key = $env:SMARTPARK_SERVICE_KEY
+$env:DOTNET_ENVIRONMENT = 'Development'
+$env:Services__Key = $serviceKey
 $env:Services__User = 'http://localhost:5035/'
 $env:Services__Parking = 'http://localhost:5045/'
 $env:Services__Reservation = 'http://localhost:5055/'
@@ -81,6 +154,9 @@ if ($Service -eq 'User') {
         $value = [Environment]::GetEnvironmentVariable($sourceName, 'Process')
         if (!(Test-JwtConfiguredValue $value)) { $value = ' ' }
         [Environment]::SetEnvironmentVariable('Jwt__' + $field, $value, 'Process')
+    }
+    if ($env:SMARTPARK_JWT_PRIVATE_KEY_FILE) {
+        $env:Jwt__PrivateKeyPem = Read-JwtPrivateKeyFile $env:SMARTPARK_JWT_PRIVATE_KEY_FILE $taskRoot
     }
 } else {
     $env:JwtValidation__Issuer = $jwtIssuer
@@ -116,15 +192,38 @@ if ($Service -in @('Parking', 'Reservation')) {
 }
 $dbPortByService = @{ User = 'SMARTPARK_DB_USER_PORT'; Parking = 'SMARTPARK_DB_PARKING_PORT'; Reservation = 'SMARTPARK_DB_RESERVATION_PORT'; Payment = 'SMARTPARK_DB_PAYMENT_PORT' }
 $defaultDbPortByService = @{ User = '5441'; Parking = '5442'; Reservation = '5443'; Payment = '5444' }
-$apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065' }
+$apiPortByService = @{ User = '5035'; Parking = '5045'; Reservation = '5055'; Payment = '5065'; Notification = '5068'; Assistant = '5075' }
 
 $dbPort = [Environment]::GetEnvironmentVariable($dbPortByService[$Service])
 if ([string]::IsNullOrWhiteSpace($dbPort)) { $dbPort = $defaultDbPortByService[$Service] }
 $apiPort = $apiPortByService[$Service]
+$launchUrl = "http://localhost:$apiPort"
+$listenerName = "SMARTPARK_SERVICE_$($Service.ToUpperInvariant())_LISTEN_URLS"
+$listeners = [string]$settings[$listenerName]
+if ($Service -in @('User','Parking','Reservation','Payment') -and $listeners) {
+    foreach ($address in ($listeners -split ';')) {
+        $uri = $null
+        if ($address -notmatch '^https?://(?:localhost|127\.0\.0\.1|\[::1\]):[0-9]+$' -or
+            ![Uri]::TryCreate($address, [UriKind]::Absolute, [ref]$uri) -or $uri.Port -lt 1) {
+            throw "Invalid local listener in $listenerName. Use loopback HTTP(S) addresses with explicit ports."
+        }
+    }
+    $launchUrl = $listeners
+}
+if ($Service -eq 'Assistant' -and $settings['SMARTPARK_ASSISTANT_URL']) {
+    $assistantUri = $null
+    $configuredAssistantUrl = [string]$settings['SMARTPARK_ASSISTANT_URL']
+    if (![Uri]::TryCreate($configuredAssistantUrl, [UriKind]::Absolute, [ref]$assistantUri) -or
+        $assistantUri.Scheme -notin @('http','https') -or $assistantUri.UserInfo -or
+        $assistantUri.AbsolutePath -ne '/' -or $assistantUri.Query -or $assistantUri.Fragment) {
+        throw 'SMARTPARK_ASSISTANT_URL must be a single HTTP(S) origin without a path, query or fragment.'
+    }
+    $launchUrl = $assistantUri.GetLeftPart([UriPartial]::Authority)
+}
 
-$dbName = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification' }[$Service]
+$dbName = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Assistant='smartpark_iot' }[$Service]
 # Quote the password for Npgsql syntax so ';' inside a password is safe.
-$quotedPassword = $env:SMARTPARK_DEV_PASSWORD.Replace('"', '""')
+$quotedPassword = $devPassword.Replace('"', '""')
 [Environment]::SetEnvironmentVariable('ConnectionStrings__' + $Service, "Host=127.0.0.1;Port=$dbPort;Database=$dbName;Username=$dbName;Password=`"$quotedPassword`"", 'Process')
 if ($Service -eq 'Notification') {
     [Environment]::SetEnvironmentVariable('ConnectionStrings__NotificationAudit', "Host=127.0.0.1;Port=$dbPort;Database=$dbName;Username=$dbName;Password=`"$quotedPassword`"", 'Process')
@@ -193,12 +292,15 @@ if ($Service -eq 'User') {
 if ($Service -eq 'Notification') {
     $projectDir = Join-Path $taskRoot "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
     $serviceDisplay = 'NotificationAuditService'
+} elseif ($Service -eq 'Assistant') {
+    $projectDir = Join-Path $taskRoot 'src/Services/IoTService/SmartParking.IoTService.API'
+    $serviceDisplay = 'Assistant'
 } else {
     $projectService = switch ($Service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $Service } }
     $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
     $serviceDisplay = "${projectService}Service"
 }
-dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls "http://localhost:$apiPort"
+dotnet run --project $projectDir --no-restore --no-launch-profile -- --contentRoot $projectDir --urls $launchUrl
 if ($LASTEXITCODE -ne 0) { throw "$serviceDisplay exited with code $LASTEXITCODE" }
 } finally {
     # Do not leave UserService .env signing secrets in the launching shell.

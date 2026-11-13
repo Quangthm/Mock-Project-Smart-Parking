@@ -315,6 +315,12 @@ test('Owner dashboard shares backend sites with overview and refreshes after sit
 function structureScreen(h, parkingApi = {}) {
   return load('roles/owner/structure/ParkingStructure.tsx', {
     react: h.react, 'react/jsx-runtime': h.runtime,
+    'motion/react': { motion: { div: 'div' }, useReducedMotion: () => false },
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'select' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../../../components/ui/PageHeader': { PageHeader: 'header' },
+    '../../../components/ui/Badge': { Badge: 'span' },
+    '../../../components/feedback/ErrorBoundary': { ErrorBoundary: 'error-boundary' },
     '../../../lib/parkingApi': { parkingApi },
     '../dashboard/BackupCapacityPanel': { BackupCapacityPanel: 'backup' },
     '../../../components/3d/Parking3DViewer': { Parking3DViewer: '3d-viewer' },

@@ -29,7 +29,7 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 | `smartpark_operations` | 5443 | `03b-reservation-operations-service-db.sql` | `reservation-site-capacity-pools`, `reservation-structure-safety`, `reservation-structure-receipts`, `reservation-confirmation-time` | OperationService |
 | `smartpark_payment` | 5444 | `04-payment-pricing-service-db.sql` | — | PaymentService |
 | `smartpark_notification` | 5445 | `05-notification-audit-service-db.sql` | — | NotificationService |
-| `smartpark_iot` | 5446 | `06-iot-recognition-service-db.sql` | — | IoTService |
+| `smartpark_iot` | 5446 | `06-iot-recognition-service-db.sql` | Assistant Management → S02 → S05 → Current Chat | IoTService |
 
 `03` là **một logical Operations service** nhưng tách 03a/03b theo DB đích (D1). Không có FK vật lý xuyên database; các tham chiếu là Logical ID.
 
@@ -42,6 +42,8 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 **Facility DB:** `01-base` (02) → `02-base` (03a) → `03-overlay-tenants` → `04-overlay-synchronizations` → `05-overlay-operator` → `06-overlay-slot-constraints`. Owner-onboarding provisioning state is created by the Facility base script.
 
 **Operations DB:** `01-base` (03b) → `02-overlay-capacity-pools` → `03-overlay-structure-safety` → `04-overlay-receipts` → `05-overlay-confirmation`.
+
+**IoT DB:** `01-base` (06) → `02-assistant-management` → `03-assistant-s02` → `04-assistant-s05` → `05-assistant-current-chat`. Compose initializes this chain on a new volume. For existing Assistant schemas, follow the [Assistant upgrade guide](../../03-design/ai/conversation-and-recovery.md#approval-and-scope).
 
 `microservices/02-facility-service-db.sql` defines Facility's owner-onboarding provisioning table. Existing Facility databases missing this relation require a separately reviewed migration; the base script is for clean database initialization only. `reservation-site-capacity-pools.sql` phải chạy trước `reservation-structure-safety.sql` vì guard trigger tham chiếu `site_capacity_pools`.
 

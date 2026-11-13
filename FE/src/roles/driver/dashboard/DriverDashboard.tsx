@@ -26,7 +26,7 @@ import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { FloatingChatbot } from "../../../components/chat/FloatingChatbot"
+import { DriverChatbot } from "../../../components/chat/DriverChatbot"
 
 type Tab = "home" | "subscriptions" | "support" | "payments"
 
@@ -38,7 +38,7 @@ type HomePanel = "find" | "bookings" | "history"
 
 type ProfileSection = "account" | "security" | "vehicles"
 
-export function DriverDashboard() {
+export function DriverDashboard({ pendingQuestion, onUseQuestion }: { pendingQuestion?: string; onUseQuestion?: () => void } = {}) {
   const { user, setUser } = useApp()
 
   const [tab, setTab] = useState<Tab>("home")
@@ -524,13 +524,9 @@ export function DriverDashboard() {
           </>
         )}
       </main>
-      {user && (
-        <FloatingChatbot
-          role={user.role}
-          parkingMode={findingParking}
-          parkingDetailsOpen={findingParking && parkingDetailsOpen}
-        />
-      )}
+      {user?.role === "driver" && <div hidden={bookingLot !== null || (findingParking && parkingDetailsOpen)}>
+        <DriverChatbot allowBookingPreview pendingQuestion={pendingQuestion} onUseQuestion={onUseQuestion} />
+      </div>}
     </DashboardSidebar>
   )
 }

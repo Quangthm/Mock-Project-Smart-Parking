@@ -76,4 +76,23 @@ ON CONFLICT (account_id) DO UPDATE
 SET permissions = EXCLUDED.permissions,
     created_by = EXCLUDED.created_by;
 
+-- The Assistant vehicle card needs one approved, owner-bound Driver vehicle.
+-- Keep the demo row image-free so it works when media storage is disabled;
+-- the API reports imageStatus=reupload-required until a Driver uploads an image.
+-- If the plate or deterministic ID is already owned elsewhere, the unique
+-- constraint / verification fails instead of silently moving that vehicle.
+INSERT INTO vehicles (id, account_id, original_plate, normalized_plate, vehicle_type, created_at, updated_at)
+SELECT :'driver_vehicle_id'::uuid, a.id, '51A-123.45', '51A12345', 'CAR', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+  FROM accounts a
+  JOIN users u ON u.id = a.user_id
+ WHERE lower(u.email) = lower(:'driver_email')
+   AND a.role_code = 'DRIVER'
+   AND a.status = 'ACTIVE'
+   AND a.deleted_at IS NULL
+   AND NOT EXISTS (
+       SELECT 1 FROM vehicles v
+        WHERE v.id = :'driver_vehicle_id'::uuid
+   )
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

@@ -2,7 +2,7 @@
 param()
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path $PSScriptRoot -Parent
-$testRoot = Join-Path $sourceRoot ('.cache/setup-tests-' + [Guid]::NewGuid().ToString('N'))
+$testRoot = Join-Path $sourceRoot ('.cache/sp-setup-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
 $global:setupTestSecretMaps = @{}
 $global:setupTestSecretWrites = 0
 $global:setupTestDockerCalls = @()
@@ -26,7 +26,7 @@ function dotnet {
         foreach ($entry in [Environment]::GetEnvironmentVariables('Process').GetEnumerator()) { $global:runnerEnvironment[$entry.Key] = $entry.Value }
         if (($args -join ' ') -notmatch 'UserService.API') {
             $childScript = '@([Environment]::GetEnvironmentVariables().Keys | Where-Object { $_ -match "(?i)JWT.*(PRIVATE|SIGNING|SECRET)" }).Count'
-            $childCount = & 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe' -NoProfile -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript)))
+            $childCount = & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -NoProfile -EncodedCommand ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript)))
             Assert-Setup ($childCount -eq 0) 'A real consumer child inherited signing variables.'
         }
         $global:LASTEXITCODE = 0
@@ -50,6 +50,14 @@ function dotnet {
     }
     $global:LASTEXITCODE = 0
 }
+function cmd.exe {
+    if ($args[0] -ne '/c' -or $args[1] -notmatch '^dotnet user-secrets set --project "([^"]+)" < "([^"]+)"$') {
+        throw 'Unexpected cmd.exe invocation in the setup fixture.'
+    }
+    $projectPath = $Matches[1]
+    $inputPath = $Matches[2]
+    [IO.File]::ReadAllText($inputPath) | dotnet user-secrets set --project $projectPath
+}
 function docker {
     $global:setupTestDockerCalls += ,@($args)
     $global:LASTEXITCODE = 0
@@ -63,7 +71,7 @@ function New-Fixture($name) {
     foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
         if ($service -eq 'Notification') {
             $project = Join-Path $fixture "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
-            New-Item -ItemType Directory -Force -Path $project | Out-Null
+            [IO.Directory]::CreateDirectory($project) | Out-Null
             [IO.File]::WriteAllText((Join-Path $project "SmartParking.NotificationAuditService.API.csproj"), "<Project><PropertyGroup><UserSecretsId>smartpark-setup-test-$service</UserSecretsId></PropertyGroup></Project>")
         } else {
             $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
@@ -98,7 +106,7 @@ Invoke-Fixture $local
 Assert-Setup ([Convert]::ToBase64String($localBytes) -eq [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $local '.env')))) 'Rerun changed .env.'
 Assert-Setup ($global:setupTestSecretWrites -eq $writes) 'Rerun rewrote existing secrets.'
 $key = $global:setupTestSecretMaps['User']['Services:Key']
-Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Notification']['Services:Key']) 'Local service keys differ.'
+Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key']) 'Local service keys differ.'
 Assert-Setup ($global:setupTestSecretMaps['Parking']['ConnectionStrings:Parking'] -match 'Database=smartpark_facility;Username=smartpark_facility;') 'Facility database mapping differs from compose.'
 Assert-Setup ($global:setupTestSecretMaps['Reservation']['ConnectionStrings:Reservation'] -match 'Database=smartpark_operations;Username=smartpark_operations;') 'Operations database mapping differs from compose.'
 $global:setupTestSecretMaps = @{}
@@ -150,6 +158,101 @@ $global:setupTestOldVolume = $true
 $freshVolume = New-Fixture 'old-volume'
 Expect-Failure { & (Join-Path $freshVolume 'setup.ps1') -SkipRestore -NonInteractive } 'Existing database volumes found'
 Assert-Setup (!(Test-Path -LiteralPath (Join-Path $freshVolume '.env'))) 'Old-volume failure wrote .env.'
+$global:setupTestOldVolume = $false
+$assistantFixture = New-Fixture 'assistant-integration'
+Copy-Item -LiteralPath (Join-Path $local '.env') -Destination (Join-Path $assistantFixture '.env')
+$assistantBefore = [IO.File]::ReadAllText((Join-Path $assistantFixture '.env'))
+New-Item -ItemType Directory -Force -Path (Join-Path $assistantFixture 'scripts/messaging') | Out-Null
+[IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/messaging/provision-profile-audit-topology.ps1'), @'
+param($ManagementUri, $Credential, $VirtualHost)
+$global:setupTestAssistantSteps += 'broker'
+'@)
+[IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/apply-workflow-migrations.ps1'), @'
+param($Service, $SchemaRoot, $EnvPath)
+$global:setupTestAssistantSteps += "schema-$Service"
+'@)
+[IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/setup-assistant-docker.ps1'), @'
+param($EnvPath, [switch]$ValidateOnly)
+if ($ValidateOnly) {
+    $global:setupTestAssistantSteps += 'preflight'
+    if ($global:setupTestAssistantReject) { throw 'Fixture Assistant preflight rejected.' }
+} else {
+    $global:setupTestAssistantSteps += 'assistant'
+    if (!$EnvPath -or !(Test-Path -LiteralPath $EnvPath)) { throw 'Missing setup environment path.' }
+}
+'@)
+$global:setupTestAssistantSteps = @()
+$global:setupTestAssistantReject = $true
+$dockerBefore = $global:setupTestDockerCalls.Count
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive } 'Fixture Assistant preflight rejected'
+Assert-Setup ($global:setupTestDockerCalls.Count -eq $dockerBefore) 'Assistant preflight failed after Docker provisioning.'
+Assert-Setup ([IO.File]::ReadAllText((Join-Path $assistantFixture '.env')) -ceq $assistantBefore) 'Failed Assistant preflight changed configuration.'
+$global:setupTestAssistantReject = $false
+$global:setupTestAssistantSteps = @()
+& (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive
+$expectedSteps = @('preflight','broker','schema-User','schema-Parking','schema-Reservation','schema-Payment','schema-Notification','schema-Iot','assistant')
+Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -join '|')) 'Assistant setup must preflight before provisioning and start after schema verification.'
+Assert-Setup ([IO.File]::ReadAllText((Join-Path $assistantFixture '.env')) -ceq $assistantBefore) 'Assistant setup replaced an existing .env.'
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipDatabase } 'cannot be combined'
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -RecreateDb } 'cannot be combined'
+[IO.File]::AppendAllText((Join-Path $assistantFixture '.env'), "`nSMARTPARK_ASSISTANT_DOCKER_ENABLED=true`n")
+$global:setupTestAssistantSteps = @()
+& (Join-Path $assistantFixture 'setup.ps1') -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive
+Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -join '|')) 'Configured Assistant was not included in normal setup.'
+& {
+    $runner = Join-Path $assistantFixture 'scripts/run-app-service.ps1'
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/run-app-service.ps1') -Destination $runner
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/discovery-docker.ps1') -Destination (Join-Path $assistantFixture 'scripts/discovery-docker.ps1')
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'compose.app.yml') -Destination $assistantFixture
+    $global:setupTestAssistantSteps = @()
+    $global:setupTestFrontendUrl = ''
+    $global:setupTestFrontendRunning = $true
+    $global:setupTestAssistantHealthy = $true
+    function docker {
+        $global:LASTEXITCODE = 0
+        if ($args[0] -eq 'ps') {
+            if ($args -contains 'label=com.docker.compose.service=frontend') {
+                if ($global:setupTestFrontendRunning) { return 'frontend-container' }
+            } elseif ($global:setupTestAssistantHealthy) { return 'assistant-container' }
+            return
+        }
+        if ($args[0] -eq 'port') { return '127.0.0.1:6076' }
+        if ($args -contains 'up') {
+            Assert-Setup ($args -contains '--no-build') 'App runner did not preserve NoBuild.'
+            Assert-Setup ($env:COMPOSE_REMOVE_ORPHANS -ceq 'false') 'App runner could remove Assistant as an orphan.'
+            if ($global:setupTestRefreshOnly) {
+                Assert-Setup ($args[-1] -ceq 'frontend' -and $args -notcontains 'user-service') 'Assistant refreshed another app service.'
+            }
+            $global:setupTestAssistantSteps += 'app'
+            $global:setupTestFrontendUrl = $env:VITE_ASSISTANT_API_BASE_URL
+        }
+        if ($args[0] -eq 'compose' -and $args -contains 'ps') { return '{"State":"running","Health":"healthy"}' }
+    }
+    $previousUrl = $env:VITE_ASSISTANT_API_BASE_URL
+    $previousRemoveOrphans = $env:COMPOSE_REMOVE_ORPHANS
+    try {
+        $env:COMPOSE_REMOVE_ORPHANS = 'true'
+        $env:VITE_ASSISTANT_API_BASE_URL = 'https://localhost:5075'
+        & $runner -Service All -NoBuild -NoLogWindow
+        Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq 'assistant|app') 'All did not start Assistant before the app stack.'
+        Assert-Setup ($global:setupTestFrontendUrl -ceq 'http://localhost:6076') 'Docker frontend did not receive the published Assistant port.'
+        Assert-Setup ($env:VITE_ASSISTANT_API_BASE_URL -ceq 'https://localhost:5075') 'App runner changed the caller frontend configuration.'
+        Assert-Setup ($env:COMPOSE_REMOVE_ORPHANS -ceq 'true') 'App runner changed the caller Compose configuration.'
+        $global:setupTestAssistantSteps = @()
+        $global:setupTestRefreshOnly = $true
+        & $runner -Service Assistant -NoBuild -NoLogWindow
+        Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq 'assistant|app') 'Assistant did not refresh the running Docker frontend.'
+        $global:setupTestAssistantSteps = @()
+        $global:setupTestFrontendRunning = $false
+        & $runner -Service Assistant -NoBuild -NoLogWindow
+        Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq 'assistant') 'Assistant started a previously stopped frontend.'
+        $global:setupTestAssistantHealthy = $false
+        Expect-Failure { & $runner -Service Frontend -NoBuild -NoLogWindow } 'Docker Assistant is enabled but has no healthy container'
+    } finally {
+        $env:VITE_ASSISTANT_API_BASE_URL = $previousUrl
+        $env:COMPOSE_REMOVE_ORPHANS = $previousRemoveOrphans
+    }
+}
 Write-Output 'PASS: local reuse, idempotence, shared Team baseline, remote URL, MapTiler import, secrets sync/overwrite/removal, skip-secrets and old-volume protection.'
 . (Join-Path $sourceRoot 'scripts/jwt-environment.ps1')
 $global:setupTestOldVolume = $false
@@ -256,5 +359,6 @@ foreach ($removalMode in @('missing','blank')) {
 Remove-Item Env:SMARTPARK_CLOUDINARY_API_SECRET, Env:MediaStorage__Cloudinary__ApiSecret
 Assert-Setup ([IO.File]::ReadAllText((Join-Path $mediaFixture 'FE/.env')) -notmatch 'CLOUDINARY|synthetic-cloud-') 'Provider configuration reached frontend.'
 Write-Output 'PASS: optional media imports, rotation, removal, idempotence, host aliases, feature isolation and frontend/log secret isolation.'
+Write-Output 'PASS: opt-in Assistant preflight order, default schema flow, final dispatch, env preservation and incompatible-option guards.'
 Write-Output "Scratch evidence retained at $testRoot"
 Write-Output ('PowerShell version: ' + $PSVersionTable.PSVersion.ToString())

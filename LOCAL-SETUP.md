@@ -9,11 +9,13 @@ Tài liệu onboarding chi tiết cho môi trường local. Happy path nằm ở
 git branch --show-current          # nhánh làm việc mặc định: develop
 .\setup.ps1                        # dựng DB + credential + SonarQube + restore
 # Cấu hình RSA/JWT ổn định theo mục 5.5 trước khi chạy shared JWT
-.\scripts\run-app-service.ps1 -Service All   # chạy 6 container BE + FE
+.\scripts\run-app-service.ps1 -Service All   # chạy app stack, gồm Assistant nếu đã bật
 # Mở http://localhost:5173
 ```
 
 ## 1. Prerequisites
+
+Chatbot API demo độc lập: xem [hướng dẫn chạy và phạm vi dữ liệu mẫu](docs/03-design/ai/chatbot-scaffold.md#demo-api--hướng-dẫn-chạy-và-phạm-vi). Chạy opt-in bằng tham số lệnh, không thuộc `setup.ps1`/Compose; chưa kết nối tài khoản, DB hay dịch vụ AI.
 
 Checklist trước khi setup:
 
@@ -49,11 +51,149 @@ Checklist trước khi setup:
 3. Probe authentication từng DB và áp workflow migration đúng trạng thái schema.
 4. Đồng bộ user-secrets cho User/Facility/Operation/Payment theo `.env` ở `[5/7]`.
 5. Dựng SonarQube (mặc định) và restore solution ở `[7/7]`.
-6. **Không tự chạy API hoặc frontend** — sau setup mới chuyển sang [mục 3](#3-run-application).
+6. Setup mặc định để các API và frontend khởi động riêng theo [mục 3](#3-run-application). Bật Assistant trong `.env` để đưa chatbot vào quy trình Docker của nhóm.
+
+### AI Chatbot bằng Docker
+
+Hướng dẫn QA hiện hành: [setup máy mới/add-on, dữ liệu và test theo role](docs/04-testing/assistant-handoff-testing.md). Máy local chưa có bộ signing/TLS/keyring có thể chạy:
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1
+```
+
+Initializer ghi đường dẫn tương đối từ root `.env` tới `.cache/assistant-docker`, tạo JWT/PFX/TLS riêng và bảo toàn bộ cấu hình đã có. Nó không xuất bản corpus: đặt cặp Markdown + `publication.json` đã được Admin duyệt vào thư mục knowledge, sau đó bật Guest release và làm các bước setup bên dưới. Cả chat đăng nhập cũng cần corpus hợp lệ. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey`: giữ nguyên private key và xuất đúng public key, tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Bộ Assistant/TLS đã có phải giữ và cấu hình thủ công; không rotate bằng initializer.
+
+
+#### Tìm bãi qua Docker (Discovery local)
+
+Sau khi User TLS, Assistant JWT/keyring/corpus và DB nền đã được setup, dùng PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File scripts/initialize-discovery-docker.ps1
+pwsh -NoProfile -File scripts/run-discovery-docker.ps1
+```
+
+Initializer tạo CA public và ba PFX riêng cho Facility/Operations/Payment trong `.cache`, sinh credential Operations→Payment có hạn 90 ngày, cập nhật các biến Discovery trong `.env`, giữ nguyên JWT/User TLS/keyring cũ. Chạy lại giữ nguyên credential, không tự rotate. Search vẫn tắt cho tới khi runner kiểm được HTTPS và API tìm bãi thật. Bộ thiết lập này chỉ dành cho Docker local, không phải provisioning production. Freshness dev là 60 giây, clock skew 5 giây; không phải cam kết SLA.
+
+Runner build các image mới, kiểm metadata Facility trước khi dừng app và không tự migrate. Nếu báo thiếu schema, backup và duyệt riêng `scripts/database/migrations/20261106_facility_discovery_publication.sql` trước khi áp. Không chạy lại SQL này khi các bảng/trigger đã tồn tại. Không dùng `down -v`/reset volume để xử lý. Nếu có container cũ `parking-service`/`reservation-service`, dùng `-ReplaceLegacyContainers` một lần: chỉ dừng hai app thuộc project `smartpark-app`, không xóa container/DB/volume. Container cũ được giữ để đối chiếu/rollback; trước khi start lại phải dừng service mới chiếm cổng tương ứng.
+
+```powershell
+# Build trước, chưa đổi container hoặc DB
+pwsh -NoProfile -File scripts/run-discovery-docker.ps1 -BuildOnly
+# Sau khi image và schema phù hợp; dùng switch cuối chỉ khi chuyển container legacy
+pwsh -NoProfile -File scripts/run-discovery-docker.ps1 -NoBuild -ReplaceLegacyContainers
+# Những lần sau, khi không đổi source
+pwsh -NoProfile -File scripts/run-discovery-docker.ps1 -NoBuild
+```
+
+`compose.discovery.yml` dùng DNS nội bộ `facility-service`, `operation-service`, `payment-service` trên HTTPS 8443, không mở thêm cổng host. Facility nhận CA User hiện có. Assistant chỉ nhận thêm CA public Discovery, không nhận private PFX hoặc key Payment. Facility và Operations có volume keyring cursor riêng. App runner tự chọn overlay khi `SMARTPARK_DISCOVERY_DOCKER_ENABLED=true`; thay `.env` phải chạy lại runner để recreate, không chỉ Docker Desktop Start.
+
+Catalogue chỉ hiển thị bãi đã được Owner publish qua API đúng quyền; migration không tự công bố bãi. `200` với `items=[]` chứng minh đường đọc chạy và hiện chưa có bãi phù hợp đã publish, không phải bằng chứng card dương. Sau khi owner xác nhận đúng site/tenant, thêm `DiscoveryPricing__SiteTenants__<site-uuid>=<tenant-uuid>` vào file `pricing-bindings.env` trong thư mục `SMARTPARK_DISCOVERY_DOCKER_DIRECTORY` rồi recreate Payment. File này chỉ chấp nhận mapping UUID, không chứa credential. Không tự suy quyền từ tên bãi. Availability dương còn thiếu nguồn production; giữ unknown thay vì bịa chỗ trống.
+
+Chứng chỉ và service key hết hạn sau 90 ngày. Checker báo lỗi thay vì tự tạo bộ mới; gia hạn có kiểm soát và cập nhật cả producer/consumer. Thiết lập lại credential chỉ áp dụng cho môi trường mới hoặc quy trình rotate được duyệt, không xóa keyring hoặc `.env` cũ.
+
+Kiểm offline: `pwsh -NoProfile -File scripts/test-discovery-docker.ps1`. Kiểm đầu vào máy hiện tại: `pwsh -NoProfile -File scripts/initialize-discovery-docker.ps1 -CheckOnly`. Hai lệnh này không thay thế nghiệm thu API/Driver thật.
+
+**Smoke test cách ly cho tester.** Mở Docker Desktop ở chế độ Linux containers và chạy từ thư mục gốc bằng Windows PowerShell 5.1+ hoặc PowerShell 7+:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-docker-setup.ps1
+```
+
+Bộ test tự tạo PostgreSQL, JWT và tài liệu FAQ mẫu. Tester có thể chạy trước khi chuẩn bị `.env`, tài khoản UserService và provider key. Test build image `smartpark/assistant:local`, kiểm Settings, quyền Admin/Driver, FAQ và lịch sử qua lần chạy lại setup, rồi dọn container và volume test.
+
+**Chạy chatbot cùng stack của nhóm.** Chuẩn bị cấu hình bên dưới để test bằng tài khoản UserService và dữ liệu của môi trường QA.
+
+Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bảng Assistant trong `smartpark_iot` cùng các bảng IoT khi khởi tạo volume mới. Chuẩn bị các đầu vào local sau để setup và runner `All` chạy container Assistant.
+
+| Cấu hình | Giá trị dùng ở máy dev |
+| --- | --- |
+| `SMARTPARK_ASSISTANT_DOCKER_ENABLED` | `true` để setup và `-Service All` chạy Assistant. Mặc định `false` cho máy chưa chuẩn bị đầu vào. |
+| `SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` | Cấu hình khóa RSA riêng của UserService theo mục 5.5. Giữ khóa đang dùng nếu môi trường đã có. |
+| `Assistant__Jwt__PublicKeyFile`, `Assistant__Jwt__Issuer`, `Assistant__Jwt__Audience` | Public PEM tương ứng và issuer/audience đang dùng của UserService. Docker mặc định dùng `SmartParking.UserService` và `SmartParking`. |
+| `Assistant__Management__KeyDirectory` | Thư mục keyring ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
+| `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
+| `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). |
+| `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
+
+Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`; Admin nhập trong Settings sau khi container đã chạy.
+
+Nếu chưa có bộ khóa dev, có thể tạo bằng PowerShell 7 trong **một thư mục mới ngoài repo**. Cặp JWT này dành riêng cho UserService local. PFX dùng một khóa RSA khác. Nạp PEM riêng vào cấu hình UserService theo mục 5.5.
+
+```powershell
+$devKeys = Join-Path $env:LOCALAPPDATA ('SmartPark-Assistant-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $devKeys | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $devKeys 'keyring') | Out-Null
+$jwt = [Security.Cryptography.RSA]::Create(2048)
+$protection = [Security.Cryptography.RSA]::Create(2048)
+$cert = $null
+try {
+    [IO.File]::WriteAllText((Join-Path $devKeys 'user-private.pem'), $jwt.ExportPkcs8PrivateKeyPem())
+    [IO.File]::WriteAllText((Join-Path $devKeys 'user-public.pem'), $jwt.ExportSubjectPublicKeyInfoPem())
+    $password = (Get-Credential -UserName 'assistant-keyring' -Message 'Choose a password for the local PFX').GetNetworkCredential().Password
+    $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=SmartPark Assistant local',
+        $protection, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+    $now = [DateTimeOffset]::UtcNow
+    $cert = $request.CreateSelfSigned($now.AddMinutes(-5), $now.AddYears(1))
+    [IO.File]::WriteAllBytes((Join-Path $devKeys 'assistant.pfx'),
+        $cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $password))
+} finally {
+    if ($cert) { $cert.Dispose() }
+    $jwt.Dispose()
+    $protection.Dispose()
+    Remove-Variable password -ErrorAction SilentlyContinue
+}
+Write-Host "Local setup files: $devKeys"
+```
+
+Chọn thư mục con `keyring` cho `Assistant__Management__KeyDirectory` và một thư mục knowledge riêng. Giữ khóa JWT riêng, `.env` và các file cá nhân ngoài hai thư mục này.
+
+```powershell
+# Kiểm tra cấu hình trước khi dựng stack
+.\setup.ps1 -AssistantCheck
+
+# Máy mới, sau khi đã điền cấu hình và mở Docker Desktop
+.\setup.ps1 -SkipSonarQube
+.\scripts\run-app-service.ps1 -Service All
+
+# Máy đã chạy stack DB, chỉ bổ sung hoặc cập nhật Assistant
+.\scripts\run-app-service.ps1 -Service Assistant
+```
+
+Assistant nằm trong project Docker `smartpark-app`, cổng mặc định `http://localhost:5076`. Runner nối frontend Docker với cổng của Assistant đang healthy và giữ nguyên URL host đã cấu hình trong `FE/.env`. `-Service Assistant` cũng cập nhật frontend Docker nếu frontend đang chạy. Dùng `-NoBuild` khi các image đã có và chỉ đổi cấu hình. `-WithAssistant` vẫn dùng được để chạy setup một lần. Nếu container Assistant đời cũ còn chạy trong project `smartpark-assistant`, dừng container cũ trước khi chuyển và giữ nguyên volume, PFX và keyring.
+
+Đường dẫn public PEM, PFX, keyring và knowledge có thể ghi tương đối so với thư mục chứa file `.env` khi dùng Docker. Mỗi thành viên giữ file cấu hình và vật liệu khóa của mình ngoài Git.
+
+`/health/live` kiểm container sống. Admin vào Settings để nhập provider key, chọn model, bật provider và cấu hình, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-app-assistant-1`.
+
+Để kiểm tìm bãi và tra lịch với API thật, bật từng cờ `Assistant__Reads__*__Enabled` sau khi nhận HTTPS origin mà container truy cập và tin cậy được. Dùng [hướng dẫn QA owner reads](docs/04-testing/assistant-handoff-testing.md#6-test-tích-hợp-owner-sau-khi-môi-trường-sẵn-sàng) để cấu hình và đối chiếu dữ liệu test.
+
+**Đọc xe UserService qua HTTPS trong Docker.** Chuẩn bị PFX TLS có private key, còn hạn và SAN `user-service`, cùng CA công khai đã ký chứng chỉ đó. Dùng chứng chỉ TLS riêng với khóa ký JWT và PFX bảo vệ keyring. Điền các giá trị local trong root `.env`.
+
+| Biến | Giá trị |
+| --- | --- |
+| `SMARTPARK_USER_DOCKER_TLS_ENABLED` | `true` |
+| `SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH` | Đường dẫn PFX TLS tương đối theo root `.env` hoặc tuyệt đối |
+| `SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD` | Mật khẩu PFX local |
+| `SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH` | Đường dẫn CA public dạng PEM `.crt` |
+| `Assistant__Reads__User__Enabled` | `true` |
+| `Assistant__Reads__User__Origin` | `https://user-service:8443` |
+
+Chạy lần lượt hai runner sau. User mở HTTPS cổng 8443 trong Docker network. Assistant cài CA vào trust store của container mỗi lần khởi động và preflight kiểm tra PFX có SAN `user-service`; nếu thiếu SAN, setup dừng trước khi dựng container. Cổng HTTP của frontend và User trên host tiếp tục phục vụ luồng đăng nhập hiện có.
+
+```powershell
+.\scripts\run-app-service.ps1 -Service User -NoBuild -NoLogWindow
+.\scripts\run-app-service.ps1 -Service Assistant -NoBuild -NoLogWindow
+```
+
+`User`/`All` chọn `compose.user-tls.yml` khi TLS được bật. Setup Assistant chọn `compose.assistant-trust.yml` khi có CA public. Khi gia hạn, dùng đường dẫn chứng chỉ mới rồi chạy lại hai runner để Compose cập nhật mount. Nghiệm thu bằng Driver thật hỏi `Xe của tôi`, đối chiếu với My Vehicles. Danh sách rỗng cần hiện rõ rỗng; lỗi TLS hoặc owner cần hiện lỗi nguồn.
+
+Với volume IoT có sẵn mà phần chatbot còn trống, runner Assistant bổ sung các bảng trong một transaction. Với DB đã chạy S05, sao lưu, dừng Assistant cũ và áp migration mới theo [hướng dẫn hội thoại](docs/03-design/ai/conversation-and-recovery.md#approval-and-scope) trước khi dựng bản mới. Setup kiểm tra schema đã nâng cấp. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
 
 ### Cảnh báo ghi đè và mất dữ liệu
 
-Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**Enter = Keep**).
+Nếu `.env` đã tồn tại, setup hỏi `[O]verwrite / [K]eep / [A]bort` (**Enter = Keep**). Với `-WithAssistant`, setup giữ file đã qua preflight và bỏ câu hỏi ghi đè.
 
 > **CẢNH BÁO — ghi đè cấu hình:** chọn `O` sẽ backup `.env` hiện tại ra `.env.bak` rồi sinh lại `.env` từ `.env.example`. Password/key đang dùng có thể bị thay; chỉ chọn `O` khi chấp nhận cấu hình lại. `-NonInteractive` tự động Keep.
 
@@ -78,7 +218,7 @@ Cấu hình `.cache/qa-local.json` cũ **được giữ nguyên**, nhưng runner
 - Admin: xem `SMARTPARK_ADMIN_PASSWORD` trong `.env`; email mặc định `admin@smartpark.local`.
 - Owner/operator: UserService seed thêm `owner@smartpark.local` và `operator@smartpark.local` khi service khởi động; password từ `.env` (`SMARTPARK_OWNER_PASSWORD`, `SMARTPARK_OPERATOR_PASSWORD`).
 - UserService **chỉ tạo lần đầu** và không thay mật khẩu tài khoản đã có.
-- Driver demo: `driver@gmail.com / Password@123` do `DataSeeder` tạo trong code.
+- Driver demo: `driver@gmail.com / Password@123` do `DataSeeder` tạo trong code. Sau khi UserService đã chạy, chạy `.\scripts\seed-demo-site.ps1` để thêm vehicle demo `51A-123.45` vào Driver Account; script không cần media storage và có thể chạy lại an toàn.
 
 ## 3. Run Application
 
@@ -93,9 +233,10 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 .\scripts\run-app-service.ps1 -Service Facility
 .\scripts\run-app-service.ps1 -Service Operation
 .\scripts\run-app-service.ps1 -Service Payment
-.\scripts\run-app-service.ps1 -Service Notification
+.\scripts\run-app-service.ps1 -Service Assistant
 .\scripts\run-app-service.ps1 -Service Frontend
-.\scripts\run-app-service.ps1 -Service All        # cả 6 container
+.\scripts\run-app-service.ps1 -Service All        # cả app stack, gồm Assistant khi đã bật
+.\scripts\run-app-service.ps1 -Service Notification
 ```
 
 | Container | Host URL | Ghi chú |
@@ -569,6 +710,8 @@ Runner **không reset volume** và không chạy lại `CREATE TABLE` trên dữ
 
 Rebuild image app là bước **riêng** (migration không build lại service): xem [QUICK_START.md](QUICK_START.md#8-pull-branch-mới--cập-nhật-image-service-và-schema-db).
 
+**User volume cũ thiếu `vehicles.binding_revision`:** setup dừng trước bước nâng cấp feature và chỉ rõ migration `scripts/database/migrations/20261111_user_vehicle_binding_revision.sql`. Volume mới đã có cột này trong baseline. Với volume cũ, sao lưu đúng User database, review và áp file migration đó theo quy trình SQL của nhóm rồi chạy lại setup; không reset volume để vượt qua lỗi. File chỉ thêm cột revision mặc định 1 và constraint dương, không di chuyển quyền sở hữu xe. Nếu cột có sẵn nhưng sai kiểu/nullability, migration sẽ dừng để review schema.
+
 #### Volume cũ thiếu schema canonical
 
 Volume tạo trước baseline mới ở trạng thái legacy — thiếu các bảng như `structure_synchronizations`, `structure_release_receipts`, `tenants`, … hoặc thiếu cột scan trong Operation. Runner sẽ dừng, không tự ALTER hay reset dữ liệu:
@@ -633,7 +776,7 @@ Checklist đầy đủ ở [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skill
 - [QUICK_START.md](QUICK_START.md) — happy path, progress lines, known errors, flags và ports.
 - [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) — cấu trúc `setup.ps1`, runner app và cách backup script local.
 - [schema-integration.md](docs/02-architecture/database/schema-integration.md) — cấu trúc DB, seed demo, naming container/DB.
-- [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
+- [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/schema-integration.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
 

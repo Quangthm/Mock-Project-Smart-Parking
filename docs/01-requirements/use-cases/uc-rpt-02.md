@@ -22,7 +22,7 @@ Explicit audit/investigation or originating case scope.
 
 ## Alternatives and failures
 
-Admin has no blanket business-evidence access. Administrative chat reads do not reset 90-day last-message clock. Twenty-four-hour deletion target cannot extend hard deadline.
+Admin has no blanket business-evidence access. Administrative reads do not change Assistant chat deletion deadlines. Twenty-four-hour deletion target cannot extend hard deadline.
 
 ## Postconditions
 

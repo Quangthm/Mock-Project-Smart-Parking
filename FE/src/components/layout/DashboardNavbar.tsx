@@ -8,6 +8,7 @@ import { BrandLogo } from "../brand/BrandLogo"
 import { ThemeIcon } from "../icon/ThemeIcon"
 import { UntitledIcon } from "../icon/UntitledIcon"
 import { AccountSecurityPanel } from "../forms/AccountSecurityPanel"
+import { AssistantSettings } from "../../roles/admin/setting/AssistantSettings"
 import { store } from "../../lib/store"
 import { scrollPageToTop } from "../../lib/scrollPageToTop"
 import { AccountSwitcher } from "../account/AccountSwitcher"
@@ -80,7 +81,7 @@ export function DashboardNavbar() {
   const settingsCloseRef = useRef<HTMLButtonElement>(null)
 
   // Universal Account & Security Modal state
-  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | "identity" | null>(null)
+  const [accountModalTab, setAccountModalTab] = useState<"profile" | "appearance" | "roles" | "security" | "contracts" | "assistant" | "identity" | null>(null)
   const [identityDemoUser, setIdentityDemoUser] = useState<string | null>(null)
   const [identityDemoSaveError, setIdentityDemoSaveError] = useState(false)
   const identityDemoComplete = Boolean(user && hasCompletedIdentityDemo(user.id))
@@ -464,6 +465,7 @@ export function DashboardNavbar() {
                     ...(user?.role === "admin" ? [] : [["roles", "My Roles", "switch-account"] as const]),
                     ...(user?.role === "owner" ? [["contracts", "Agreements", "file"] as const] : []),
                     ["security", "Security", "shield"],
+                    ...(user?.role === "admin" ? [["assistant", "AI Chatbot", "sparkles"] as const] : []),
                     ...(user && user.role !== "admin" ? [["identity", "VNeID Simulation", "file"] as const] : []),
                   ] as const).map(([id, label, icon]) => (
                     <button
@@ -627,6 +629,7 @@ export function DashboardNavbar() {
                     <AccountSecurityPanel key={user?.id} onDismissBlockedChange={setSecurityDismissBlocked} />
                   </div>
                 )}
+                {accountModalTab === "assistant" && user?.role === "admin" && <AssistantSettings key={user.id} />}
                 {accountModalTab === "identity" && user && user.role !== "admin" && (
                   <section aria-labelledby="settings-identity-title">
                     <div className="settings-section-heading">

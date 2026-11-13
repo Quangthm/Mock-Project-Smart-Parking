@@ -24,6 +24,10 @@ git branch --show-current          # xác nhận đang ở branch làm việc
 
 Chi tiết từng bước và cách xử lý lỗi nằm ở các mục bên dưới.
 
+Tester chatbot đọc [hướng dẫn setup và test theo role](docs/04-testing/assistant-handoff-testing.md): có initializer local dùng đường dẫn root-relative và hai nhánh máy mới/máy đã chạy hệ thống.
+
+Khi tạo volume mới, Docker khởi tạo sẵn schema **AI Chatbot** trong `smartpark_iot`. Để chạy Assistant cùng app stack, chuẩn bị public key JWT, certificate cho keyring và bộ knowledge đã duyệt, rồi đặt `SMARTPARK_ASSISTANT_DOCKER_ENABLED=true` trong `.env`. Chạy setup và runner `All` như trên. Nếu volume đã chạy chatbot S05, xem bước nâng cấp trong [hướng dẫn Assistant Docker](LOCAL-SETUP.md#ai-chatbot-bằng-docker).
+
 ## 1. Prerequisites
 
 Checklist trước khi setup:
@@ -407,11 +411,18 @@ Checklist đầy đủ và lệnh kiểm chứng: [SmartParking_Env_Config_SKILL
 - [LOCAL-SETUP.md](LOCAL-SETUP.md) — setup local, Docker app stack, volume, AI camera và credential chi tiết.
 - [UPDATE_SCRIPT_GUIDE.md](UPDATE_SCRIPT_GUIDE.md) — cấu trúc `setup.ps1`, runner app và cách sửa script.
 - [schema-integration.md](docs/02-architecture/database/schema-integration.md) — cấu trúc DB, seed demo và naming.
-- [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/workflow-upgrades-2026-10-08.md) — lịch sử workflow migration.
+- [workflow-upgrades-2026-10-08.md](docs/02-architecture/database/schema-integration.md) — lịch sử workflow migration.
 - [scripts/database/seeds/README.md](scripts/database/seeds/README.md) — phân biệt seed demo với seed canonical.
 - [SmartParking_Env_Config_SKILL_v1.0.md](docs/07-skills/SmartParking_Env_Config_SKILL_v1.0.md) — quy tắc cập nhật `.env` và thêm key mới theo consumer.
 
 ## 8. Pull branch mới — cập nhật image service và schema DB
+
+Nếu setup báo Facility thiếu `structure_maintenance_windows`, sao lưu `smartpark_facility` rồi chạy lệnh dưới đây từ thư mục repo. Lệnh bổ sung riêng schema SPARK-238 vào volume Facility hiện có. Sau đó chạy lại setup.
+
+```powershell
+.\scripts\apply-workflow-migrations.ps1 -Service Parking -SchemaRoot . -UpgradeFacilityMaintenance
+.\setup.ps1
+```
 
 `git pull` **không** tự cập nhật Docker: container vẫn chạy image build từ code cũ, và PostgreSQL volume vẫn giữ schema cũ. Bỏ qua mục này bạn sẽ test nhầm bản cũ. Triệu chứng điển hình:
 

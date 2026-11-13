@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect } from "react"
+import { useEffect, useLayoutEffect, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 
 import {
@@ -20,7 +20,8 @@ import { RoleRoute } from "./components/navigation/RoleRoute"
 
 import { Footer } from "./components/layout/Footer"
 
-import { FloatingChatbot } from "./components/chat/FloatingChatbot"
+import { GuestChatbot } from "./components/chat/GuestChatbot"
+import { DriverChatbot } from "./components/chat/DriverChatbot"
 import { AppToastHost } from "./components/feedback/AppToastHost"
 
 import { Landing } from "./public pages/Landing"
@@ -69,7 +70,15 @@ import { getUserHomePath } from "./roles/operator/data/roleRoutes"
 import { scrollPageToTop } from "./lib/scrollPageToTop"
 
 function AppContent() {
-  const { view, user, authReady, authError, accentColor } = useApp()
+  const { view, user, authReady, authError, accentColor, setView } = useApp()
+  const [guestQuestion, setGuestQuestion] = useState<string>()
+  useEffect(() => {
+    if (user && user.role !== "driver") setGuestQuestion(undefined)
+    if (user?.role === "driver") return () => setGuestQuestion(undefined)
+  }, [user?.id, user?.role])
+  useEffect(() => {
+    if (view === "landing") setGuestQuestion(undefined)
+  }, [view])
 
   const location = useLocation()
 
@@ -162,7 +171,7 @@ function AppContent() {
             animate={{ opacity: 1, y: 0, transition: { duration: reduceMotion ? 0.08 : 0.2, ease: "easeOut" } }}
             exit={{ opacity: 0, y: reduceMotion ? 0 : -6, transition: { duration: reduceMotion ? 0.05 : 0.08, ease: "easeOut" } }}>
             <Routes>
-              <Route path="/" element={<LegacyView view={view} />} />
+              <Route path="/" element={<LegacyView view={view} guestQuestion={guestQuestion} clearGuestQuestion={() => setGuestQuestion(undefined)} />} />
               <Route path="/sign-in/email-otp" element={<SignIn flow="email-otp" />} />
               <Route path="/owner/contract/:applicationId" element={<OwnerContractPage />} />
               <Route path="/admin/applications/:applicationId/contract" element={<RoleRoute allowedRoles={["admin"]}><AdminContractPage /></RoleRoute>} />
@@ -197,15 +206,22 @@ function AppContent() {
         </AnimatePresence>
       </main>
       {authReady && user && usesDashboardNavbar && view !== "driver" && (
-        <FloatingChatbot key={user.id} role={user.role} />
+        user.role === "admin" || user.role === "owner"
+          ? <DriverChatbot key={`${user.id}:${user.role}`} />
+          : <GuestChatbot key={user.id} role={user.role} />
       )}
-      {authReady && !user && view === "landing" && <FloatingChatbot role="driver" />}
+      {authReady && !user && view === "landing" && <GuestChatbot onSignIn={question => {
+        setGuestQuestion(question)
+        setView("sign-in")
+      }} />}
       {!isDashboard && !isContractPath && <Footer />}
     </div>
   )
 }
 
-function LegacyView({ view }: { view: ReturnType<typeof useApp>["view"] }) {
+function LegacyView({ view, guestQuestion, clearGuestQuestion }: {
+  view: ReturnType<typeof useApp>["view"]; guestQuestion?: string; clearGuestQuestion: () => void
+}) {
   return (
     <>
       {view === "landing" && <Landing />}
@@ -215,7 +231,7 @@ function LegacyView({ view }: { view: ReturnType<typeof useApp>["view"] }) {
       {view === "sign-in" && <SignIn />}
       {view === "sign-up" && <SignUp />}
       {view === "parking-lot-setup" && <BusinessLotSetupPage />}
-      {view === "driver" && <DriverDashboard />}
+      {view === "driver" && <DriverDashboard pendingQuestion={guestQuestion} onUseQuestion={clearGuestQuestion} />}
       {view === "owner" && <OwnerDashboard />}
       {view === "operator" && <OperatorDashboard />}
       {view === "admin" && <AdminDashboard />}

@@ -54,6 +54,7 @@ public static class PersistenceDependencyInjection
         });
 
         services.AddScoped<IParkingTariffPort, TariffPersistenceAdapter>();
+        services.AddScoped<Application.IDiscoveryPriceSource, DiscoveryPriceSource>();
         services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
         services.AddScoped<IPaymentTransactionRepository, PaymentTransactionRepository>();
         services.AddScoped<IProviderWebhookRepository, ProviderWebhookRepository>();

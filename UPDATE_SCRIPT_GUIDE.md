@@ -27,6 +27,14 @@ AI camera dùng các helper trong `setup.ps1`: `Test-AiModelAssets`/`Assert-AiMo
 
 `load-env.ps1 -NoExport` trả hashtable để setup đọc cấu hình mà không export giá trị. Export mặc định loại private JWT signing variables, kể cả biến kế thừa từ shell và alias ASP.NET; chỉ runner UserService được opt in. Các đường export khác không được cấp private key. `apply-workflow-migrations.ps1 -Service <service> -SchemaRoot <checkout> [-EnvPath <env>] [-ProjectName <project>]` luôn dùng đúng env file; mặc định là `.env` của SchemaRoot, không phụ thuộc thư mục terminal. Không reset volume: runner probe state — schema hiện tại → skip, DB trống → áp canonical, schema cũ → báo chạy `-RecreateDb`.
 
+## Assistant local initializer và đường dẫn cấu hình
+
+`pwsh -File scripts/initialize-assistant-docker.ps1` là thao tác opt-in riêng cho checkout local mới; khác `setup.ps1` tự giữ credential cũ. Nó tạo RSA JWT, certificate bảo vệ keyring và TLS User riêng, ghi các path `.cache/assistant-docker/...` tương đối theo thư mục chứa `.env`, từ chối cấu hình signing/keyring đang có. Switch `-UseExistingSigningKey` dành cho add-on: dùng private key đã cấu hình trong `.env` (FILE/PEM/Base64), giữ nguyên nguồn và xuất matching public PEM; từ chối nguồn thiếu/lệch/placeholder, không thay key User. Không xuất bản knowledge hoặc tự bật provider. Các file có secret kế thừa quyền filesystem của checkout và không được commit.
+
+`Read-JwtPrivateKeyFile` trong `scripts/jwt-environment.ps1` thống nhất path resolution cho setup user-secrets, host User runner và Docker User runner. `SMARTPARK_JWT_PRIVATE_KEY_FILE` ưu tiên inline PEM; Base64 nếu còn cấu hình phải cùng cặp khóa. `SMARTPARK_SERVICE_*_LISTEN_URLS` của host chỉ chấp nhận loopback HTTP(S) và cổng tường minh. Docker dùng DNS/service TLS overlay, không dùng listener host để thay DNS nội bộ.
+
+Test sửa setup: `test-setup.ps1`, `test-owner-listeners.ps1`, `test-assistant-docker-initializer.ps1`, `test-assistant-check.ps1`, `test-assistant-runner.ps1`; Docker fixture: `test-assistant-docker-setup.ps1`. FAQ fixture `publication.json` dùng UTF-8 không BOM, request tiếng Việt gửi bytes UTF-8 rõ ràng để PowerShell 5.1/7 có cùng kết quả. Tài liệu QA và `.env.example` phải cập nhật cùng bridge mới.
+
 ## JWT signing và public trust (SPARK-327)
 
 Giữ nguyên workflow `.env` duy nhất: missing → template; existing → Overwrite/Keep/Abort, Enter và NonInteractive là Keep, Overwrite backup `.env.bak`; không merge key template mới, không tự sinh/thay RSA signing key. Base64 placeholder không phải key. Hướng dẫn developer và rotation ở [LOCAL-SETUP §5.5](LOCAL-SETUP.md#55-jwt-ổn-định-và-jwks-spark-327).

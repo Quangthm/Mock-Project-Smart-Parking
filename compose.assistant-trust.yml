@@ -1,0 +1,15 @@
+# Optional additional public CA, installed on every Assistant container start.
+# Selected by setup-assistant-docker.ps1 when a User CA path is configured.
+services:
+  assistant:
+    entrypoint:
+      - /bin/sh
+      - -c
+      - update-ca-certificates > /dev/null && exec dotnet SmartParking.IoTService.API.dll
+    volumes:
+      - type: bind
+        source: ${SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH:?Configure the public User TLS CA certificate}
+        target: /usr/local/share/ca-certificates/smartpark-user.crt
+        read_only: true
+        bind:
+          create_host_path: false

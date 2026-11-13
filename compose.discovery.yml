@@ -1,0 +1,52 @@
+# Optional local Docker discovery transport. No host HTTPS ports or DB changes.
+# Selected by run-app-service.ps1 after discovery-docker.ps1 validates inputs.
+x-tls: &tls
+  ASPNETCORE_URLS: http://+:8080;https://+:8443
+  Kestrel__Certificates__Default__Path: /run/discovery/server.pfx
+  Kestrel__Certificates__Default__Password: ${SMARTPARK_DISCOVERY_DOCKER_CERT_PASSWORD:?Initialize discovery Docker}
+
+x-trust-entrypoint: &trust-entrypoint
+  - /bin/sh
+  - -c
+  - update-ca-certificates > /dev/null && exec dotnet "SmartParking.$${SERVICE_NAME}.API.dll"
+
+services:
+  facility-service:
+    entrypoint: *trust-entrypoint
+    environment:
+      <<: *tls
+      Discovery__UserOrigin: ${Discovery__UserOrigin:?Configure User HTTPS origin}
+    volumes:
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY:?Initialize discovery Docker}/facility-service.pfx:/run/discovery/server.pfx:ro
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY}/discovery-ca.crt:/usr/local/share/ca-certificates/smartpark-discovery.crt:ro
+      - ${SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH:?Configure User CA}:/usr/local/share/ca-certificates/smartpark-user.crt:ro
+      - discovery-facility-keys:/root/.aspnet/DataProtection-Keys
+  operation-service:
+    entrypoint: *trust-entrypoint
+    environment:
+      <<: *tls
+      Discovery__Enabled: ${Discovery__Enabled:-false}
+      Discovery__FacilityOrigin: ${Discovery__FacilityOrigin:?Configure Facility HTTPS origin}
+      Discovery__PaymentOrigin: ${Discovery__PaymentOrigin:?Configure Payment HTTPS origin}
+      Discovery__PaymentServiceKey: ${Discovery__PaymentServiceKey:?Configure discovery service key}
+      Discovery__MaxAgeSeconds: ${Discovery__MaxAgeSeconds:?Configure discovery freshness}
+      Discovery__ClockSkewSeconds: ${Discovery__ClockSkewSeconds:?Configure discovery clock skew}
+    volumes:
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY}/operation-service.pfx:/run/discovery/server.pfx:ro
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY}/discovery-ca.crt:/usr/local/share/ca-certificates/smartpark-discovery.crt:ro
+      - discovery-operation-keys:/root/.aspnet/DataProtection-Keys
+  payment-service:
+    entrypoint: *trust-entrypoint
+    env_file:
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY}/pricing-bindings.env
+    environment:
+      <<: *tls
+      DiscoveryPricing__Operations__Current__Key: ${DiscoveryPricing__Operations__Current__Key:?Configure discovery service key}
+      DiscoveryPricing__Operations__Current__ExpiresAt: ${DiscoveryPricing__Operations__Current__ExpiresAt:?Configure discovery key expiry}
+    volumes:
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY}/payment-service.pfx:/run/discovery/server.pfx:ro
+      - ${SMARTPARK_DISCOVERY_DOCKER_DIRECTORY}/discovery-ca.crt:/usr/local/share/ca-certificates/smartpark-discovery.crt:ro
+
+volumes:
+  discovery-facility-keys:
+  discovery-operation-keys:
