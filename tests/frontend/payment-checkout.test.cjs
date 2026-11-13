@@ -8,7 +8,7 @@ const ts = require('../../FE/node_modules/typescript');
 const orderId = 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d';
 const transactionId = 'f7d3a2b1-5e8c-4a3d-9c2b-1a2b3c4d5e6f';
 
-function fixture(data = {}) {
+function fixture(data = {}, response) {
   const storage = new Map();
   const calls = [];
   const source = fs.readFileSync(path.join(__dirname, '../../FE/src/lib/paymentApi.ts'), 'utf8')
@@ -17,7 +17,7 @@ function fixture(data = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const context = {
-    exports: {}, URL, Date, Error,
+    exports: {}, URL, URLSearchParams, Date, Error,
     require: name => name === './authApi' ? { ensureAccessToken: async () => 'test-token' } : null,
     crypto: { randomUUID: () => 'c9b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d' },
     window: {
@@ -30,6 +30,7 @@ function fixture(data = {}) {
     },
     fetch: async (url, init) => {
       calls.push({ url, init });
+      if (response) return response;
       return {
         ok: true,
         json: async () => ({ success: true, data: {
@@ -49,6 +50,33 @@ function fixture(data = {}) {
   vm.runInNewContext(javascript, context);
   return { api: context.exports, storage, calls };
 }
+
+test('invoice history uses the raw paged response and authenticated date/status filters', async () => {
+  const page = { items: [], totalCount: 21, pageNumber: 2, totalPages: 3 };
+  const f = fixture({}, { ok: true, json: async () => page });
+  const result = await f.api.paymentApi.invoiceHistory({
+    status: 'PAID', fromDate: '2026-11-01', toDate: '2026-11-11', pageNumber: 2,
+  });
+  assert.equal(result, page);
+  const request = f.calls[0];
+  const url = new URL(request.url, 'http://localhost');
+  assert.equal(url.pathname, '/payment-api/api/v1/payments/invoices/my-history');
+  assert.equal(url.searchParams.get('status'), 'PAID');
+  assert.equal(url.searchParams.get('pageNumber'), '2');
+  assert.equal(url.searchParams.get('fromDate'), '2026-11-01T00:00:00+07:00');
+  assert.equal(url.searchParams.get('toDate'), '2026-11-11T23:59:59.9999999+07:00');
+  assert.equal(request.init.headers.Authorization, 'Bearer test-token');
+});
+
+test('invoice download requires PDF content and handles unsettled payments', async () => {
+  const pdf = new Blob(['%PDF'], { type: 'application/pdf' });
+  const f = fixture({}, { ok: true, headers: new Headers({ 'content-type': 'application/pdf' }), blob: async () => pdf });
+  assert.equal(await f.api.paymentApi.downloadInvoice(orderId), pdf);
+  assert.equal(f.calls[0].url, `/payment-api/api/v1/payments/invoices/${orderId}/download`);
+  assert.equal(f.calls[0].init.headers.Authorization, 'Bearer test-token');
+  const pending = fixture({}, { ok: false, status: 422 });
+  await assert.rejects(pending.api.paymentApi.downloadInvoice(orderId), /until payment is settled/);
+});
 
 test('checkout sends payOS request, idempotency key and same-origin return routes', async () => {
   const f = fixture();

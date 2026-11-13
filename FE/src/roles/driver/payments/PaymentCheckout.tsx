@@ -5,8 +5,29 @@ import { useServerRefresh } from "../../../lib/serverRefresh"
 import qrLogo from "../../../assets/payment-qr.png"
 import "./payment-checkout.css"
 
-export function PaymentCheckout({ showMethodPicker = true, reservationOrderId, holdExpiresAt }: { showMethodPicker?: boolean; reservationOrderId?: string; holdExpiresAt?: string | null }) {
-  const [orderId, setOrderId] = useState(() => reservationOrderId ?? (showMethodPicker ? new URLSearchParams(window.location.search).get("orderId") ?? sessionStorage.getItem("sp_payos_latest_order") ?? "" : ""))
+// Both prop names are used by reservation checkout callers during the branch merge.
+// Keep one authoritative order ID; remove the alias after callers are standardized.
+type PaymentCheckoutProps = {
+  showMethodPicker?: boolean
+  reservationOrderId?: string
+  bookingOrderId?: string
+  holdExpiresAt?: string | null
+}
+
+export function PaymentCheckout({
+  showMethodPicker = true,
+  reservationOrderId,
+  bookingOrderId,
+  holdExpiresAt,
+}: PaymentCheckoutProps) {
+  const [manualOrderId, setManualOrderId] = useState(() =>
+    showMethodPicker
+      ? new URLSearchParams(window.location.search).get("orderId") ??
+        sessionStorage.getItem("sp_payos_latest_order") ?? ""
+      : ""
+  )
+  const providedOrderId = reservationOrderId ?? bookingOrderId
+  const orderId = providedOrderId ?? manualOrderId
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -80,13 +101,15 @@ export function PaymentCheckout({ showMethodPicker = true, reservationOrderId, h
 
   return <section className="card payos-checkout" aria-labelledby="payos-checkout-title">
     <div className="payos-checkout-heading"><span>PAYMENT SERVICE</span><h3 id="payos-checkout-title">Pay by QR</h3><p>{showMethodPicker ? "Generate a real VietQR from an existing Payment Service order." : "Your payment details will appear here when the booking creates a payment order."}</p></div>
-    {!checkout && !showMethodPicker && !reservationOrderId ? <div className="payos-checkout-unavailable" role="status">
+    {!checkout && !showMethodPicker && !providedOrderId ? <div className="payos-checkout-unavailable" role="status">
       <strong>QR payment is not available for this booking yet.</strong>
-      <p>SmartParking needs a payment order from the booking service before it can request a real payOS QR code. Your slot has not been reserved and no payment has been started.</p>
+      <p>SmartParking needs a payment order from the booking service before it can request a real payOS QR code. Check your reservation status before trying again.</p>
     </div> : !checkout ? <form onSubmit={pay} className="payos-checkout-form">
-      {!reservationOrderId && <><label htmlFor="payment-order-id">Payment order ID</label>
-      <input id="payment-order-id" className="input" value={orderId} onChange={event => { setOrderId(event.target.value); setError("") }} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autoComplete="off" spellCheck={false} required aria-describedby="payment-order-hint" />
-      <p id="payment-order-hint">The booking service has not yet supplied a payment order. When it does, this ID can be passed here automatically. A booking ID is not a payment order ID.</p></>}
+      {!providedOrderId && <>
+        <label htmlFor="payment-order-id">Payment order ID</label>
+        <input id="payment-order-id" className="input" value={orderId} onChange={event => { setManualOrderId(event.target.value); setError("") }} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autoComplete="off" spellCheck={false} required aria-describedby="payment-order-hint" />
+        <p id="payment-order-hint">The booking service has not yet supplied a payment order. When it does, this ID can be passed here automatically. A booking ID is not a payment order ID.</p>
+      </>}
       {showMethodPicker && <div className="payos-methods" role="group" aria-label="Payment method">
         <button type="button" className={`payos-method${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => setSelected(true)}>
           <img src={qrLogo} alt="" /><span><strong>payOS VietQR</strong><small>Bank transfer via payOS</small></span><span className="payos-method-check" aria-hidden="true">{selected ? "✓" : ""}</span>
