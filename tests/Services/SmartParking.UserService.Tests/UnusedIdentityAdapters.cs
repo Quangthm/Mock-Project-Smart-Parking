@@ -20,6 +20,8 @@ internal class UnusedIdentityRepository : IIdentityAccessRepository
     public Task<IReadOnlyList<OperatorGrant>> GetOperatorGrantsAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<IReadOnlyList<AuthChallenge>> GetPendingInvitationsAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task ReplaceInvitationAsync(Guid userId, AuthChallenge challenge, WorkflowDelivery delivery, CancellationToken ct) => throw new NotSupportedException();
+    public Task<UserSimulatedIdentity?> FindSimulatedIdentityAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public void AddSimulatedIdentity(UserSimulatedIdentity identity) => throw new NotSupportedException();
 }
 internal class RecordingEventPublisher : IEventPublisher
 {

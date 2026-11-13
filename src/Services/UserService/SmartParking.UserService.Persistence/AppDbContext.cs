@@ -24,6 +24,7 @@ namespace UserService.Persistence
         public DbSet<MfaCredential> MfaCredentials { get; set; } = null!;
         public DbSet<MfaRecoveryCode> MfaRecoveryCodes { get; set; } = null!;
         public DbSet<RegisteredVehicle> RegisteredVehicles { get; set; } = null!;
+        public DbSet<UserSimulatedIdentity> UserSimulatedIdentities { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -124,6 +125,29 @@ namespace UserService.Persistence
                 entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId);
             });
 
+            modelBuilder.Entity<UserSimulatedIdentity>(entity =>
+            {
+                entity.ToTable("user_simulated_identities");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.UserId).HasColumnName("user_id");
+                entity.Property(e => e.SimulatedVNeIdGuid).HasColumnName("simulated_vneid_guid");
+                entity.Property(e => e.ConsentGiven).HasColumnName("consent_given");
+                entity.Property(e => e.ConsentTimestamp).HasColumnName("consent_timestamp");
+                entity.Property(e => e.ConsentVersion).HasColumnName("consent_version").HasMaxLength(50);
+                entity.Property(e => e.SimulationStatus).HasColumnName("simulation_status").HasMaxLength(30);
+                entity.Property(e => e.MockDocumentNumber).HasColumnName("mock_document_number").HasMaxLength(50);
+                entity.Property(e => e.MockFullName).HasColumnName("mock_full_name").HasMaxLength(255);
+                entity.Property(e => e.CreatedOn).HasColumnName("created_at");
+                entity.Property(e => e.ModifiedOn).HasColumnName("updated_at");
+                entity.Property(e => e.DeletedOn).HasColumnName("deleted_at");
+                entity.Ignore(e => e.IsDeleted);
+                entity.Ignore(e => e.CreatedBy);
+                entity.Ignore(e => e.ModifiedBy);
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            });
+
             modelBuilder.Entity<User>(entity =>
             {
                 entity.ToTable("users");
@@ -137,6 +161,7 @@ namespace UserService.Persistence
                 entity.Property(e => e.CompanyName).HasColumnName("company_name");
                 entity.Property(e => e.AvatarAssetId).HasColumnName("avatar_asset_id");
                 entity.HasOne<MediaAsset>().WithMany().HasForeignKey(e => e.AvatarAssetId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(e => e.SimulatedVNeIdGuid).HasColumnName("simulated_vneid_guid");
                 // Preserve the stored, read-only avatar value without reinterpretation or conversion.
                 entity.Property(e => e.AvatarUrl)
                     .HasColumnName("avatar_url")

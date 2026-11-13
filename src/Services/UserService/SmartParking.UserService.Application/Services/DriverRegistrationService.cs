@@ -38,16 +38,36 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
         if (await db.ContactExistsAsync(email, phone, ct))
             throw Error("CONTACT_EXISTS", "Email or phone is already registered. Resume OTP verification if pending.", 409);
         var now = clock.GetUtcNow();
+        var simulatedGuid = Guid.NewGuid();
         var user = new User { Id = Guid.NewGuid(), FullName = request.FullName.Trim(), Email = email, Phone = phone,
             PasswordHash = string.IsNullOrEmpty(request.Password) ? "" : passwords.Hash(request.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
+        user.AssignSimulatedVNeId(simulatedGuid);
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             CreatedOn = now, Status = "ACTIVE", RoleCode = "DRIVER" };
         user.Accounts.Add(account);
         var registration = new DriverRegistration { Id = Guid.NewGuid(), UserId = user.Id.Value, Channel = email != null ? "email" : "sms" };
         var code = NewCode();
         SetCode(registration, code);
+
+        var simulatedIdentity = new UserSimulatedIdentity
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id.Value,
+            User = user,
+            SimulatedVNeIdGuid = simulatedGuid,
+            ConsentGiven = true,
+            ConsentTimestamp = now,
+            ConsentVersion = "v1.1-simulated",
+            SimulationStatus = "COMPLETED",
+            MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+            MockFullName = request.FullName.Trim().ToUpperInvariant(),
+            CreatedOn = now,
+            ModifiedOn = now
+        };
+
         db.Stage(user);
         db.Stage(registration);
+        db.Stage(simulatedIdentity);
         await db.SaveRegistrationAsync(ct);
         await sender.SendAsync(registration.Channel, email ?? phone!, code, ct);
         await tx.CommitAsync(ct);
@@ -79,6 +99,33 @@ public sealed class DriverRegistrationService(IIdentityWorkflowStore db, IPasswo
     {
         await using var tx = await db.BeginTransactionAsync(ct);
         var (r, user) = await LoadAsync(request.RegistrationId, ct);
+        if (user.SimulatedVNeIdGuid is null || user.SimulatedVNeIdGuid == Guid.Empty)
+        {
+            var fallbackGuid = Guid.NewGuid();
+            user.AssignSimulatedVNeId(fallbackGuid);
+        }
+
+        var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
+        if (simulated is null)
+        {
+            var now = clock.GetUtcNow();
+            db.Stage(new UserSimulatedIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id.Value,
+                User = user,
+                SimulatedVNeIdGuid = user.SimulatedVNeIdGuid!.Value,
+                ConsentGiven = true,
+                ConsentTimestamp = now,
+                ConsentVersion = "v1.1-simulated",
+                SimulationStatus = "COMPLETED",
+                MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+                MockFullName = user.FullName.ToUpperInvariant(),
+                CreatedOn = now,
+                ModifiedOn = now
+            });
+        }
+
         if (r.ExpiresAt <= clock.GetUtcNow()) throw Error("OTP_EXPIRED", "Code has expired. Request a new code.");
         if (!passwords.Verify(request.Code, r.CodeHash))
         {

@@ -41,8 +41,10 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         if (await db.OwnerContactExistsAsync(email, phone, ct))
             throw Error("CONTACT_EXISTS", "Email or phone is already registered.", 409);
         var now = clock.GetUtcNow();
+        var simulatedGuid = Guid.NewGuid();
         var user = new User { Id = Guid.NewGuid(), FullName = body.FullName.Trim(), CompanyName = body.BusinessName.Trim(), Email = email, Phone = phone,
             PasswordHash = string.IsNullOrEmpty(body.Password) ? "" : passwords.Hash(body.Password), Status = UserStatus.PendingVerification, CreatedOn = now, ModifiedOn = now };
+        user.AssignSimulatedVNeId(simulatedGuid);
         var account = new Account { Id = Guid.NewGuid(), User = user, UserId = user.Id.Value,
             Status = "PENDING_APPROVAL", CreatedOn = now };
         account.RoleCode = "BUSINESS_OWNER";
@@ -51,7 +53,25 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         var application = new OwnerApplication { Id = Guid.NewGuid(), UserId = user.Id.Value, User = user,
             BusinessName = body.BusinessName.Trim(), LotType = body.LotType, SubmittedAt = now,
             SetupTokenHash = Hash(setupToken), SetupTokenExpiresAt = now.AddHours(24) };
+
+        var simulatedIdentity = new UserSimulatedIdentity
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id.Value,
+            User = user,
+            SimulatedVNeIdGuid = simulatedGuid,
+            ConsentGiven = true,
+            ConsentTimestamp = now,
+            ConsentVersion = "v1.1-simulated",
+            SimulationStatus = "COMPLETED",
+            MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+            MockFullName = body.FullName.Trim().ToUpperInvariant(),
+            CreatedOn = now,
+            ModifiedOn = now
+        };
+
         db.Stage(application);
+        db.Stage(simulatedIdentity);
         await db.SaveRegistrationAsync(ct);
         await tx.CommitAsync(ct);
         return Result(application) with { SetupToken = setupToken };
@@ -73,6 +93,33 @@ public sealed class OwnerRegistrationService(IIdentityWorkflowStore db, IPasswor
         application.User = user;
         if (application.Status != "pending" || application.ApprovalRequestedBy is not null || user.DeletedOn is not null || user.Status != UserStatus.PendingVerification)
             throw Error("APPLICATION_CLOSED", "Setup is no longer editable.", 409);
+
+        if (user.SimulatedVNeIdGuid is null || user.SimulatedVNeIdGuid == Guid.Empty)
+        {
+            var fallbackGuid = Guid.NewGuid();
+            user.AssignSimulatedVNeId(fallbackGuid);
+        }
+
+        var simulated = await db.FindSimulatedIdentityAsync(user.Id!.Value, ct);
+        if (simulated is null)
+        {
+            var now = clock.GetUtcNow();
+            db.Stage(new UserSimulatedIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id.Value,
+                User = user,
+                SimulatedVNeIdGuid = user.SimulatedVNeIdGuid!.Value,
+                ConsentGiven = true,
+                ConsentTimestamp = now,
+                ConsentVersion = "v1.1-simulated",
+                SimulationStatus = "COMPLETED",
+                MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+                MockFullName = user.FullName.ToUpperInvariant(),
+                CreatedOn = now,
+                ModifiedOn = now
+            });
+        }
         // Serialize a typed payload for stable comparison, independent of incoming JSON property order.
         var json = JsonSerializer.Serialize(body.Lot);
         ChallengeResult challenge;

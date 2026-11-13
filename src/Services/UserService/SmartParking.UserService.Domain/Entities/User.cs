@@ -28,6 +28,12 @@ public class User : BaseEntity
     public string? AvatarUrl { get; set; }
     public Guid? AvatarAssetId { get; set; }
 
+    /// <summary>
+    /// Substitute GUID representing simulated VNeID identity verification (V11-06).
+    /// Not a real government ID or authentication credential.
+    /// </summary>
+    public Guid? SimulatedVNeIdGuid { get; set; }
+
     public UserStatus Status { get; set; }
 
     public int FailedLoginAttempts { get; set; }
@@ -47,4 +53,10 @@ public class User : BaseEntity
         FullName = ProfileName.Normalize(fullName);
     }
 
+    public void AssignSimulatedVNeId(Guid guid)
+    {
+        if (guid == Guid.Empty)
+            throw new ArgumentException("Simulated VNeID GUID cannot be empty.", nameof(guid));
+        SimulatedVNeIdGuid = guid;
+    }
 }

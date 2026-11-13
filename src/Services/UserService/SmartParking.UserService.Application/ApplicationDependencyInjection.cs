@@ -26,6 +26,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<ICurrentAccessService, CurrentAccessService>();
         services.AddScoped<IAccountAuthorizationService, AccountAuthorizationService>();
         services.AddScoped<IOperatorInvitationFactory, OperatorInvitationFactory>();
+        services.AddScoped<IVNeIdSimulationService, VNeIdSimulationService>();
         if (policy.MaxFailedLoginAttempts < 1 || policy.LockoutMinutes < 1 || policy.RefreshTokenDays < 1)
             throw new InvalidOperationException("Authentication policy values must be positive.");
         services.AddSingleton(policy);
@@ -37,6 +38,7 @@ public static class ApplicationDependencyInjection
         services.AddScoped<IDriverRegistrationService, DriverRegistrationService>();
         services.AddScoped<DriverRegistrationService>();
         services.AddScoped<IOwnerRegistrationService, OwnerRegistrationService>();
+        services.AddScoped<IVNeIdSimulationService, VNeIdSimulationService>();
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<AccountWorkflowService>();
         services.AddScoped<IAccountWorkflows>(sp=>sp.GetRequiredService<AccountWorkflowService>());

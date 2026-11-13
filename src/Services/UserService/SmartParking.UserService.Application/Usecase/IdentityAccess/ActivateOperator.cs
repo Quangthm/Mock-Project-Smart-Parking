@@ -22,8 +22,11 @@ public sealed class ActivateOperatorValidator : AbstractValidator<ActivateOperat
         {
             RuleFor(x => x.Body.ChallengeId).NotEmpty();
             RuleFor(x => x.Body.Token).NotEmpty().Length(64).Matches("^[0-9A-Fa-f]{64}$");
-            RuleFor(x => x.Body.Password).NotEmpty().Length(8, 15)
-                .Matches(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$");
+            When(x => !string.IsNullOrEmpty(x.Body.Password), () =>
+            {
+                RuleFor(x => x.Body.Password).Length(8, 15)
+                    .Matches(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).+$");
+            });
         });
     }
 }
@@ -32,7 +35,7 @@ public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository
 {
     public async Task Handle(ActivateOperatorCommand request, CancellationToken cancellationToken)
     {
-        var passwordHash = passwords.Hash(request.Body.Password);
+        var passwordHash = string.IsNullOrEmpty(request.Body.Password) ? null : passwords.Hash(request.Body.Password);
         await using var transaction = await unitOfWork.BeginTransactionAsync(cancellationToken);
         var invitation = await repository.LockInvitationAsync(request.Body.ChallengeId, cancellationToken);
         var now = clock.GetUtcNow();
@@ -40,6 +43,34 @@ public sealed class ActivateOperatorHandler(IIdentityAccessRepository repository
             !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(value.Challenge.CodeHash),
                 Encoding.UTF8.GetBytes(AuthSessionService.HashRefreshToken(request.Body.Token))))
             throw new AuthException("INVALID_TOKEN", "Activation link is invalid or expired.", 401);
+
+        if (value.User.SimulatedVNeIdGuid is null || value.User.SimulatedVNeIdGuid == Guid.Empty)
+        {
+            var fallbackGuid = Guid.NewGuid();
+            value.User.AssignSimulatedVNeId(fallbackGuid);
+        }
+
+        var simulated = await repository.FindSimulatedIdentityAsync(value.User.Id!.Value, cancellationToken);
+        if (simulated is null)
+        {
+            var sim = new UserSimulatedIdentity
+            {
+                Id = Guid.NewGuid(),
+                UserId = value.User.Id.Value,
+                User = value.User,
+                SimulatedVNeIdGuid = value.User.SimulatedVNeIdGuid!.Value,
+                ConsentGiven = true,
+                ConsentTimestamp = now,
+                ConsentVersion = "v1.1-simulated",
+                SimulationStatus = "COMPLETED",
+                MockDocumentNumber = $"001090{RandomNumberGenerator.GetInt32(100000, 999999):D6}",
+                MockFullName = value.User.FullName.ToUpperInvariant(),
+                CreatedOn = now,
+                ModifiedOn = now
+            };
+            repository.AddSimulatedIdentity(sim);
+        }
+
         OperatorActivation.Activate(value.User, value.Challenge, passwordHash, now);
         await repository.RevokeSessionsAsync(value.User.Id!.Value, cancellationToken);
         await events.PublishAsync(new OperatorAccessChanged(Guid.NewGuid(), 1, value.User.Id.Value, value.User.AccessVersion, now,

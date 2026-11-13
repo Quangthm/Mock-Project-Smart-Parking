@@ -21,6 +21,10 @@ internal static class TestAuthorization
     {
         services.TryAddSingleton<IUserRepository>(fixture);
         services.TryAddSingleton<IIdentityAccessRepository, UnusedIdentityRepository>();
+        services.TryAddSingleton<IIdentityWorkflowStore>(UnsupportedFeature.Create<IIdentityWorkflowStore>());
+        services.TryAddSingleton<IAccountAuthorityRepository>(UnsupportedFeature.Create<IAccountAuthorityRepository>());
+        services.TryAddSingleton<IAccountAccessDecisionRepository>(UnsupportedFeature.Create<IAccountAccessDecisionRepository>());
+        services.TryAddSingleton<IAccountAccessDecisionPublisher>(UnsupportedFeature.Create<IAccountAccessDecisionPublisher>());
         services.TryAddSingleton<IEventPublisher, RecordingEventPublisher>();
         services.TryAddSingleton<IWorkflowProtector, TestWorkflowProtector>();
         services.TryAddSingleton<IAuthorizationScopeStore>(new MemoryScopes(fixture));
