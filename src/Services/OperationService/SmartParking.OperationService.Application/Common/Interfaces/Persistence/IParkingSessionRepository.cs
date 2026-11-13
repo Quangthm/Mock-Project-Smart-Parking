@@ -10,4 +10,5 @@ public interface IParkingSessionRepository : IRepository<ParkingSessionRow>
     Task<WalkInParkingSession?> FindActiveWalkInAsync(Guid tenantId, Guid siteId, string plate, CancellationToken ct);
     Task<bool> HasActivePlateAsync(Guid tenantId, Guid siteId, string plate, CancellationToken ct);
     Task<ParkingSessionRow?> FindByReservationAsync(Guid tenantId, Guid siteId, Guid reservationId, bool active, CancellationToken ct);
+    Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsByAccountAsync(Guid accountId, string? statusFilter, int limit, CancellationToken ct);
 }

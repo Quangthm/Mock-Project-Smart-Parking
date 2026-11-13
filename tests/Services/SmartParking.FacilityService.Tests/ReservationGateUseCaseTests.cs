@@ -224,6 +224,7 @@ public sealed class ReservationGateUseCaseTests
         public Task<ReservationGateEntry?> FindByIdAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => Task.FromResult<ReservationGateEntry?>(new(id, Guid.NewGuid(), site, "site", Allocation?.SlotId, "Unassigned", "29A12345", Reservation!.Status,
             null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), null, null, null, null, DateTimeOffset.UtcNow));
         public Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(Guid tenant, Guid site, CancellationToken ct) => Task.FromResult<IReadOnlyList<ParkingSessionHistoryEntry>>([]);
+        public Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsByAccountAsync(Guid accountId, string? statusFilter, int limit, CancellationToken ct) => Task.FromResult<IReadOnlyList<ParkingSessionHistoryEntry>>([]);
         public Task<WalkInParkingSession?> FindActiveWalkInAsync(Guid tenant, Guid site, string plate, CancellationToken ct) => Task.FromResult<WalkInParkingSession?>(null);
     }
 }
