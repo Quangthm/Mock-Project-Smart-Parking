@@ -8,7 +8,7 @@
 |---|---|
 | Owner | Parking Operations; User & Access, Facility/Gate and Payment supply authoritative facts |
 | Status | Operations source baseline: version-2 `HOLD_CREATED`, hold outbox consumer, order/zero-price provisioning, real Payment preview/quote/order HTTP adapter, reservation `PaymentSucceededV1` consumer and guarded paid/zero-price confirmation are implemented and registered. Zero-price acceptance, targeted collection lookup/reconciliation, production machine authentication and live cross-service acceptance remain blocked/unverified. The active generic event deviates from the proposed dedicated collection schema and requires owner review. |
-| Task | SPARK-273 / US-D01, US-D05, US-D10; implementation evidence in the [session](../../../ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md) |
+| Task | [SPARK-273 / US-D01, US-D05, US-D10](../../../ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md); Driver history P0 [SPARK-286](https://mangamanagement.atlassian.net/browse/SPARK-286) and [SPARK-302](https://mangamanagement.atlassian.net/browse/SPARK-302) |
 | Reviewed checkout | 7c47755d83cbe4eea2d2e887a2abc49e6decd203; old handoff SHA is historical |
 | Requirements | [Reservation SRS](../../01-requirements/srs/modules/04-reservations-allocation.md), [BR-RES](../../01-requirements/business-rules/04-reservations-allocation.md), [UC-RES-01](../../01-requirements/use-cases/uc-res-01.md), [UC-RES-02](../../01-requirements/use-cases/uc-res-02.md), [UC-RES-03](../../01-requirements/use-cases/uc-res-03.md) |
 | Approval | [D1–D4c](../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md); [authorization matrix](../../01-requirements/srs/authorization-operation-classification.md), [ADR §9](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#9-global-saga-retry-redelivery-timeout-and-unknown-outcome-policy) |
@@ -25,7 +25,7 @@ The table distinguishes current source routes from proposed cancellation work. A
 | POST `/api/reservation-requests` | REQUEST / validated Driver JWT | Admit own normalized create intent and return durable receipt. Required `Idempotency-Key`. |
 | GET `/api/reservation-requests/{requestId}` | TOKEN / validated Driver JWT | Observe only own receipt, including pending work without a booking/session. No body. |
 | GET `/api/me/reservations` | TOKEN / validated Driver JWT | Current source: own list, pageSize 20 (1–100), optional `before` + `beforeId` together; descending createdAt then ID. Use last item's createdAt/ID for next page. |
-| GET `/api/me/reservations/{reservationId}` | TOKEN / validated Driver JWT | Current source: own booking summary; Operator `/api/reservations` remains separate. |
+| GET `/api/me/reservations/{reservationId}` | TOKEN / validated Driver JWT | Own booking detail using the same response fields as each item in the Driver list. |
 | POST `/api/me/reservations/{reservationId}/cancellation-requests` | REQUEST / validated Driver JWT | PROPOSED future phase only: separate receipt, required Idempotency-Key; no cancellation route implemented here. |
 
 TOKEN reads accept remaining 15-minute token staleness and still filter local ownership. REQUEST means Account-current asynchronous admission, not a synchronous UserService round trip. Use API `ICurrentActor` from validated `sub` (User), `account_id` (Account), `role`; reject malformed/missing claims. Unknown JSON fields are ignored without changing protected state.
@@ -71,9 +71,22 @@ Preview response: **200 OK**, `data` has `bookedAmount`, nullable `depositAmount
 
 Review response: **200 OK**, `data` has `termsId`, `termsVersion`, `validUntil`, `commercial` and `operationalPolicy`. Commercial contains quoteId/version/validUntil, normalized selection, authenticated Account, bookedAmount/depositAmount/currency, prepaymentMode, coverageVersion and disclosure. OperationalPolicy contains platform/site revision IDs/versions, effective values (minutes except COUNT/LIMIT), late-tolerance enablement and cancellation timezone. Binding is deliberately not evaluated during review; it is recorded once after workflow authorization. Actual H is calculated when the hold is created. Expired/changed terms require renewed review. Missing/unreachable Payment transport remains an explicit unavailable error.
 
-Booking response: **200 OK**, current `data` fields: reservationId, state, siteId, nullable requestedSlotId, start/end, nullable `holdExpiresAt`/`orderId`, `orderProvisioningState`, nullable `orderProvisioningCode`, `zeroPriceAcceptanceState`, bookedAmount/depositAmount/currency, nullable confirmedAt, createdAt. `confirmedAt` records the accepted evaluation time; committed `CONFIRMED` is required for entitlement. RequestedSlotId is a preference, not an observed or allocated location. Allocation, refund, cancellation and visit detail fields are future phase work; do not infer them from this summary.
+Booking detail returns **200 OK** with `{"success":true,"data":{...}}`. Existing fields include `reservationId`, `state`, `siteId`, `requestedSlotId`, `start`, `end`, `holdExpiresAt`, `orderId`, `orderProvisioningState`, `orderProvisioningCode`, `zeroPriceAcceptanceState`, `bookedAmount`, `depositAmount`, `currency`, `confirmedAt` and `createdAt`. The requested slot, hold expiry, order ID, provisioning code, commercial amounts, currency and confirmation timestamp are nullable. `confirmedAt` records first accepted confirmation timing. The committed reservation state remains the source of entitlement.
 
-List response: `{"success":true,"data":[]}`. Items use the current booking summary. The current implementation returns an array, not an items/nextCursor object. For the next page send both the last item's createdAt as `before` and reservationId as `beforeId`.
+Driver history P0 adds the following fields to both reads.
+
+| Field | Type | Nullable | Meaning |
+|---|---|---|---|
+| `licensePlate` | string | Yes | Original reservation plate, with the stored normalized plate as fallback for historical records. |
+| `allocatedSlotId` | UUID | Yes | Slot from the selected Operations allocation record. `requestedSlotId` continues to identify the requested resource. |
+| `allocationStatus` | string | Yes | Recorded `RESERVED`, `OCCUPIED`, or `RELEASED`. An active record takes precedence over released records. Where multiple rows qualify, newest creation time then highest ID wins. |
+| `parkingSessionId` | UUID | Yes | Account-, tenant- and site-matching visit reference. The current visit takes precedence; otherwise the latest visit by creation time and ID is returned. |
+| `siteName`, `siteAddress` | string | Yes | Facility display data, currently returned as null. The client can resolve current display data by `siteId`. |
+| `paymentStatus` | string | Yes | PaymentService-owned status, currently returned as null. A valid order ID and a closed or confirmed reservation can coexist with an unknown payment status. |
+
+The reservation lifecycle values are `PENDING_PAYMENT`, `CONFIRMED`, `ALLOCATED`, `PARKING`, `COMPLETED`, `EXPIRED`, `NO_SHOW`, `CANCELLED` and `UNFULFILLABLE`. Each read observes the data available at request time. Repeating a request can show a newly committed state. Accepted terms presentation, cancellation and refund details, full visit data and the transition timeline are later scope.
+
+The list returns **200 OK** with a booking array in `data`, including `{"success":true,"data":[]}` when empty. Results sort by `createdAt DESC, reservationId DESC`. Request a page after the last item by sending its `createdAt` as `before` and its `reservationId` as `beforeId`. Omit both on the first request. A lone cursor parameter, an empty cursor UUID, or a page size outside 1–100 yields `400 INVALID_REQUEST`. `pageSize` defaults to 20.
 
 ### Validation and error responses
 

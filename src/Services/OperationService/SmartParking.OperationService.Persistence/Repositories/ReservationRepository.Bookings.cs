@@ -25,14 +25,72 @@ public sealed partial class ReservationRepository
             throw new ReservationGateException(409, "VEHICLE_TIME_CONFLICT", "This plate already has a conflicting booking or physical visit.");
     }
 
-    public Task<ReservationRow?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct) =>
-        db.Reservations.AsNoTracking().SingleOrDefaultAsync(r => r.AccountId == accountId && r.Id == id && r.RequestId != null, ct);
+    public async Task<BookingReadResult?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct)
+    {
+        var reservation = await db.Reservations.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.AccountId == accountId && r.Id == id && r.RequestId != null, ct);
+        if (reservation is null)
+            return null;
 
-    public async Task<IReadOnlyList<ReservationRow>> ListOwnBookingsAsync(Guid accountId, int take,
-        DateTimeOffset? before, Guid? beforeId, CancellationToken ct) =>
-        await db.Reservations.AsNoTracking().Where(r => r.AccountId == accountId && r.RequestId != null &&
-            (before == null || r.CreatedAt < before || r.CreatedAt == before && r.Id.CompareTo(beforeId!.Value) < 0))
-            .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(take).ToListAsync(ct);
+        var results = await ReadBookingLinksAsync(accountId, [reservation], ct);
+        return results[0];
+    }
+
+    public async Task<IReadOnlyList<BookingReadResult>> ListOwnBookingsAsync(Guid accountId, int take,
+        DateTimeOffset? before, Guid? beforeId, CancellationToken ct)
+    {
+        var query = db.Reservations.AsNoTracking().Where(r => r.AccountId == accountId && r.RequestId != null);
+        if (before is { } cursorTime && beforeId is { } cursorId)
+        {
+            query = query.Where(r => r.CreatedAt < cursorTime ||
+                r.CreatedAt == cursorTime && r.Id.CompareTo(cursorId) < 0);
+        }
+
+        var reservations = await query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
+            .Take(take).ToListAsync(ct);
+        return await ReadBookingLinksAsync(accountId, reservations, ct);
+    }
+
+    private async Task<IReadOnlyList<BookingReadResult>> ReadBookingLinksAsync(Guid accountId,
+        IReadOnlyList<ReservationRow> reservations, CancellationToken ct)
+    {
+        if (reservations.Count == 0)
+            return [];
+
+        var ids = reservations.Select(r => r.Id).ToArray();
+        var bookingsInPage = db.Reservations.AsNoTracking()
+            .Where(r => ids.Contains(r.Id) && r.AccountId == accountId && r.RequestId != null);
+
+        // Match the current allocation lookup, retaining the latest released row when no active row exists.
+        var allocations = await (
+            from booking in bookingsInPage
+            join allocation in db.SlotAllocations.AsNoTracking()
+                on new { ReservationId = (Guid?)booking.Id, booking.TenantId, booking.SiteId }
+                equals new { allocation.ReservationId, allocation.TenantId, allocation.SiteId }
+            orderby (allocation.AllocationStatus == "RESERVED" || allocation.AllocationStatus == "OCCUPIED") descending,
+                allocation.CreatedAt descending, allocation.Id descending
+            select new { ReservationId = booking.Id, allocation.SlotId, allocation.AllocationStatus }
+        ).ToListAsync(ct);
+
+        // Use the gate lookup's active-then-latest visit precedence, with an ID tie-break.
+        var sessions = await (
+            from booking in bookingsInPage
+            join session in db.ParkingSessions.AsNoTracking()
+                on new { ReservationId = (Guid?)booking.Id, booking.TenantId, booking.SiteId, AccountId = (Guid?)booking.AccountId }
+                equals new { session.ReservationId, session.TenantId, session.SiteId, session.AccountId }
+            orderby (session.ExitTime == null) descending, session.CreatedAt descending, session.Id descending
+            select new { ReservationId = booking.Id, session.Id }
+        ).ToListAsync(ct);
+
+        var allocationsByBooking = allocations.ToLookup(a => a.ReservationId);
+        var sessionsByBooking = sessions.ToLookup(s => s.ReservationId);
+        return reservations.Select(reservation =>
+        {
+            var allocation = allocationsByBooking[reservation.Id].FirstOrDefault();
+            var session = sessionsByBooking[reservation.Id].FirstOrDefault();
+            return new BookingReadResult(reservation, allocation?.SlotId, allocation?.AllocationStatus, session?.Id);
+        }).ToArray();
+    }
 
     public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) =>
         db.Reservations.AsNoTracking().SingleOrDefaultAsync(r => r.Id == reservationId && r.RequestId != null, ct);

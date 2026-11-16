@@ -114,13 +114,6 @@ public sealed class RecordAccountAccessDecisionHandler(IReservationRequestReposi
     }
 }
 
-internal static class AdmissionActor
-{
-    public static (Guid User, Guid Account) RequireDriver(ICurrentActor actor) =>
-        actor.UserId is { } user && user != Guid.Empty && actor.AccountId is { } account && account != Guid.Empty && actor.Role == "driver"
-            ? (user, account) : throw new ReservationGateException(403, "FORBIDDEN", "Driver access is required.");
-}
-
 internal static class AdmissionMessage
 {
     public static AccountAccessRequestV1 For(ReservationRequest request) => new(request.Id, request.AttemptId,

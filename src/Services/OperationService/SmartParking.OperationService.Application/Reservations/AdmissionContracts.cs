@@ -4,13 +4,6 @@ using SmartParking.OperationService.Domain.Reservations;
 
 namespace SmartParking.OperationService.Application.Reservations;
 
-public interface ICurrentActor
-{
-    Guid? UserId { get; }
-    Guid? AccountId { get; }
-    string? Role { get; }
-}
-
 public interface IReservationRequestRepository
 {
     Task LockAdmissionAsync(Guid accountId, Guid key, CancellationToken ct);

@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
-using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
-using SmartParking.OperationService.Application.DTOs;
+using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Domain.Reservations;
@@ -86,19 +85,20 @@ public sealed class ReservationCreationLifecycleTests
     [Fact]
     public async Task HoldCreatedEventTriggersPositivePriceOrderProvisioning()
     {
-        var reservationId = Guid.NewGuid();
-        var booking = CreateBooking(reservationId, DateTimeOffset.UtcNow, 20000m, 5000m);
+        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 20000m, 5000m);
         var repo = new FakeBookingRepository(booking);
         var positive = new RecordingHandler<ProvisionReservationOrderCommand>();
         var zero = new RecordingHandler<AcceptZeroPriceTermsCommand>();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddApplicationServices();
         services.AddSingleton<IRequestHandler<ProvisionReservationOrderCommand>>(positive);
         services.AddSingleton<IRequestHandler<AcceptZeroPriceTermsCommand>>(zero);
-        var mediator = new Mediator(services.BuildServiceProvider());
+        using var provider = services.BuildServiceProvider();
+        var mediator = provider.GetRequiredService<IMediator>();
 
         await ReservationHoldChangedConsumer.DispatchAsync(repo, mediator,
-            new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid(), reservationId,
+            new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, booking.RequestId!.Value, booking.Id,
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1),
                 DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1),
             CancellationToken.None);
@@ -110,19 +110,20 @@ public sealed class ReservationCreationLifecycleTests
     [Fact]
     public async Task HoldCreatedEventTriggersZeroPriceAcceptance()
     {
-        var reservationId = Guid.NewGuid();
-        var booking = CreateBooking(reservationId, DateTimeOffset.UtcNow, 0m, 0m);
+        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 0m, 0m);
         var repo = new FakeBookingRepository(booking);
         var positive = new RecordingHandler<ProvisionReservationOrderCommand>();
         var zero = new RecordingHandler<AcceptZeroPriceTermsCommand>();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddApplicationServices();
         services.AddSingleton<IRequestHandler<ProvisionReservationOrderCommand>>(positive);
         services.AddSingleton<IRequestHandler<AcceptZeroPriceTermsCommand>>(zero);
-        var mediator = new Mediator(services.BuildServiceProvider());
+        using var provider = services.BuildServiceProvider();
+        var mediator = provider.GetRequiredService<IMediator>();
 
         await ReservationHoldChangedConsumer.DispatchAsync(repo, mediator,
-            new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid(), reservationId,
+            new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, booking.RequestId!.Value, booking.Id,
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1),
                 DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1),
             CancellationToken.None);
@@ -135,45 +136,4 @@ public sealed class ReservationCreationLifecycleTests
         ReservationRow.Prepare(Guid.NewGuid(), requestId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "terms-v1", "PAYOS", now.AddHours(1),
             now.AddHours(2), now.AddHours(2), now, now.AddMinutes(5), booked, deposit, "VND", "{}", "{}");
-
-    private sealed class FakeBookingRepository(ReservationRow booking) : IReservationBookingRepository
-    {
-        public Task AddAsync(ReservationRow entity, CancellationToken cancellationToken) => Task.CompletedTask;
-        public void Remove(ReservationRow entity) { }
-        public Task<ReservationRow?> FindForUpdateAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken cancellationToken) =>
-            Task.FromResult<ReservationRow?>(booking.Id == reservationId ? booking : null);
-        public Task<IReadOnlyList<ReservationGateEntry>> ListAsync(Guid tenantId, Guid siteId, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<ReservationGateEntry>>([]);
-        public Task<ReservationGateEntry?> FindAsync(Guid tenantId, Guid siteId, string query, CancellationToken ct) =>
-            Task.FromResult<ReservationGateEntry?>(null);
-        public Task<ReservationGateEntry?> FindByIdAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken ct) =>
-            Task.FromResult<ReservationGateEntry?>(null);
-        public Task<ReservationRow?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct) =>
-            Task.FromResult<ReservationRow?>(null);
-        public Task<IReadOnlyList<ReservationRow>> ListOwnBookingsAsync(Guid accountId, int take, DateTimeOffset? before, Guid? beforeId, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<ReservationRow>>([]);
-        public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) =>
-            Task.FromResult<ReservationRow?>(booking.Id == reservationId ? booking : null);
-        public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) => Task.FromResult(false);
-        public Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);
-        public Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);
-        public Task<IReadOnlyList<Guid>> DueZeroPriceAcceptanceAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);
-        public Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);
-        public Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);
-        public Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct) => Task.FromResult(DateTimeOffset.UtcNow);
-        public Task RequireDurableConfirmationAsync(CancellationToken ct) => Task.CompletedTask;
-        public Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    private sealed class RecordingHandler<TCommand> : IRequestHandler<TCommand>
-        where TCommand : IRequest
-    {
-        public List<object> Calls { get; } = [];
-
-        public Task Handle(TCommand request, CancellationToken cancellationToken)
-        {
-            Calls.Add(request!);
-            return Task.CompletedTask;
-        }
-    }
 }
