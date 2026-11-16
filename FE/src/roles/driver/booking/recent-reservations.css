@@ -1,0 +1,70 @@
+.driver-current-bookings .driver-recent-reservations { padding: 0; overflow: hidden; scroll-margin-top: 80px; }
+.recent-reservations-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; min-height: 64px; border-bottom: 1px solid var(--border); }
+.recent-reservations-header { cursor: pointer; list-style: none; border-bottom-color: transparent; }
+.recent-reservations-header::-webkit-details-marker { display: none; }
+.driver-recent-reservations[open] > .recent-reservations-header { border-bottom-color: var(--border); }
+.recent-reservations-title { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.recent-reservations-toggle { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 50%; transition: transform 180ms ease-out; }
+.driver-recent-reservations[open] .recent-reservations-toggle { transform: rotate(180deg); }
+.recent-reservations-header:focus-visible { outline: 2px solid var(--fg); outline-offset: -5px; border-radius: inherit; }
+@media (hover: hover) and (pointer: fine) { .recent-reservations-header:hover .recent-reservations-toggle { background: var(--bg); } }
+.recent-reservations-header h2 { margin: 0; font-size: 1.0625rem; font-weight: 650; line-height: 1.4; letter-spacing: -.015em; }
+.recent-reservations-header p { margin: 3px 0 0; color: var(--muted); font-size: .8125rem; line-height: 1.5; }
+.recent-reservations-count { flex-shrink: 0; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.recent-reservations-list { list-style: none; padding: 0; margin: 0; }
+.recent-reservation-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(240px, 1fr) minmax(150px, auto); align-items: center; gap: 16px; padding: 14px 18px; }
+.driver-recent-reservations[open] .recent-reservation-row { animation: recent-reservation-enter 220ms cubic-bezier(.23, 1, .32, 1) both; }
+.recent-reservation-row:nth-child(2) { animation-delay: 25ms; }
+.recent-reservation-row:nth-child(3) { animation-delay: 50ms; }
+.recent-reservation-row:nth-child(4) { animation-delay: 75ms; }
+.recent-reservation-row:nth-child(n+5) { animation-delay: 100ms; }
+.recent-reservation-row + .recent-reservation-row { border-top: 1px solid var(--border); }
+.recent-reservation-site { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.recent-reservation-site > div { display: grid; gap: 4px; min-width: 0; }
+.recent-reservation-site strong { font-size: 1rem; line-height: 1.5; font-weight: 650; overflow-wrap: anywhere; }
+.recent-reservation-mark { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); transition: transform 180ms ease-out; }
+.recent-reservation-date { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .875rem; line-height: 1.5; }
+.recent-reservation-date svg { flex-shrink: 0; }
+.recent-reservation-schedule { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: 24px; margin: 0; }
+.recent-reservation-schedule dt { color: var(--muted); font-size: .8125rem; line-height: 1.5; }
+.recent-reservation-schedule dd { margin: 5px 0 0; font-size: 1rem; line-height: 1.5; font-weight: 600; font-variant-numeric: tabular-nums; }
+.recent-reservation-schedule small { display: block; color: var(--muted); font-size: .8125rem; font-weight: 400; }
+.recent-reservation-outcome { display: grid; justify-items: end; gap: 12px; }
+.recent-reservation-status { gap: 7px; padding: 6px 11px; font-size: .8125rem; line-height: 1.4; white-space: normal; }
+.recent-reservation-status > span { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: currentColor; }
+.recent-reservation-outcome button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; transition: background-color 160ms ease-out, transform 160ms ease-out; }
+.recent-reservation-outcome button:active { transform: scale(.98); }
+.recent-reservation-outcome button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.recent-reservations-message { margin: 0; padding: 24px; color: var(--muted); line-height: 1.6; }
+.recent-reservations-message p { margin: 0 0 16px; }
+@keyframes recent-reservation-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@supports (interpolate-size: allow-keywords) {
+  .driver-recent-reservations { interpolate-size: allow-keywords; }
+  .driver-recent-reservations::details-content { block-size: 0; opacity: 0; overflow: clip; transition: block-size 240ms cubic-bezier(.23, 1, .32, 1), opacity 180ms ease-out, content-visibility 240ms allow-discrete; }
+  .driver-recent-reservations[open]::details-content { block-size: auto; opacity: 1; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .recent-reservation-row:hover .recent-reservation-mark { transform: translateY(-2px); }
+  .recent-reservation-outcome button:hover { transform: translateY(-1px); }
+}
+@media (max-width: 1000px) {
+  .recent-reservation-row { grid-template-columns: minmax(0, 1fr) auto; gap: 18px; }
+  .recent-reservation-schedule { grid-row: 2; grid-column: 1 / -1; max-width: 360px; }
+  .recent-reservation-outcome { grid-row: 1; grid-column: 2; }
+}
+@media (max-width: 540px) {
+  .recent-reservations-header { padding: 12px 16px; gap: 10px; }
+  .recent-reservation-row { padding: 14px 16px; gap: 12px; }
+  .recent-reservation-site { grid-column: 1 / -1; }
+  .recent-reservation-outcome { grid-row: 3; grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .recent-reservation-date { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .driver-recent-reservations[open] .recent-reservation-row { animation: none; }
+  .recent-reservation-outcome button { transition: none; }
+  .recent-reservation-outcome button:active { transform: none; }
+  .recent-reservations-toggle { transition: none; }
+  .driver-recent-reservations::details-content { transition: none; }
+  .recent-reservation-mark { transition: none; }
+  .recent-reservation-row:hover .recent-reservation-mark, .recent-reservation-outcome button:hover { transform: none; }
+}

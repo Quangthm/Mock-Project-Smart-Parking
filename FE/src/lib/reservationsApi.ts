@@ -44,7 +44,19 @@ export interface OwnReservation {
   currency: string | null
   confirmedAt: string | null
   createdAt: string
+  // Nullable P0 history fields; older deployments may omit them.
+  siteName?: string | null
+  siteAddress?: string | null
+  licensePlate?: string | null
+  allocatedSlotId?: string | null
+  allocationStatus?: string | null
+  parkingSessionId?: string | null
+  paymentStatus?: string | null
+  // TODO: Driver history BE must expose authorized session evidence; P0 omits these fields.
+  entryImageUrl?: string | null
+  exitImageUrl?: string | null
 }
+export interface ReservationHistoryCursor { before: string; beforeId: string }
 async function call<T>(path: string, method = "GET", body?: unknown, headers?: Record<string, string>): Promise<T> {
   const response = await request<{ success: boolean; data: T }>(path, method, body, "/api", server, headers)
   if (!response.success || response.data == null) throw new Error("Reservation Service returned no result.")
@@ -61,4 +73,23 @@ export const reservationsApi = {
   receipt: (id: string) => call<ReservationReceipt>(`/reservation-requests/${encodeURIComponent(id)}`),
   booking: (id: string) => call<OwnReservation>(`/me/reservations/${encodeURIComponent(id)}`),
   list: () => call<OwnReservation[]>("/me/reservations?pageSize=100"),
+  async historyPage(pageSize = 9, cursor?: ReservationHistoryCursor): Promise<OwnReservation[]> {
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new Error("Invalid reservation page size.")
+    const query = new URLSearchParams({ pageSize: String(pageSize) })
+    if (cursor) {
+      if (!cursor.before || !Number.isFinite(Date.parse(cursor.before)) ||
+        !/^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(cursor.beforeId)) {
+        throw new Error("Invalid reservation history cursor.")
+      }
+      // Preserve the server's timestamp precision; do not round-trip through Date.toISOString().
+      query.set("before", cursor.before)
+      query.set("beforeId", cursor.beforeId)
+    }
+    const items = await call<OwnReservation[]>(`/me/reservations?${query}`)
+    if (!Array.isArray(items) || items.some(item => !item || typeof item.reservationId !== "string" ||
+      typeof item.siteId !== "string" || typeof item.state !== "string" || !Number.isFinite(Date.parse(item.createdAt)))) {
+      throw new Error("Reservation Service returned an invalid history page.")
+    }
+    return items
+  },
 }

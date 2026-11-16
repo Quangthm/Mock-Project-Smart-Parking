@@ -32,6 +32,8 @@ interface ParkingHistoryProps {
   error?: string
   onRetry?: () => void
   showVehicleFilter?: boolean
+  onViewDetails?: (id: string) => void
+  pagination?: { page: number; hasNext: boolean; onPrevious: () => void; onNext: () => void }
 }
 
 const dateTime = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
@@ -66,6 +68,12 @@ const STATUS_TONE_MAP: Record<string, "completed" | "active" | "neutral" | "atte
   CANCELLED: "neutral",
   DISPUTED: "attention",
   OVERSTAYED: "attention",
+  EXPIRED: "neutral",
+  NO_SHOW: "attention",
+  UNFULFILLABLE: "attention",
+  PARKING: "active",
+  CONFIRMED: "active",
+  ALLOCATED: "active",
 }
 
 function statusTone(status: string) {
@@ -76,7 +84,7 @@ function normalizePlate(value: string) {
   return value.replace(/[^a-z0-9]/gi, "").toUpperCase()
 }
 
-export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emptyMessage, loading = false, quietLoading = false, error, onRetry, showVehicleFilter = false }: ParkingHistoryProps) {
+export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emptyMessage, loading = false, quietLoading = false, error, onRetry, showVehicleFilter = false, onViewDetails, pagination }: ParkingHistoryProps) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [vehicle, setVehicle] = useState("all")
@@ -97,7 +105,7 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
     return (normalized && normalizePlate(record.plate).includes(normalized)) || record.title.toLowerCase().includes(term.toLowerCase())
   }), [records, status, vehicle, query, showVehicleFilter])
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const visible = filtered.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize)
+  const visible = pagination ? filtered : filtered.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize)
   const selected = records.find(record => record.id === selectedId) ?? null
 
   useEffect(() => {
@@ -137,6 +145,7 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
   }, [selected?.id, selected?.showDuration, selected?.endedAt])
 
   function openDetails(id: string) {
+    if (onViewDetails) { onViewDetails(id); return }
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setClock(Date.now())
     setSelectedId(id)
@@ -148,7 +157,7 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
         <h2>{title}</h2>
         <p aria-live="polite">{scope}{(!loading || !quietLoading) && <> <span aria-hidden="true">·</span> {loading ? "Loading…" : `${filtered.length} ${filtered.length === 1 ? "record" : "records"}`}</>}</p>
       </div>
-      {(!loading || !quietLoading) && <span className="parking-history-total" aria-label={`${records.length} total records`}>{records.length} total</span>}
+      {(!loading || !quietLoading) && <span className="parking-history-total" aria-label={`${records.length} ${pagination ? "records on this page" : "total records"}`}>{records.length} {pagination ? "on this page" : "total"}</span>}
     </div>
 
     <div className="parking-history-filters" aria-label="Filter parking history">
@@ -183,7 +192,8 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
       </article>)}</div>
     </>}
 
-    {!loading && pageCount > 1 && <div className="parking-history-pagination"><span>Showing {(Math.min(page, pageCount) - 1) * pageSize + 1}–{Math.min(Math.min(page, pageCount) * pageSize, filtered.length)} of {filtered.length}</span><div><button type="button" disabled={page <= 1} onClick={() => setPage(current => Math.max(1, current - 1))}>Previous</button><button type="button" disabled={page >= pageCount} onClick={() => setPage(current => Math.min(pageCount, current + 1))}>Next</button></div></div>}
+    {pagination ? <div className="parking-history-pagination"><span aria-live="polite">Page {pagination.page}</span><div><button type="button" disabled={loading || pagination.page <= 1} onClick={pagination.onPrevious}>Previous</button><button type="button" disabled={loading || !!error || !pagination.hasNext} onClick={pagination.onNext}>Next</button></div></div>
+      : !loading && pageCount > 1 && <div className="parking-history-pagination"><span>Showing {(Math.min(page, pageCount) - 1) * pageSize + 1}–{Math.min(Math.min(pageCount, page) * pageSize, filtered.length)} of {filtered.length}</span><div><button type="button" disabled={page <= 1} onClick={() => setPage(current => Math.max(1, current - 1))}>Previous</button><button type="button" disabled={page >= pageCount} onClick={() => setPage(current => Math.min(pageCount, current + 1))}>Next</button></div></div>}
 
     {selected && createPortal(<div className="parking-history-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setSelectedId(null) }}><div role="dialog" aria-modal="true" aria-labelledby="parking-history-detail-title" className="parking-history-dialog">
       <div className="parking-history-dialog-header"><div><p>Parking record</p><h3 id="parking-history-detail-title">{selected.plate || selected.id}</h3><span>{selected.title}</span></div><button ref={closeRef} type="button" className="parking-history-close" onClick={() => setSelectedId(null)} aria-label="Close parking details"><UntitledIcon name="x" size={19} /></button></div>
