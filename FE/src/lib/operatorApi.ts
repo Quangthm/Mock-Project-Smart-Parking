@@ -1,4 +1,5 @@
 import { request } from "./authApi"
+import { operatorCheckoutReturnUrls } from "./operatorCheckoutReturn"
 import { store } from "./store"
 import { loadOwnerModelUrl } from "./3d/ownerModelStorage"
 import {
@@ -705,11 +706,12 @@ export const paymentApi = {
   }) => {
     throw new Error("Payment orders must be prepared by OperationService.")
   },
-  initiate: (orderId: string, idempotencyKey: string) =>
+  initiate: (orderId: string, idempotencyKey: string, siteId: string) =>
     checkoutRequest<PaymentCheckout>(
       `/orders/${encodeURIComponent(orderId)}/payos`,
       "POST",
-      { idempotencyKey },
+      // Requires OperationService to accept and forward both URLs to PaymentService.
+      { idempotencyKey, ...operatorCheckoutReturnUrls(siteId) },
     ),
   cash: (orderId: string, idempotencyKey: string) =>
     checkoutRequest<PaymentTransactionStatus>(

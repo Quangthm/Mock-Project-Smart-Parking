@@ -85,12 +85,13 @@ public sealed class CheckoutPaymentClient(
             new(result.Data.OrderId, result.Data.OrderCode, result.Data.FinalAmount, result.Data.Status, result.Data.ExpiresAt));
     }
 
-    public async Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct)
+    public async Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct,
+        string? returnUrl = null, string? cancelUrl = null)
     {
         var result = await SendAsync<PaymentEnvelope<PaymentCheckout>>(
             HttpMethod.Post,
             $"/api/v1/payments/orders/{orderId}/checkout",
-            new { paymentMethod = "PAYOS" },
+            new { paymentMethod = "PAYOS", returnUrl, cancelUrl },
             ct,
             idempotencyKey);
         return new(result.Data.PaymentTransactionId, result.Data.OrderCode, result.Data.Amount,

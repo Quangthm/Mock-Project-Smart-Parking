@@ -56,7 +56,7 @@ export function OperatorDashboard({
   const accessRole = accessRoleOverride ?? user?.operatorRole ?? "operation"
 
   const [tab, setTab] = useState<OperatorTab>(
-    accessRole === "financial" ? "finance" : "overview",
+    accessRole === "financial" ? "finance" : new URLSearchParams(window.location.search).get("checkoutReturn") === "payos" ? "checkout" : "overview",
   )
 
   const [targetPlateQuery, setTargetPlateQuery] = useState("")
@@ -65,7 +65,10 @@ export function OperatorDashboard({
   >("all")
 
   const [allLots, setAllLots] = useState<OperatorSite[]>([])
-  const [activeSiteId, setActiveSiteId] = useState<string>("")
+  const [activeSiteId, setActiveSiteId] = useState<string>(() => {
+    const query = new URLSearchParams(window.location.search)
+    return query.get("checkoutReturn") === "payos" ? query.get("checkoutSiteId") ?? "" : ""
+  })
   const [bookingsState, setBookingsState] = useState<ResourceState<Booking>>({ scope: "", data: [], loading: false, error: "" })
   const [ticketsState, setTicketsState] = useState<ResourceState<SupportTicket>>({ scope: "", data: [], loading: false, error: "" })
   const [notificationsState, setNotificationsState] = useState<ResourceState<AppNotification>>({ scope: "", data: [], loading: false, error: "" })
@@ -74,6 +77,7 @@ export function OperatorDashboard({
   const [sitesLoading, setSitesLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [bookingRevision, setBookingRevision] = useState(0)
+  const [checkoutRevision, setCheckoutRevision] = useState(0)
   const [layoutConnectionState, setLayoutConnectionState] = useState<LayoutConnectionState>("connecting")
   const [layoutConnectionAttempt, setLayoutConnectionAttempt] = useState(0)
   const [sitesRevision, setSitesRevision] = useState(0)
@@ -149,14 +153,15 @@ export function OperatorDashboard({
     const stop = watchOperatorLayout(siteId, async (refreshBookings) => {
       const site = selectedLotRef.current
       if (!active || site?.id !== siteId) return
+      if (refreshBookings) {
+        setCheckoutRevision(value => value + 1)
+        if (accessRole === "financial") setSitesRevision(value => value + 1)
+        else setBookingRevision(value => value + 1)
+      }
       try {
         const updated = await refreshOperatorSite(site)
         if (active) {
           setAllLots(current => current.map(item => item.id === siteId ? updated : item))
-          if (refreshBookings) {
-            if (accessRole === "financial") setSitesRevision(value => value + 1)
-            else setBookingRevision(value => value + 1)
-          }
         }
       } catch (error) {
         if (active) setSitesError(requestError(error, "Could not refresh this parking site's layout."))
@@ -249,7 +254,7 @@ export function OperatorDashboard({
 
   // Cashier role shortcut view
   if (accessRole === "cashier") {
-    return <CashierPOS key={selectedLot?.id ?? "none"} lot={selectedLot} sitesLoading={sitesLoading} sitesError={sitesError} onDataChanged={() => setRefreshKey((value) => value + 1)} />
+    return <CashierPOS key={selectedLot?.id ?? "none"} lot={selectedLot} realtimeRevision={checkoutRevision} sitesLoading={sitesLoading} sitesError={sitesError} onDataChanged={() => setRefreshKey((value) => value + 1)} />
   }
 
   // Financial reconciliation metrics
@@ -448,6 +453,7 @@ export function OperatorDashboard({
               mode={tab === "checkin" ? "check-in" : "check-out"}
               lot={selectedLot}
               initialPlateQuery={targetPlateQuery}
+              realtimeRevision={checkoutRevision}
               onDataChanged={() => setRefreshKey((value) => value + 1)}
             />
           )}
@@ -567,17 +573,32 @@ function CashierPOS({
   sitesError,
   onDataChanged,
   readOnly = false,
+  realtimeRevision = 0,
 }: {
   lot: OperatorSite | null
   sitesLoading: boolean
   sitesError: string
   onDataChanged: () => void
   readOnly?: boolean
+  realtimeRevision?: number
 }) {
   const [plate, setPlate] = useState("")
   const [booking, setBooking] = useState<Booking | null>(null)
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const bookingRef = useRef(booking)
+  bookingRef.current = booking
+  useEffect(() => {
+    const current = bookingRef.current
+    if (!lot || !current || current.lotId !== lot.id) return
+    let active = true
+    reservationApi.lookup(lot.id, current.id).then(updated => {
+      if (active && bookingRef.current?.id === current.id) setBooking(updated)
+    }).catch(error => {
+      if (active && bookingRef.current?.id === current.id) setFeedback({ type: "error", message: requestError(error, "Could not refresh this session.") })
+    })
+    return () => { active = false }
+  }, [lot?.id, realtimeRevision])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -674,7 +695,7 @@ function CashierPOS({
           <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong className="font-mono text-lg text-[var(--fg)]">{booking.licensePlate}</strong>
-              <span className="rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-semibold text-green-700">Checked in</span>
+              <span className="rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-semibold text-green-700">{booking.status === "checked-in" ? "Checked in" : booking.status.replace(/[-_]/g, " ")}</span>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
               <div><dt className="text-[var(--muted)]">Reservation</dt><dd className="mt-1 font-mono text-[var(--fg)]">{booking.id}</dd></div>
@@ -682,7 +703,7 @@ function CashierPOS({
               <div><dt className="text-[var(--muted)]">Recorded amount</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.amount.toLocaleString("vi-VN")} VND</dd></div>
               <div><dt className="text-[var(--muted)]">Payment status</dt><dd className="mt-1 font-semibold text-[var(--fg)]">{booking.paymentStatus ?? "unknown"}</dd></div>
             </dl>
-            {!readOnly && (
+            {!readOnly && booking.status === "checked-in" && (
               <button type="button" className="btn-primary mt-4 w-full justify-center" onClick={() => void completeCheckout()} disabled={busy}>
                 <UntitledIcon name="check-circle" size={16} /> Confirm vehicle checkout
               </button>

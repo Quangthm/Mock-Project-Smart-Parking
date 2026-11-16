@@ -67,7 +67,8 @@ public sealed class OccupancyOutboxWorker(
         {
             // A publisher failure propagates and leaves the message unconfirmed; the lease
             // expires so the row becomes claimable again for retry (at-least-once delivery).
-            await publisher.PublishAsync(message, stoppingToken);
+            // SnapshotRequired is a UI invalidation, not a Facility occupancy delta.
+            if (message.EventType != "SnapshotRequired") await publisher.PublishAsync(message, stoppingToken);
             if (broadcaster is not null)
             {
                 try
@@ -76,8 +77,8 @@ public sealed class OccupancyOutboxWorker(
                 }
                 catch (Exception ex)
                 {
-                    // A failed broadcast must not block the outbox: the broker message is
-                    // already published and clients recover via SnapshotRequired on reconnect.
+                    // Realtime delivery is best-effort; clients recover committed state
+                    // via SnapshotRequired on reconnect, including UI-only invalidations.
                     logger.LogWarning(ex, "Realtime broadcast failed for event {EventId}.", message.EventId);
                 }
             }

@@ -145,6 +145,16 @@ sequenceDiagram
 
 ### 2.2 API Khởi tạo Thanh toán payOS VietQR (Initiate Checkout)
 
+#### Operator proxy — cập nhật tương thích ngày 2026-11-16
+
+- `POST /api/checkout/orders/{orderId}/payos` giữ nguyên endpoint và cơ chế xác thực/phân quyền hiện tại của Operations/Payment; FE không gọi thay bằng API nội bộ.
+- Body: `idempotencyKey` (như trước), `returnUrl?: string | null`, `cancelUrl?: string | null`. Hai URL dùng định dạng URL tuyệt đối theo validator hiện có của PaymentService; URL sai được trả lỗi 400 từ Payment qua proxy, không tự thay thành URL khác.
+- Operations chuyển tiếp nguyên hai URL qua command và payment client đến `POST /api/v1/payments/orders/{orderId}/checkout`; `Idempotency-Key` và response giữ nguyên. Không gửi URL thì giữ mặc định của PaymentService để tương thích client cũ.
+- FE xây URL từ origin/path hiện tại và giữ site/tab Check-out; tham số URL chỉ hỗ trợ điều hướng, không chứng minh đã thanh toán. Trạng thái tiền và quyền mở cổng vẫn do các API/event hiện có xác nhận.
+- Gọi lại checkout pending trả link đã lưu, bao gồm URL quay về đã gắn khi tạo link. Bản sửa chỉ áp dụng URL mới khi tạo link mới; không thay thế/hủy giao dịch pending hay tự tạo thêm giao dịch.
+- Sau khi Operations xử lý `PaymentSucceededV1`, một `SnapshotRequired` được lưu vào `outbox_events` cùng transaction cập nhật phiên đỗ. Worker hiện có phát SignalR tới nhóm Operator của site sau commit; tín hiệu này không được gửi như occupancy delta sang Facility. Cần worker outbox/RabbitMQ đang hoạt động theo cấu hình hiện có. Tín hiệu không mang kết luận thanh toán cho FE: FE đọc lại session/payment status; khi reconnect, hub cũng phát `SnapshotRequired` để bù event bị bỏ lỡ.
+- FE dùng lại kết nối layout theo site để cập nhật bảng lịch sử Check-out và trạng thái thanh toán, không thêm polling hay tạo thêm connection. Khi backend chưa commit, UI vẫn giữ Pending Payment; chỉ snapshot session `COMPLETED` mới hiển thị hoàn tất.
+
 - **Method / URL:** `POST /api/v1/payments/orders/{orderId}/checkout`
 - **Caller:** Trình duyệt POS cổng ra hoặc ứng dụng Driver.
 - **Headers:** `Idempotency-Key: <UUID>` *(Bắt buộc)*.

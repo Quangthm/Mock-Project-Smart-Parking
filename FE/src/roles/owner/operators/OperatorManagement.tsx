@@ -20,9 +20,11 @@ import { formatStatus } from "../../../lib/formatStatus"
 export function OperatorManagement({
   selectedSiteId,
   onOperatorsChanged,
+  liveOperators,
 }: {
   selectedSiteId: string
   onOperatorsChanged: () => void
+  liveOperators?: Operator[]
 }) {
   const { user } = useApp()
   const { confirm, confirmation } = useConfirmation()
@@ -37,6 +39,7 @@ export function OperatorManagement({
   const [filterSite, setFilterSite] = useState(selectedSiteId)
   const [inviting, setInviting] = useState<string | null>(null)
   useEffect(() => {
+    if (liveOperators !== undefined) { setOperators(liveOperators); return }
     let active = true
     const stop = watchOperators(() => {
       void operatorsApi.list().then(accounts => {
@@ -46,7 +49,7 @@ export function OperatorManagement({
       })
     })
     return () => { active = false; stop() }
-  }, [user?.id])
+  }, [user?.id, liveOperators])
 
   async function resendInvitation(id: string) {
     setInviting(id)
@@ -73,10 +76,10 @@ export function OperatorManagement({
     setLoading(true)
     setError("")
     setMessage("")
-    Promise.all([operatorsApi.list(), parkingApi.list()])
+    Promise.all([liveOperators === undefined ? operatorsApi.list() : Promise.resolve(null), parkingApi.list()])
       .then(([accounts, parkingSites]) => {
         if (!current) return
-        setOperators(accounts)
+        if (accounts) setOperators(accounts)
         setSites(
           parkingSites.filter(
             (site) => site.isActive && site.status === "ACTIVE",

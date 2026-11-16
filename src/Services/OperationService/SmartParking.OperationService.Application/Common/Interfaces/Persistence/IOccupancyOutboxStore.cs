@@ -9,6 +9,8 @@ namespace SmartParking.OperationService.Application.Common.Interfaces.Persistenc
 /// </summary>
 public interface IOccupancyOutboxStore
 {
+    void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt);
+
     Task<IReadOnlyList<OutboxMessage>> ClaimBatchAsync(
         int batchSize,
         TimeSpan leaseDuration,
