@@ -9,6 +9,8 @@ Decision snapshot: 2026-11-04 (authorization amendment; other conventions retain
 
 **Shared-guidance amendment (2026-11-12):** Slice-first implementation, SOLID/ownership discipline, explicit escalation of exceptional-case designs, and event-driven execution preferences were added. This is general coding guidance, not retroactive approval to change existing service contracts, schedulers or production infrastructure.
 
+**Shared-guidance amendment (2026-11-16):** One C# named type per source file, plus extract-when-touched migration of legacy multi-type files, is now an explicit shared code-organization convention. This is a source organization rule, not approval to redesign domain models or change API contracts.
+
 ## 1. Authority and efficient context loading
 
 Follow the current user task and explicit approved decisions over conflicting older project guidance. Preserve all nonconflicting AGENTS.md instructions. Record conflicts instead of silently rewriting history. Never promote an AI recommendation, sample implementation or passing test into a product decision.
@@ -90,6 +92,20 @@ Apply **SOLID as a decision discipline, not a class-count target**:
 - **Dependency Inversion:** Business decisions depend on approved Application/Domain abstractions and authoritative facts, not concrete EF, HTTP, broker classes or foreign service databases.
 
 Favor **low coupling, high cohesion and the minimum number of independently coordinated state machines**. Reuse existing repositories, outbox/inbox, Domain transitions and service contracts before creating extra entities, tables, managers or workers. Explain a new abstraction by the current slice's demonstrated responsibility or invariants, not "future-proofing" alone. Number of source files is not itself a measure of simplicity or complexity.
+
+### C# source-file organization — one named type per file
+
+**Required for all new C# code and for existing types used, extended or materially modified by the current task:** Put each declared named C# type in its own `.cs` file, named after the type (`BookingView.cs`, `ReadOwnBookingsHandler.cs`, `IReservationBookingRepository.cs`, `ReservationRow.cs`, etc.). This applies to classes (including static classes), records, structs, interfaces, enums and delegates. A file must not accumulate multiple unrelated named types merely because they participate in the same feature, endpoint, or use case. Do not nest a second named model/DTO/handler/contract type inside another type to avoid creating its own file. Organize related files in cohesive feature folders and preserve the approved layer boundaries.
+
+**Legacy extract-when-touched rule:** When a new use case needs an existing type declared in a multi-type file, first extract **that type** into a matching dedicated file before changing or extending it. Do not silently keep adding functionality in the old grouped source file, copy the type into a second declaration, or rename/restructure its behavior merely to improve filing. Move only the types required by the authorized slice, plus unavoidable neighboring declarations needed to resolve file naming or compilation; leave unrelated legacy types for separately scoped cleanup. When extracting a file's namesake type, relocate/rename the remaining aggregate file as needed so its path no longer misrepresents what it contains. Report any remaining legacy multi-type files without treating them as newly compliant.
+
+**Behavior-preserving extraction:** Preserve the existing namespace, declared type name, accessibility, public constructors/parameters, serialization shape, DI registration, EF mapping/table, AutoMapper configuration, route contract and business behavior unless the approved feature independently changes them. Update references/usings, retain copyright/comments on the relevant type, and run or provide appropriate compilation/regression checks. File moves are organizational changes, **not** reasons to introduce more entities, tables, interfaces, commands, domain models or state machines. Do not reorganize the entire codebase as a side effect of one feature.
+
+**Partial and generated types:** A genuinely necessary `partial` type may occupy multiple explicitly named fragments, e.g. `ReservationRepository.cs` and `ReservationRepository.Bookings.cs`; each fragment file still declares only that same partial type, with no additional top-level types. Prefer consolidating fragments only when in scope and safe. Framework-generated source files are exempt; do not hand-edit generated files. If an established framework or generator requires a conflicting layout, surface that exception for approval rather than ignoring this rule.
+
+**Illustrative migration:** If `BookingContracts.cs` currently contains `BookingView` plus other contracts, move the existing `BookingView` declaration to `BookingView.cs` before enhancing the history response. If a static `BookingContracts` helper currently lives in `BookingReviewHandlers.cs` and the current feature changes that helper, move the helper to its own `BookingContracts.cs` (resolving the existing filename collision through extraction/rename). Move involved query, validator and handler declarations into their own named files when they are touched; preserve their logic and namespaces.
+
+**Review check:** For each new or modified `.cs` file, verify there is only one declared named type, the filename identifies it, and touched legacy types were actually extracted. Report any exceptions or remaining legacy grouped files explicitly.
 
 ### Validation and rule ownership
 
@@ -473,6 +489,7 @@ Deliver actual files changed, request-to-response call path, decisions versus pr
 
 ## 11. Quick rejection checklist for agent-generated changes
 
+- Reject new or materially modified C# files declaring multiple named types, grouped contracts/handlers that were extended instead of extracting the touched legacy type, and file moves that silently change namespace, public contracts, business behavior or EF mapping.
 - Reject client-selected actor/owner identifiers used as authorization authority for own-resource operations, and reject authorization that ignores the authenticated/current Account/session/scope required by the contract.
 - Reject blanket current-access network checks for TOKEN, synchronous REQUEST admission, unapproved speculation, finalization before Allowed, fabricated user actors, raw JWT persistence, unbounded retry and unknown-as-failed cleanup.
 - Reject transactions/locks added without an identified concurrency invariant, and reject atomic-authorization claims when competing writers are not coordinated through the same protocol and fresh state.
