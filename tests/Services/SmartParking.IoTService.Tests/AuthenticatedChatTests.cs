@@ -337,10 +337,13 @@ public sealed partial class AuthenticatedChatTests
             new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message }));
         var answer = result.GetProperty("answer");
         Assert.Equal("clarification", answer.GetProperty("outcome").GetString());
-        var prompt = answer.GetProperty("content").GetString()!.Split("Hãy gửi lại")[0];
+        var content = answer.GetProperty("content").GetString()!;
+        var prompt = content.Split("Mở Tìm bãi đỗ")[0];
         Assert.Equal(location, prompt.Contains("điểm xuất phát"));
         Assert.Equal(vehicle, prompt.Contains("một loại xe"));
         Assert.Equal(time, prompt.Contains("khung giờ"));
+        Assert.Contains("Landmark 81", content);
+        Assert.DoesNotContain("10.77,106.70", content);
         Assert.Empty(f.Answers.Inputs);
         Assert.Empty(owner.Paths);
     }

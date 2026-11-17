@@ -34,14 +34,14 @@ public sealed record ParkingSearch(decimal Latitude, decimal Longitude, string V
             !Regex.IsMatch(text[..now.Index], @"\b(?:not|khong|or|hay|hoac)$");
         var missing = new List<string>();
         if (coordinates.Count != 1 || !Location(coordinates[0].Groups[1].Value, coordinates[0].Groups[2].Value, out _, out _))
-            missing.Add(english ? "one origin (latitude,longitude)" : "một điểm xuất phát (vĩ độ,kinh độ)");
+            missing.Add(english ? "a starting point" : "một điểm xuất phát");
         if (vehicles != 1) missing.Add(english ? "one vehicle type (car or motorcycle)" : "một loại xe (ô tô hoặc xe máy)");
         if (!explicitTime && !explicitNow) missing.Add(english ? "when (now or the exact start and end times)" : "khung giờ (tìm ngay hoặc giờ bắt đầu và kết thúc cụ thể)");
         var prompt = missing.Count == 0 ? "" :
             (english ? "Please confirm " : "Bạn cho mình biết ") + string.Join(", ", missing) + ". ";
         return prompt + (english
-            ? "Resend the complete search in one message, for example ‘find parking car near 10.77,106.70’ for now. For a future search, append from= and to= with full ISO 8601 times including UTC offsets."
-            : "Hãy gửi lại yêu cầu đầy đủ trong một tin nhắn, ví dụ ‘tìm bãi ô tô gần 10.77,106.70’ để tìm ngay. Nếu tìm cho khung giờ sau, thêm from= và to= với ngày giờ ISO 8601 kèm múi giờ.");
+            ? "Open Find Parking to search near your current location or browse the map. For example, if you want to park near Landmark 81 or FPT University, use that area on the map as your starting point. Chat cannot look up a landmark or address yet."
+            : "Mở Tìm bãi đỗ để dùng vị trí hiện tại hoặc xem trên bản đồ. Ví dụ, nếu bạn muốn gửi xe gần Landmark 81 hoặc Đại học FPT, hãy xem khu vực đó trên bản đồ. Chat chưa tra được vị trí từ tên địa điểm hoặc địa chỉ.");
     }
 
     // Parse only the local allowlist. Business filtering and ordering belong to Operations.
