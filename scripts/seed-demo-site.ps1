@@ -218,10 +218,12 @@ SELECT
   (SELECT count(*) FROM operational_capacity_configs
     WHERE tenant_id = :'tenant_id'::uuid AND site_id = :'site_id'::uuid)::text || '|' ||
   (SELECT count(*) FROM operational_policies
-    WHERE tenant_id = :'tenant_id'::uuid AND site_id = :'site_id'::uuid)::text;
+    WHERE tenant_id = :'tenant_id'::uuid AND site_id = :'site_id'::uuid
+      AND is_active AND effective_from <= CURRENT_TIMESTAMP
+      AND (effective_until IS NULL OR CURRENT_TIMESTAMP < effective_until))::text;
 '@
 Assert-Counts -Label 'reservation' -Actual $reservationCounts -Expected @('2','2','1')
-Write-Host '      OK (2 pools, 2 configs, 1 policy)' -ForegroundColor DarkGray
+Write-Host '      OK (2 pools, 2 configs, 1 effective policy)' -ForegroundColor DarkGray
 
 Write-Host '[6/7] Seeding demo Driver reservation history...' -ForegroundColor Cyan
 $driver = Get-SeedCounts -Service 'user-db' -DatabaseUser 'smartpark_user' -DatabaseName 'smartpark_user' -Sql @'
