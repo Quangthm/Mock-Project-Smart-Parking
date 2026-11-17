@@ -111,12 +111,14 @@ public sealed class ReservationGateUseCaseTests
         await mediator.Send(payment with { PaymentOrderId = Guid.NewGuid() });
         Assert.Null(session.ExitTime);
         Assert.Null(session.CheckoutPaidAt);
+        Assert.DoesNotContain("queue-snapshot", data.Calls);
 
         await mediator.Send(payment);
         Assert.Equal(occurredAt, session.CheckoutPaidAt);
         Assert.Equal(occurredAt, session.ExitTime);
         Assert.Equal("COMPLETED", session.SessionStatus);
         Assert.Equal("RELEASED", data.Allocation!.AllocationStatus);
+        Assert.Equal(new[] { "queue-snapshot", "save", "commit", "release-slot" }, data.Calls.TakeLast(4));
         Assert.Equal("release-slot", data.Calls.Last());
 
         await mediator.Send(payment with { OccurredAt = occurredAt.AddMinutes(1) });
@@ -153,11 +155,13 @@ public sealed class ReservationGateUseCaseTests
         services.AddSingleton<IParkingSessionRepository>(data); services.AddSingleton<ISlotAllocationRepository>(data);
         services.AddSingleton<IOperationsAuditPublisher>(data);
         services.AddSingleton<IOperatorGateSlotClaims>(data);
+        services.AddSingleton<IOccupancyOutboxStore>(data);
         return services.BuildServiceProvider();
     }
 
     private sealed class FakeRepositories : IReservationRepository, IParkingSessionRepository, ISlotAllocationRepository,
-        IOperationsAuditPublisher, IOperatorIdentityClient, IOperationsConcurrency, OperationsUnitOfWork, OperationsUnitOfWorkTransaction, IOperatorGateSlotClaims
+        IOperationsAuditPublisher, IOperatorIdentityClient, IOperationsConcurrency, OperationsUnitOfWork, OperationsUnitOfWorkTransaction,
+        IOperatorGateSlotClaims, IOccupancyOutboxStore
     {
         public Guid Site { get; } = Guid.NewGuid();
         public Guid Tenant { get; } = Guid.NewGuid();
@@ -180,6 +184,18 @@ public sealed class ReservationGateUseCaseTests
         public Task<OperationsUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct) { Calls.Add("begin"); return Task.FromResult<OperationsUnitOfWorkTransaction>(this); }
         public Task<int> SaveChangesAsync(CancellationToken ct = default) { Calls.Add("save"); return Task.FromResult(1); }
         public Task CommitAsync(CancellationToken ct) { Calls.Add("commit"); return Task.CompletedTask; }
+        public void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt)
+        {
+            Assert.Equal(Site, siteId);
+            Calls.Add("queue-snapshot");
+        }
+
+        public Task<IReadOnlyList<OutboxMessage>> ClaimBatchAsync(int batchSize, TimeSpan leaseDuration, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task MarkPublishedAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken ct) =>
+            throw new NotSupportedException();
+
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public Task<IOperatorGateSlotLease> ClaimAvailableAsync(Guid tenantId, Guid siteId, string vehicleType,
             Guid? preferredSlotId, Guid? targetUnitId, bool allowReservedSlot, CancellationToken ct) =>

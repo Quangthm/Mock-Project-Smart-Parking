@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../../context/AppContext';
 import { parkingApi, operatorsApi, type Site, type Operator } from '../../../lib/parkingApi';
 import { OnboardingWizard } from '../parking-lots/CreateParkingLotForOwner';
@@ -12,6 +12,7 @@ import { ParkingStructure } from '../structure/ParkingStructure';
 import { ErrorBoundary } from '../../../components/feedback/ErrorBoundary';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 import { reconcileOwnerLotSetups } from '../../../lib/ownerLotSetup';
+import { watchOperators } from '../../../lib/operatorLive';
 
 type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy';
 
@@ -38,8 +39,31 @@ export function OwnerDashboard() {
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const rosterVersion = useRef(0);
+  useEffect(() => {
+    if (user?.role !== 'owner') return;
+    let active = true, reading = false, dirty = false;
+    const refresh = async () => {
+      dirty = true;
+      if (reading) return;
+      reading = true;
+      try {
+        do {
+          dirty = false;
+          rosterVersion.current++;
+          const accounts = await operatorsApi.list();
+          if (active) setOperators(accounts);
+        } while (active && dirty);
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : 'Cannot refresh operators.');
+      } finally { reading = false; }
+    };
+    const stop = watchOperators(() => { void refresh(); });
+    return () => { active = false; stop(); };
+  }, [user?.id, user?.role]);
   useEffect(() => {
     let current = true;
+    const requestedRosterVersion = rosterVersion.current;
     setLoading(true); setSitesLoaded(false); setError('');
     Promise.allSettled([parkingApi.list(), operatorsApi.list()])
       .then(async ([siteResult, operatorResult]) => {
@@ -54,8 +78,10 @@ export function OwnerDashboard() {
           setSites([]);
           setError(siteResult.reason instanceof Error ? siteResult.reason.message : 'Cannot load owner sites.');
         }
-        if (operatorResult.status === 'fulfilled') setOperators(operatorResult.value);
-        else {
+        if (operatorResult.status === 'fulfilled') {
+          if (requestedRosterVersion === rosterVersion.current) setOperators(operatorResult.value);
+        }
+        else if (requestedRosterVersion === rosterVersion.current) {
           setOperators([]);
           if (siteResult.status === 'fulfilled') setError(operatorResult.reason instanceof Error ? operatorResult.reason.message : 'Cannot load operators.');
         }
@@ -106,7 +132,7 @@ export function OwnerDashboard() {
                   <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} />
                 </ErrorBoundary>
               ))}
-          {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
+          {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} liveOperators={operators} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}
         </div>

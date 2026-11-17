@@ -166,6 +166,7 @@ public class FakeUnitOfWork : IUnitOfWork
 
 public class FakePaymentGatewayPort : IPaymentGatewayPort
 {
+    public PaymentInitiateRequest? LastInitiateRequest { get; private set; }
     public string ProviderCode => "PAYOS";
 
     public PaymentInitiateResult InitiateResult { get; set; } = new(
@@ -211,6 +212,7 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
 
     public Task<PaymentInitiateResult> InitiatePaymentAsync(PaymentInitiateRequest request, CancellationToken cancellationToken = default)
     {
+        LastInitiateRequest = request;
         return Task.FromResult(InitiateResult);
     }
 

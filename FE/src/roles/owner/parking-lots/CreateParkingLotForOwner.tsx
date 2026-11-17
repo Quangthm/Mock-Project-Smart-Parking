@@ -757,7 +757,7 @@ export function OnboardingWizard({
               }}
             >
               <div>
-                <label className="label">Lot Name *</label>
+                <label className="label">Lot Name <span className="required-mark">*</span></label>
                 <input
                   className="input"
                   value={lotConfig.name}
@@ -768,7 +768,7 @@ export function OnboardingWizard({
                 />
               </div>
               <div>
-                <label className="label" htmlFor="owner-setup-street">Street Address / Complex *</label>
+                <label className="label" htmlFor="owner-setup-street">Street Address / Complex <span className="required-mark">*</span></label>
                 <input
                   id="owner-setup-street"
                   className="input"
@@ -783,7 +783,7 @@ export function OnboardingWizard({
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="label" htmlFor="owner-setup-province">Province *</label>
+                  <label className="label" htmlFor="owner-setup-province">Province <span className="required-mark">*</span></label>
                   <RoundedSelect id="owner-setup-province" className="input" value={provinceCode} onChange={event => {
                     setProvinceCode(event.target.value)
                     setDistrict("")
@@ -856,7 +856,7 @@ export function OnboardingWizard({
                 </div>
                 {LOT_TYPE_INFO[lotType].hasFloors && (
                   <div>
-                    <label className="label">Number of Floors / Levels *</label>
+                    <label className="label">Number of Floors / Levels <span className="required-mark">*</span></label>
                     <input
                       className="input"
                       type="number"

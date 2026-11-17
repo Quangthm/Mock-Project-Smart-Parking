@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, useCallback, type RefObject } from "react"
 const SCRIPT_ID = "cf-turnstile-script"
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
 const CLOUDFLARE_TEST_SITE_KEY = "1x00000000000000000000AA" // Cloudflare always-pass dummy site key
+// UI configuration only; the authentication service remains the verification authority.
+export const turnstileEnabled = import.meta.env.VITE_TURNSTILE_ENABLED !== "false"
 
 function loadTurnstileScript(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve()
@@ -86,6 +88,8 @@ export function useTurnstile(
     // Reset token state when action/sitekey changes
     setToken(null)
     onTokenChange?.("")
+
+    if (!turnstileEnabled) return
 
     loadTurnstileScript()
       .then(() => {

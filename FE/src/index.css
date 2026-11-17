@@ -807,6 +807,8 @@ select:not([multiple]):not([size]) {
   transition: opacity 100ms ease, visibility 0s linear 100ms;
 }
 .smartparking-chat-shell.is-open .smartparking-chat-launcher svg { animation: none; }
+.required-mark { color: #d92d20; font-weight: 600; }
+[data-theme="dark"] .required-mark { color: #fda29b; }
 @media (prefers-reduced-motion: reduce) {
   .smartparking-chat-shell, .smartparking-chat-shell .smartparking-chat-window,
   .smartparking-chat-shell.is-open .smartparking-chat-window,

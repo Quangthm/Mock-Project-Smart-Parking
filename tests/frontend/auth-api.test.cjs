@@ -41,6 +41,36 @@ const response = (status, payload = { success: false, code: 'INVALID_TOKEN', mes
   ({ status, ok: status >= 200 && status < 300, json: async () => payload });
 
 const apiUser = { userId: 'driver-id', fullName: 'Driver', email: 'driver@example.com', role: 'driver' };
+
+test('identical in-flight GETs share a read; completed reads are never cached', async () => {
+  const f = fixture(() => response(200, { success: true, data: [] }));
+  await Promise.all([f.request('/sites'), f.request('/sites'), f.request('/sites')]);
+  assert.equal(f.calls.length, 1);
+  await f.request('/sites');
+  assert.equal(f.calls.length, 2);
+});
+
+test('a mutation prevents later reads from joining a pre-mutation snapshot', async () => {
+  let release;
+  const f = fixture((url, options) => options.method === 'GET' && !release
+    ? new Promise(resolve => { release = () => resolve(response(200, { version: 1 })); })
+    : response(200, { version: 2 }));
+  const first = f.request('/sites');
+  await new Promise(resolve => setImmediate(resolve));
+  await f.request('/sites', 'POST', { name: 'Changed' });
+  assert.equal((await f.request('/sites')).version, 2);
+  release();
+  assert.equal((await first).version, 1);
+  assert.equal(f.calls.length, 3);
+});
+
+test('failed shared reads are released and different query scopes do not share', async () => {
+  const f = fixture(() => response(503, { message: 'Unavailable' }));
+  await Promise.allSettled([f.request('/sites?id=a'), f.request('/sites?id=a'), f.request('/sites?id=b')]);
+  assert.equal(f.calls.length, 2);
+  await assert.rejects(f.request('/sites?id=a'), /Unavailable/);
+  assert.equal(f.calls.length, 3);
+});
 const refreshedSession = { success: true, data: { accessToken: 'access-rotated', refreshToken: 'refresh-rotated', expiresIn: 900, user: apiUser } };
 
 test('image upload preserves multipart bytes, browser boundary and current bearer', async () => {
@@ -60,6 +90,7 @@ test('concurrent protected requests rotate an expired access token once before u
   const users = await Promise.all([f.api.currentUser(), f.api.currentUser()]);
   assert.equal(users.length, 2);
   assert.equal(f.calls.filter(c => c.url.endsWith('/refresh')).length, 1);
+  assert.equal(f.calls.filter(c => c.url.endsWith('/me')).length, 1);
   assert.ok(f.calls.filter(c => c.url.endsWith('/me')).every(c => c.options.headers.Authorization === 'Bearer access-rotated'));
   assert.equal(f.storage.get('sp_refresh_token'), 'refresh-rotated');
 });
@@ -269,6 +300,14 @@ test('unsupported login role does not store tokens', async () => {
   f.api.clearSession();
   await assert.rejects(f.api.login('driver@example.com', 'password'), /unsupported account role/);
   assert.equal(f.storage.size, 0);
+});
+
+test('concurrent currentUser reads share one request, but later reads verify the session again', async () => {
+  const f = fixture(() => response(200, { success: true, data: apiUser }));
+  await Promise.all([f.api.currentUser(), f.api.currentUser(), f.api.currentUser()]);
+  assert.equal(f.calls.filter(call => call.url.endsWith('/me')).length, 1);
+  await f.api.currentUser();
+  assert.equal(f.calls.filter(call => call.url.endsWith('/me')).length, 2);
 });
 
 test('currentUser restores the backend identity using the bearer token', async () => {
