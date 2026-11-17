@@ -1,0 +1,3187 @@
+{
+  "info": {
+    "_postman_id": "8c4d2f10-3a6b-4c7e-9d02-5f1a8b9c0d21",
+    "name": "SPARK-340 Admin Platform Policies & Integrations (UAT)",
+    "description": "UAT for SPARK-340 / SPARK-370. Use the local stack, real Admin/Owner/Driver tokens, a published site policy, a driver-owned vehicle and a bookable slot. Use an isolated zero-deposit booking fixture or settle its sandbox order. Folder 04 derives the booking ID from the admission receipt for the reviewed terms. An explicit skip means no proof for that case. Store only sanitized evidence.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - RBAC Matrix",
+      "description": "Read authorization boundary on both admin surfaces: ADMIN -> 200, authenticated OWNER/DRIVER -> 403, anonymous -> 401.",
+      "item": [
+        {
+          "name": "Operations policies - Anonymous -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/catalogue",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "catalogue"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('anonymous is rejected with 401', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Operations policies - Driver -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/catalogue",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "catalogue"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('driver is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Operations policies - Owner -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/catalogue",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "catalogue"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('owner is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Operations policies - Admin -> 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/catalogue",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "catalogue"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admin is authorized with 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment integration - Anonymous -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('anonymous is rejected with 401', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment integration - Driver -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('driver is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment integration - Owner -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('owner is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment integration - Admin -> 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admin is authorized with 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notification integration - Anonymous -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{notification_base_url}}/api/v1/admin/integrations/notifications",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('anonymous is rejected with 401', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notification integration - Driver -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{notification_base_url}}/api/v1/admin/integrations/notifications",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('driver is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notification integration - Owner -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{notification_base_url}}/api/v1/admin/integrations/notifications",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('owner is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notification integration - Admin -> 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{notification_base_url}}/api/v1/admin/integrations/notifications",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admin is authorized with 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Operation Policies Lifecycle",
+      "description": "Catalogue canonical keys, isolated draft create/update with optimistic concurrency, revision listing/pagination/filters, immediate activation, and effective-policy provenance.",
+      "item": [
+        {
+          "name": "Catalogue - 14 canonical keys with null vs configured bounds",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/catalogue",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "catalogue"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and success envelope', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});",
+                  "const catalogueBody = pm.response.json();",
+                  "const catalogueData = catalogueBody.data;",
+                  "const canonicalKeys = [",
+                  "  'RESERVATION_MIN_DURATION',",
+                  "  'RESERVATION_MAX_DURATION',",
+                  "  'MAX_ADVANCE_BOOKING',",
+                  "  'INTER_BOOKING_BUFFER',",
+                  "  'PAYMENT_HOLD_DURATION',",
+                  "  'RESERVATION_PROTECTION_WINDOW',",
+                  "  'ALLOCATION_LEAD_TIME',",
+                  "  'FACILITY_FAILURE_REFUND_LEAD_TIME',",
+                  "  'OCCUPANCY_VALIDITY_TIMESPAN',",
+                  "  'ARRIVAL_LATE_TOLERANCE',",
+                  "  'RAPID_CANCELLATION_COUNT',",
+                  "  'RAPID_CANCELLATION_WINDOW',",
+                  "  'RAPID_CANCELLATION_RESTRICTION_DURATION',",
+                  "  'DAILY_CANCELLATION_LIMIT'",
+                  "];",
+                  "pm.test('catalogue exposes exactly the 14 canonical policy keys', function () {",
+                  "  pm.expect(catalogueData.policies).to.be.an('array').with.lengthOf(14);",
+                  "  const actualKeys = catalogueData.policies.map(function (p) { return p.key; }).sort();",
+                  "  pm.expect(actualKeys).to.eql(canonicalKeys.slice().sort());",
+                  "});",
+                  "pm.test('ARRIVAL_LATE_TOLERANCE carries the configured 15..30 bound', function () {",
+                  "  const item = catalogueData.policies.find(function (p) { return p.key === 'ARRIVAL_LATE_TOLERANCE'; });",
+                  "  pm.expect(item).to.exist;",
+                  "  pm.expect(item.bound).to.not.eql(null);",
+                  "  pm.expect(item.bound.minimum).to.eql(15);",
+                  "  pm.expect(item.bound.maximum).to.eql(30);",
+                  "});",
+                  "pm.test('all other keys have a null bound in the maintained platform catalogue', function () {",
+                  "  const others = catalogueData.policies.filter(function (p) { return p.key !== 'ARRIVAL_LATE_TOLERANCE'; });",
+                  "  others.forEach(function (p) { pm.expect(p.bound).to.eql(null); });",
+                  "});",
+                  "pm.test('anti-abuse keys are not owner-overridable', function () {",
+                  "  const antiAbuse = ['RAPID_CANCELLATION_COUNT', 'RAPID_CANCELLATION_WINDOW',",
+                  "    'RAPID_CANCELLATION_RESTRICTION_DURATION', 'DAILY_CANCELLATION_LIMIT'];",
+                  "  antiAbuse.forEach(function (key) {",
+                  "    const antiAbuseItem = catalogueData.policies.find(function (p) { return p.key === key; });",
+                  "    pm.expect(antiAbuseItem.isOverridableByOwner).to.eql(false);",
+                  "  });",
+                  "});",
+                  "pm.test('the ten time and count keys are owner-overridable', function () {",
+                  "  const overridable = catalogueData.policies.filter(function (p) { return p.isOverridableByOwner; });",
+                  "  pm.expect(overridable).to.have.lengthOf(10);",
+                  "});",
+                  "if (catalogueData && catalogueData.revisionId) { pm.environment.set('platform_revision_id', catalogueData.revisionId); }",
+                  "const cataloguePaymentHold = catalogueData && catalogueData.policies",
+                  "  ? catalogueData.policies.find(function (p) { return p.key === 'PAYMENT_HOLD_DURATION'; })",
+                  "  : undefined;",
+                  "if (cataloguePaymentHold) { pm.environment.set('platform_payment_hold_value', String(cataloguePaymentHold.defaultValue)); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create platform draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201 and success envelope', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});",
+                  "const createDraftBody = pm.response.json();",
+                  "const createDraftData = createDraftBody.data;",
+                  "pm.test('draft response exposes id, version, DRAFT status and updatedAt', function () {",
+                  "  pm.expect(createDraftData.id).to.be.a('string');",
+                  "  pm.expect(createDraftData.version).to.be.a('number');",
+                  "  pm.expect(createDraftData.status).to.eql('DRAFT');",
+                  "  pm.expect(createDraftData.updatedAt).to.be.a('string');",
+                  "});",
+                  "if (createDraftData && createDraftData.id) {",
+                  "  pm.environment.set('draft_id', createDraftData.id);",
+                  "  pm.environment.set('rbac_write_target_id', createDraftData.id);",
+                  "}",
+                  "if (createDraftData && createDraftData.updatedAt) {",
+                  "  pm.environment.set('original_updated_at', createDraftData.updatedAt);",
+                  "  pm.environment.set('expected_updated_at', createDraftData.updatedAt);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Creates an isolated platform draft for this run. Only the ARRIVAL_LATE_TOLERANCE bound is supplied so repeated runs keep the catalogue shape stable."
+        },
+        {
+          "name": "List revisions - DRAFT contains created draft",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions?status=DRAFT",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "DRAFT"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const draftListBody = pm.response.json();",
+                  "const draftListData = draftListBody.data;",
+                  "const createdDraftId = pm.environment.get('draft_id');",
+                  "pm.test('DRAFT filter contains the draft created by this run', function () {",
+                  "  pm.expect(draftListData.items).to.be.an('array');",
+                  "  const itemIds = draftListData.items.map(function (i) { return i.id; });",
+                  "  pm.expect(itemIds).to.include(createdDraftId);",
+                  "});",
+                  "pm.test('every returned item is DRAFT', function () {",
+                  "  draftListData.items.forEach(function (i) { pm.expect(i.status).to.eql('DRAFT'); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List revisions - SQL pagination",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions?status=ALL&page=1&pageSize=5",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ALL"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and pagination echoes request', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const paginationData = pm.response.json().data;",
+                  "  pm.expect(paginationData.page).to.eql(1);",
+                  "  pm.expect(paginationData.pageSize).to.eql(5);",
+                  "  pm.expect(paginationData.items.length).to.be.at.most(5);",
+                  "  pm.expect(paginationData.totalPages).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read revision by id - 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{draft_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{draft_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and id matches the created draft', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const readDraftBody = pm.response.json();",
+                  "  pm.expect(readDraftBody.data.id).to.eql(pm.environment.get('draft_id'));",
+                  "  pm.expect(readDraftBody.data.status).to.eql('DRAFT');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read revision by id - 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/11111111-1111-1111-1111-111111111111",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "11111111-1111-1111-1111-111111111111"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('unknown revision returns 404', function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update draft with If-Match - success",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{original_updated_at}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft/{{draft_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft",
+                "{{draft_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 20,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  },\n  \"expectedUpdatedAt\": \"{{original_updated_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 with update message', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const updateEnvelope = pm.response.json();",
+                  "  pm.expect(updateEnvelope.success).to.eql(true);",
+                  "  pm.expect(updateEnvelope.message).to.eql('Platform policy draft updated successfully.');",
+                  "});",
+                  "const updateDraftBody = pm.response.json();",
+                  "const updateDraftData = updateDraftBody && updateDraftBody.data;",
+                  "pm.test('update returns the same draft id and DRAFT status', function () {",
+                  "  pm.expect(updateDraftData).to.exist;",
+                  "  pm.expect(updateDraftData.id).to.eql(pm.environment.get('draft_id'));",
+                  "  pm.expect(updateDraftData.status).to.eql('DRAFT');",
+                  "});",
+                  "if (updateDraftData && updateDraftData.updatedAt) {",
+                  "  pm.environment.set('expected_updated_at', updateDraftData.updatedAt);",
+                  "  pm.test('concurrency token advanced after the successful save', function () {",
+                  "    pm.expect(updateDraftData.updatedAt).to.not.eql(pm.environment.get('original_updated_at'));",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update draft with stale If-Match - 409",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{original_updated_at}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft/{{draft_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft",
+                "{{draft_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 25,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  },\n  \"expectedUpdatedAt\": \"{{original_updated_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('stale concurrency token is rejected with 409 RESOURCE_VERSION_CONFLICT', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "  const staleBody = pm.response.json();",
+                  "  pm.expect(staleBody.success).to.eql(false);",
+                  "  pm.expect(staleBody.code).to.eql('RESOURCE_VERSION_CONFLICT');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate revision - immediate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{draft_id}}/activate",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{draft_id}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('activation succeeds', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const activationEnvelope = pm.response.json();",
+                  "  pm.expect(activationEnvelope.success).to.eql(true);",
+                  "  pm.expect(activationEnvelope.data.status).to.eql('CURRENT');",
+                  "  pm.expect(activationEnvelope.data.isActive).to.eql(true);",
+                  "  pm.expect(activationEnvelope.data.effectiveFrom).to.be.a('string');",
+                  "});",
+                  "const activationBody = pm.response.json();",
+                  "const activationData = activationBody && activationBody.data;",
+                  "if (activationData && activationData.id) {",
+                  "  pm.environment.set('activated_revision_id', activationData.id);",
+                  "  pm.environment.set('activated_revision_version', String(activationData.version));",
+                  "}",
+                  "if (activationData && activationData.supersededRevision && activationData.supersededRevision.id) {",
+                  "  pm.environment.set('superseded_revision_id', activationData.supersededRevision.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List revisions - status CURRENT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions?status=CURRENT",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "CURRENT"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and CURRENT items are non-empty', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const currentBody = pm.response.json();",
+                  "  pm.expect(currentBody.data.items).to.be.an('array').that.is.not.empty;",
+                  "  currentBody.data.items.forEach(function (i) { pm.expect(i.status).to.eql('CURRENT'); });",
+                  "});",
+                  "const currentRevisionId = pm.environment.get('activated_revision_id');",
+                  "if (!currentRevisionId) {",
+                  "  pm.test.skip('SKIPPED: the immediate activation did not return a revision id', function () {});",
+                  "} else {",
+                  "  pm.test('CURRENT filter contains the revision activated by this run', function () {",
+                  "    const currentListBody = pm.response.json();",
+                  "    const currentIds = currentListBody.data.items.map(function (i) { return i.id; });",
+                  "    pm.expect(currentIds).to.include(currentRevisionId);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List revisions - status SCHEDULED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions?status=SCHEDULED",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "SCHEDULED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and items array', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.items).to.be.an('array');",
+                  "});",
+                  "const scheduledFolderOneBody = pm.response.json();",
+                  "if (scheduledFolderOneBody.data.items.length === 0) {",
+                  "  pm.test.skip('SKIPPED: no scheduled revision exists yet; folder 05 proves SCHEDULED activation explicitly', function () {});",
+                  "} else {",
+                  "  pm.test('SCHEDULED filter returns only scheduled revisions', function () {",
+                  "    scheduledFolderOneBody.data.items.forEach(function (i) { pm.expect(i.status).to.eql('SCHEDULED'); });",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List revisions - status SUPERSEDED",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions?status=SUPERSEDED",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "SUPERSEDED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and SUPERSEDED items are non-empty', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const supersededEnvelope = pm.response.json();",
+                  "  pm.expect(supersededEnvelope.data.items).to.be.an('array').that.is.not.empty;",
+                  "  supersededEnvelope.data.items.forEach(function (i) { pm.expect(i.status).to.eql('SUPERSEDED'); });",
+                  "});",
+                  "const supersededRevisionId = pm.environment.get('superseded_revision_id');",
+                  "if (!supersededRevisionId) {",
+                  "  pm.test.skip('SKIPPED: activation reported no superseded predecessor', function () {});",
+                  "} else {",
+                  "  pm.test('SUPERSEDED filter contains the predecessor closed by activation', function () {",
+                  "    const supersededListBody = pm.response.json();",
+                  "    const supersededIds = supersededListBody.data.items.map(function (i) { return i.id; });",
+                  "    pm.expect(supersededIds).to.include(supersededRevisionId);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Effective policies - PLATFORM provenance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/effective",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "effective"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and platform scope', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const platformBody = pm.response.json();",
+                  "  pm.expect(platformBody.data.scope).to.eql('PLATFORM');",
+                  "  pm.expect(platformBody.data.platformRevision).to.exist;",
+                  "  pm.expect(platformBody.data.platformRevision.id).to.be.a('string');",
+                  "});",
+                  "const platformEffectiveBody = pm.response.json();",
+                  "const platformEffectiveData = platformEffectiveBody.data;",
+                  "pm.test('platform self-resolution reports inherited=false and source=PLATFORM_DEFAULT', function () {",
+                  "  Object.keys(platformEffectiveData.values).forEach(function (key) {",
+                  "    const item = platformEffectiveData.values[key];",
+                  "    pm.expect(item.inherited).to.eql(false);",
+                  "    pm.expect(item.source).to.eql('PLATFORM_DEFAULT');",
+                  "  });",
+                  "});",
+                  "pm.test('platform does not decide arrival-late enablement', function () {",
+                  "  pm.expect(platformEffectiveData.arrivalLateTolerance.enabled).to.eql(null);",
+                  "});",
+                  "const activeRevisionId = pm.environment.get('activated_revision_id');",
+                  "if (activeRevisionId) {",
+                  "  pm.test('platform effective revision matches the revision activated by this run', function () {",
+                  "    pm.expect(platformEffectiveData.platformRevision.id).to.eql(activeRevisionId);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Effective policies - SITE provenance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/effective?tenantId={{tenant_id}}&siteId={{site_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "effective"
+              ],
+              "query": [
+                {
+                  "key": "tenantId",
+                  "value": "{{tenant_id}}"
+                },
+                {
+                  "key": "siteId",
+                  "value": "{{site_id}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const siteTenantId = pm.environment.get('tenant_id');",
+                  "const siteId = pm.environment.get('site_id');",
+                  "if (!siteTenantId || !siteId) {",
+                  "  pm.test.skip('SKIPPED: tenant_id and site_id must both be configured for site-scoped evaluation', function () {});",
+                  "  return;",
+                  "}",
+                  "if (pm.response.code === 404) {",
+                  "  const siteMissingBody = pm.response.json();",
+                  "  if (siteMissingBody && siteMissingBody.code === 'POLICY_NOT_FOUND') {",
+                  "    pm.test.skip('SKIPPED: the configured site has no active policy revision, so inheritance cannot be observed', function () {});",
+                  "    return;",
+                  "  }",
+                  "}",
+                  "pm.test('status 200 for site-scoped evaluation', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const siteBody = pm.response.json();",
+                  "  pm.expect(siteBody.data.scope).to.eql('SITE');",
+                  "  pm.expect(siteBody.data.tenantId).to.eql(siteTenantId);",
+                  "  pm.expect(siteBody.data.siteId).to.eql(siteId);",
+                  "  pm.expect(siteBody.data.evaluatedAt).to.exist;",
+                  "});",
+                  "const siteEffectiveBody = pm.response.json();",
+                  "const siteEffectiveData = siteEffectiveBody && siteEffectiveBody.data;",
+                  "if (!siteEffectiveData || !siteEffectiveData.values) { return; }",
+                  "if (siteEffectiveData.tenantId) { pm.environment.set('resolved_tenant_id', siteEffectiveData.tenantId); }",
+                  "if (siteEffectiveData.siteId) { pm.environment.set('resolved_site_id', siteEffectiveData.siteId); }",
+                  "const siteValueKeys = Object.keys(siteEffectiveData.values);",
+                  "const inheritedKeys = siteValueKeys.filter(function (k) { return siteEffectiveData.values[k].inherited === true; });",
+                  "const overriddenKeys = siteValueKeys.filter(function (k) { return siteEffectiveData.values[k].inherited === false; });",
+                  "pm.test('inherited site values report source=PLATFORM_DEFAULT', function () {",
+                  "  pm.expect(inheritedKeys.length).to.be.greaterThan(0);",
+                  "  inheritedKeys.forEach(function (k) {",
+                  "    pm.expect(siteEffectiveData.values[k].source).to.eql('PLATFORM_DEFAULT');",
+                  "  });",
+                  "});",
+                  "if (overriddenKeys.length === 0) {",
+                  "  pm.test.skip('SKIPPED: the site policy does not override any key, so SITE_OVERRIDE provenance cannot be observed', function () {});",
+                  "} else {",
+                  "  pm.test('overridden site values report source=SITE_OVERRIDE', function () {",
+                  "    overriddenKeys.forEach(function (k) {",
+                  "      pm.expect(siteEffectiveData.values[k].source).to.eql('SITE_OVERRIDE');",
+                  "    });",
+                  "  });",
+                  "}",
+                  "pm.test('every site value has a consistent provenance shape', function () {",
+                  "  siteValueKeys.forEach(function (k) {",
+                  "    const item = siteEffectiveData.values[k];",
+                  "    if (item.inherited === true) { pm.expect(item.source).to.eql('PLATFORM_DEFAULT'); }",
+                  "    else { pm.expect(item.source).to.eql('SITE_OVERRIDE'); }",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Payment Integration",
+      "description": "PayOS integration settings: secret masking, mode switching, base-url allowlist, credential validation, and optional SANDBOX credential proof. Never returns plaintext apiKey/checksumKey.",
+      "item": [
+        {
+          "name": "Get payment integration - secrets masked",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and provider is PAYOS', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const paymentEnvelope = pm.response.json();",
+                  "  pm.expect(paymentEnvelope.data.provider).to.eql('PAYOS');",
+                  "});",
+                  "const paymentBody = pm.response.json();",
+                  "const paymentData = paymentBody.data;",
+                  "pm.test('credentials are reported as booleans, never raw values', function () {",
+                  "  pm.expect(typeof paymentData.apiKeyConfigured).to.eql('boolean');",
+                  "  pm.expect(typeof paymentData.checksumKeyConfigured).to.eql('boolean');",
+                  "  pm.expect(paymentData).to.not.have.property('apiKey');",
+                  "  pm.expect(paymentData).to.not.have.property('checksumKey');",
+                  "});",
+                  "pm.test('client id is masked', function () {",
+                  "  if (paymentData.clientIdMasked !== null) {",
+                  "    pm.expect(typeof paymentData.clientIdMasked).to.eql('string');",
+                  "    pm.expect(paymentData.clientIdMasked.indexOf('****')).to.eql(0);",
+                  "  }",
+                  "});",
+                  "pm.test('capabilities are declared', function () {",
+                  "  pm.expect(paymentData.capabilities.supportsWebhook).to.eql(true);",
+                  "  pm.expect(paymentData.capabilities.supportsVietQr).to.eql(true);",
+                  "});",
+                  "pm.test('response text carries no raw apiKey or checksumKey property', function () {",
+                  "  const paymentText = pm.response.text();",
+                  "  pm.expect(paymentText.indexOf('\"apiKey\"')).to.eql(-1);",
+                  "  pm.expect(paymentText.indexOf('\"checksumKey\"')).to.eql(-1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Switch to FIXTURE mode - success",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"FIXTURE\",\n  \"baseUrl\": \"http://localhost:5173\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('fixture mode is accepted', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const fixtureBody = pm.response.json();",
+                  "  pm.expect(fixtureBody.success).to.eql(true);",
+                  "  pm.expect(fixtureBody.data.mode).to.eql('FIXTURE');",
+                  "  pm.expect(fixtureBody.data.isConfigured).to.eql(true);",
+                  "  pm.expect(fixtureBody.data.status).to.eql('HEALTHY');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disallowed BaseUrl - 400 INVALID_PAYMENT_BASE_URL",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"SANDBOX\",\n  \"baseUrl\": \"https://evil.example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('off-allowlist base url is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const badUrlBody = pm.response.json();",
+                  "  pm.expect(badUrlBody.success).to.eql(false);",
+                  "  pm.expect(badUrlBody.code).to.eql('INVALID_PAYMENT_BASE_URL');",
+                  "  pm.expect(badUrlBody.errorCode).to.eql('INVALID_PAYMENT_BASE_URL');",
+                  "  pm.expect(badUrlBody.message).to.be.a('string');",
+                  "  pm.expect(badUrlBody.traceId).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid mode - 400 VALIDATION_FAILED",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"BOGUS\",\n  \"baseUrl\": \"https://api-merchant.payos.vn\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('unknown mode is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const invalidModeBody = pm.response.json();",
+                  "  pm.expect(invalidModeBody.code).to.eql('VALIDATION_FAILED');",
+                  "  pm.expect(invalidModeBody.errorCode).to.eql('VALIDATION_FAILED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Blank credential - 400 VALIDATION_FAILED",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"SANDBOX\",\n  \"baseUrl\": \"https://api-merchant.payos.vn\",\n  \"apiKey\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('blank credential is rejected', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const blankBody = pm.response.json();",
+                  "  pm.expect(blankBody.code).to.eql('VALIDATION_FAILED');",
+                  "  pm.expect(blankBody.errors).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Configure SANDBOX credentials - masked (optional)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"SANDBOX\",\n  \"baseUrl\": \"https://api-merchant.payos.vn\",\n  \"clientId\": \"{{payment_test_client_id}}\",\n  \"apiKey\": \"{{payment_test_api_key}}\",\n  \"checksumKey\": \"{{payment_test_checksum_key}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sandboxClientId = pm.environment.get('payment_test_client_id');",
+                  "const sandboxApiKey = pm.environment.get('payment_test_api_key');",
+                  "const sandboxChecksumKey = pm.environment.get('payment_test_checksum_key');",
+                  "if (!sandboxClientId || !sandboxApiKey || !sandboxChecksumKey) {",
+                  "  pm.test.skip('SKIPPED: payment_test_client_id/payment_test_api_key/payment_test_checksum_key are blank; no SANDBOX credentials supplied', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('sandbox credential save returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const sandboxBody = pm.response.json();",
+                  "const sandboxData = sandboxBody && sandboxBody.data;",
+                  "pm.test('sandbox credentials are configured and masked', function () {",
+                  "  pm.expect(sandboxData).to.exist;",
+                  "  pm.expect(sandboxData.mode).to.eql('SANDBOX');",
+                  "  pm.expect(sandboxData.apiKeyConfigured).to.eql(true);",
+                  "  pm.expect(sandboxData.checksumKeyConfigured).to.eql(true);",
+                  "  pm.expect(sandboxData).to.not.have.property('apiKey');",
+                  "  pm.expect(sandboxData).to.not.have.property('checksumKey');",
+                  "});",
+                  "pm.test('no supplied plaintext credential is echoed', function () {",
+                  "  const sandboxText = pm.response.text();",
+                  "  pm.expect(sandboxText.indexOf(sandboxApiKey)).to.eql(-1);",
+                  "  pm.expect(sandboxText.indexOf(sandboxChecksumKey)).to.eql(-1);",
+                  "  pm.expect(sandboxText.indexOf(sandboxClientId)).to.eql(-1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "SKIPPED when any payment_test_* environment variable is blank. When credentials are supplied, a 200 response, apiKeyConfigured=true, and no plaintext echo are required; 400 is never accepted."
+        }
+      ]
+    },
+    {
+      "name": "03 - Notification Integration",
+      "description": "Notifications expose four fixed local fixture channels (EMAIL, SMS, PUSH, IN_APP), all ACTIVE and ready, with provider names identifying the local adapters.",
+      "item": [
+        {
+          "name": "Get notification integrations - 4 fixed channels ACTIVE",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{notification_base_url}}/api/v1/admin/integrations/notifications",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 with success envelope', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});",
+                  "const notificationBody = pm.response.json();",
+                  "const notificationChannels = notificationBody && notificationBody.data && notificationBody.data.channels",
+                  "  ? notificationBody.data.channels",
+                  "  : [];",
+                  "pm.test('four fixed channel enums are returned', function () {",
+                  "  pm.expect(notificationChannels).to.be.an('array').with.lengthOf(4);",
+                  "  const channelNames = notificationChannels.map(function (c) { return c.channel; }).sort();",
+                  "  pm.expect(channelNames).to.eql(['EMAIL', 'IN_APP', 'PUSH', 'SMS']);",
+                  "});",
+                  "const providerByChannel = {};",
+                  "notificationChannels.forEach(function (c) { providerByChannel[c.channel] = c.provider; });",
+                  "pm.test('each channel maps to its local fixture provider', function () {",
+                  "  pm.expect(providerByChannel.EMAIL).to.eql('LOCAL_EMAIL_CAPTURE_FIXTURE');",
+                  "  pm.expect(providerByChannel.SMS).to.eql('LOCAL_SMS_FIXTURE');",
+                  "  pm.expect(providerByChannel.PUSH).to.eql('LOCAL_PUSH_FIXTURE');",
+                  "  pm.expect(providerByChannel.IN_APP).to.eql('IN_APP_FIXTURE');",
+                  "});",
+                  "pm.test('every channel is ACTIVE and ready', function () {",
+                  "  notificationChannels.forEach(function (c) {",
+                  "    pm.expect(c.status).to.eql('ACTIVE');",
+                  "    pm.expect(c.isReady).to.eql(true);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Immutable Operational Policy Snapshot",
+      "description": "Review driver terms, submit that terms id/version, follow its receipt to a confirmed booking, then compare the same booking before and after activation. Compare the immutable raw platform configuration separately. Verify stored operational/pricing JSON with the read-only PostgreSQL checks in the guide.",
+      "item": [
+        {
+          "name": "Accept reservation terms - capture accepted snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/reservation-terms",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "reservation-terms"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicle_id}}\",\n  \"siteId\": \"{{site_id}}\",\n  \"requestedSlotId\": \"{{slot_id}}\",\n  \"start\": \"{{snapshot_start}}\",\n  \"end\": \"{{snapshot_end}}\",\n  \"paymentMethod\": \"PAYOS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "['accepted_terms_id','accepted_terms_version','accepted_platform_revision_id','accepted_platform_version','accepted_values_json','accepted_timezone','accepted_booked_amount','accepted_deposit_amount','accepted_currency','snapshot_request_id','snapshot_reservation_id','snapshot_poll_deadline','snapshot_platform_before','booking_id_before','snapshot_revision_id','snapshot_draft_id'].forEach(function (key) { pm.environment.unset(key); });",
+                  "pm.environment.set('snapshot_idempotency_key', pm.variables.replaceIn('{{$guid}}'));",
+                  "const fixtureVehicleId = pm.environment.get('vehicle_id');",
+                  "const fixtureSiteId = pm.environment.get('site_id');",
+                  "const fixtureSlotId = pm.environment.get('slot_id');",
+                  "if (!fixtureVehicleId || !fixtureSiteId || !fixtureSlotId) {",
+                  "  pm.environment.set('snapshot_fixture_ready', 'false');",
+                  "  pm.environment.set('snapshot_start', '');",
+                  "  pm.environment.set('snapshot_end', '');",
+                  "} else {",
+                  "  pm.environment.set('snapshot_fixture_ready', 'true');",
+                  "  const snapshotStart = new Date(Date.now() + 3600 * 1000);",
+                  "  const snapshotEnd = new Date(Date.now() + 7200 * 1000);",
+                  "  pm.environment.set('snapshot_start', snapshotStart.toISOString());",
+                  "  pm.environment.set('snapshot_end', snapshotEnd.toISOString());",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('snapshot_fixture_ready') !== 'true') {",
+                  "  pm.test.skip('SKIPPED: vehicle_id/site_id/slot_id are not configured, so accepted reservation terms cannot be captured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('terms review succeeds', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});",
+                  "if (pm.response.code !== 200) { return; }",
+                  "const termsBody = pm.response.json();",
+                  "const termsData = termsBody && termsBody.data;",
+                  "pm.test('terms include identifiers, commercial amounts and resolved site policy', function () {",
+                  "  pm.expect(termsData).to.be.an('object');",
+                  "  pm.expect(termsData.termsId).to.be.a('string').and.not.empty;",
+                  "  pm.expect(termsData.termsVersion).to.be.a('string').and.not.empty;",
+                  "  pm.expect(termsData.operationalPolicy.siteRevisionId).to.be.a('string').and.not.empty;",
+                  "  pm.expect(termsData.commercial.depositAmount).to.be.a('number');",
+                  "  pm.expect(termsData.commercial.currency).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (!termsData || !termsData.operationalPolicy) { return; }",
+                  "const acceptedOperationalPolicy = termsData.operationalPolicy;",
+                  "const acceptedCommercialTerms = termsData.commercial;",
+                  "pm.test('accepted operational-policy snapshot is captured from the response', function () {",
+                  "  pm.expect(acceptedOperationalPolicy.platformRevisionId).to.be.a('string');",
+                  "  pm.expect(acceptedOperationalPolicy.values).to.include.keys('PAYMENT_HOLD_DURATION');",
+                  "  pm.expect(acceptedCommercialTerms).to.exist;",
+                  "  pm.expect(acceptedCommercialTerms.bookedAmount).to.be.a('number');",
+                  "});",
+                  "if (acceptedOperationalPolicy.platformRevisionId) {",
+                  "  pm.environment.set('accepted_platform_revision_id', acceptedOperationalPolicy.platformRevisionId);",
+                  "  pm.environment.set('accepted_platform_version', String(acceptedOperationalPolicy.platformVersion));",
+                  "  pm.environment.set('accepted_payment_hold_value', String(acceptedOperationalPolicy.values.PAYMENT_HOLD_DURATION));",
+                  "  pm.environment.set('accepted_values_json', JSON.stringify(acceptedOperationalPolicy.values));",
+                  "  pm.environment.set('accepted_timezone', acceptedOperationalPolicy.cancellationTimezone || '');",
+                  "}",
+                  "if (termsData.termsId) { pm.environment.set('accepted_terms_id', termsData.termsId); }",
+                  "if (termsData.termsVersion) { pm.environment.set('accepted_terms_version', termsData.termsVersion); }",
+                  "if (acceptedCommercialTerms) {",
+                  "  pm.environment.set('accepted_booked_amount', String(acceptedCommercialTerms.bookedAmount));",
+                  "  pm.environment.set('accepted_deposit_amount', String(acceptedCommercialTerms.depositAmount));",
+                  "  pm.environment.set('accepted_currency', acceptedCommercialTerms.currency || '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "SKIPPED when vehicle_id, site_id or slot_id is blank. Captures the accepted operational policy and commercial values from the response."
+        },
+        {
+          "name": "Submit exactly the reviewed terms for admission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{snapshot_idempotency_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/reservation-requests",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "reservation-requests"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": \"{{vehicle_id}}\",\n  \"siteId\": \"{{site_id}}\",\n  \"requestedSlotId\": \"{{slot_id}}\",\n  \"start\": \"{{snapshot_start}}\",\n  \"end\": \"{{snapshot_end}}\",\n  \"termsId\": \"{{accepted_terms_id}}\",\n  \"termsVersion\": \"{{accepted_terms_version}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"paymentMethod\": \"PAYOS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('accepted_terms_id')) {",
+                  "  pm.test.skip('SKIPPED: no terms were captured for this run', function () {});",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('admission accepted for these reviewed terms', function () {",
+                  "  pm.response.to.have.status(202);",
+                  "  const receipt = pm.response.json().data;",
+                  "  pm.expect(receipt.requestId).to.be.a('string').and.not.empty;",
+                  "  pm.environment.set('snapshot_request_id', receipt.requestId);",
+                  "  pm.environment.set('snapshot_poll_deadline', String(Date.now() + 60000));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read admission receipt until this booking is confirmed",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/reservation-requests/{{snapshot_request_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "reservation-requests",
+                "{{snapshot_request_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('snapshot_request_id')) {",
+                  "  pm.test.skip('SKIPPED: no admission receipt from this run', function () {});",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('receipt belongs to the submitted admission', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.requestId).to.eql(pm.environment.get('snapshot_request_id'));",
+                  "});",
+                  "if (pm.response.code !== 200) return;",
+                  "const receipt = pm.response.json().data;",
+                  "if (receipt.state === 'COMPLETED') {",
+                  "  pm.test('completed receipt identifies the linked reservation', function () {",
+                  "    pm.expect(receipt.reservationId).to.be.a('string').and.not.empty;",
+                  "    pm.environment.set('snapshot_reservation_id', receipt.reservationId);",
+                  "  });",
+                  "} else if (!['REJECTED', 'EXPIRED', 'FAILED'].includes(receipt.state) && Date.now() < Number(pm.environment.get('snapshot_poll_deadline'))) {",
+                  "  setTimeout(function () { pm.execution.setNextRequest(pm.info.requestName); }, 1000);",
+                  "} else {",
+                  "  pm.test('the prepared fixture confirms this admission within 60 seconds', function () {",
+                  "    pm.expect(receipt.state, 'receipt state/code: ' + receipt.state + '/' + (receipt.code || '')).to.eql('COMPLETED');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Capture raw historical platform settings before activation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{accepted_platform_revision_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{accepted_platform_revision_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('accepted_platform_revision_id')) {",
+                  "  pm.test.skip('SKIPPED: no reviewed platform revision to capture', function () {});",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function policySettings(row) {",
+                  "  const fields = ['paymentHoldDurationMinutes','minReservationDurationMinutes','maxReservationDurationHours','maxAdvanceBookingDays','interBookingBufferMinutes','reservationProtectionWindowHours','allocationLeadTimeMinutes','facilityFailureRefundLeadMinutes','occupancyValidityTimespanHours','arrivalLateToleranceMinutes','arrivalLateToleranceEnabled','rapidCancellationCount','rapidCancellationWindowMinutes','rapidCancellationRestrictionMinutes','dailyCancellationLimit','cancellationTimezone','overrideBounds'];",
+                  "  const settings = {};",
+                  "  fields.forEach(function (field) {",
+                  "    pm.expect(row).to.have.property(field);",
+                  "    settings[field] = row[field];",
+                  "  });",
+                  "  return settings;",
+                  "}",
+                  "pm.test('platform row matches the revision referenced by these terms', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const row = pm.response.json().data;",
+                  "  pm.expect(row.scope).to.eql('PLATFORM');",
+                  "  pm.expect(row.id).to.eql(pm.environment.get('accepted_platform_revision_id'));",
+                  "  pm.expect(String(row.version)).to.eql(pm.environment.get('accepted_platform_version'));",
+                  "  pm.environment.set('snapshot_platform_before', JSON.stringify(policySettings(row)));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read accepted booking before activation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/me/reservations/{{snapshot_reservation_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "reservations",
+                "{{snapshot_reservation_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('snapshot_reservation_id')) {",
+                  "  pm.test.skip('SKIPPED: no confirmed reservation from the submitted terms', function () {});",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('linked booking is confirmed at its reviewed price', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const booking = pm.response.json().data;",
+                  "  pm.expect(booking.reservationId).to.eql(pm.environment.get('snapshot_reservation_id'));",
+                  "  pm.expect(booking.state).to.eql('CONFIRMED');",
+                  "  pm.expect(String(booking.bookedAmount)).to.eql(pm.environment.get('accepted_booked_amount'));",
+                  "  pm.expect(String(booking.depositAmount)).to.eql(pm.environment.get('accepted_deposit_amount'));",
+                  "  pm.expect(booking.currency).to.eql(pm.environment.get('accepted_currency'));",
+                  "  pm.expect(booking.confirmedAt).to.be.a('string').and.not.empty;",
+                  "  pm.environment.set('booking_id_before', booking.reservationId);",
+                  "  pm.environment.set('snapshot_booking_before', JSON.stringify(booking));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "Only the completed receipt from this terms submission can select this booking."
+        },
+        {
+          "name": "Create replacement platform draft - change payment hold",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": {{snapshot_changed_payment_hold}},\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const currentPlatformHold = pm.environment.get('platform_payment_hold_value');",
+                  "let changedHold = 10;",
+                  "if (currentPlatformHold !== null && currentPlatformHold !== undefined && currentPlatformHold !== '') {",
+                  "  const parsedCurrentHold = parseInt(currentPlatformHold, 10);",
+                  "  if (!isNaN(parsedCurrentHold)) { changedHold = parsedCurrentHold === 10 ? 11 : 10; }",
+                  "}",
+                  "pm.environment.set('snapshot_changed_payment_hold', String(changedHold));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('replacement draft is created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const replacementEnvelope = pm.response.json();",
+                  "  pm.expect(replacementEnvelope.success).to.eql(true);",
+                  "  pm.expect(replacementEnvelope.data.status).to.eql('DRAFT');",
+                  "});",
+                  "const replacementBody = pm.response.json();",
+                  "const replacementData = replacementBody && replacementBody.data;",
+                  "if (replacementData && replacementData.id) {",
+                  "  pm.environment.set('snapshot_draft_id', replacementData.id);",
+                  "}",
+                  "if (replacementData && replacementData.updatedAt) {",
+                  "  pm.environment.set('snapshot_draft_updated_at', replacementData.updatedAt);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Creates an isolated draft whose payment-hold value differs from the accepted platform value."
+        },
+        {
+          "name": "Activate replacement platform revision",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{snapshot_draft_id}}/activate",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{snapshot_draft_id}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('replacement revision activates immediately', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const snapshotActivationEnvelope = pm.response.json();",
+                  "  pm.expect(snapshotActivationEnvelope.success).to.eql(true);",
+                  "  pm.expect(snapshotActivationEnvelope.data.status).to.eql('CURRENT');",
+                  "  pm.expect(snapshotActivationEnvelope.data.isActive).to.eql(true);",
+                  "});",
+                  "const snapshotActivationBody = pm.response.json();",
+                  "const snapshotActivationData = snapshotActivationBody && snapshotActivationBody.data;",
+                  "if (snapshotActivationData && snapshotActivationData.id) {",
+                  "  pm.environment.set('snapshot_revision_id', snapshotActivationData.id);",
+                  "}",
+                  "if (snapshotActivationData && snapshotActivationData.effectiveFrom) {",
+                  "  pm.environment.set('snapshot_effective_from', snapshotActivationData.effectiveFrom);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Effective platform reflects the changed revision",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/effective",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "effective"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and platform scope after activation', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const snapshotEffectiveEnvelope = pm.response.json();",
+                  "  pm.expect(snapshotEffectiveEnvelope.data.scope).to.eql('PLATFORM');",
+                  "});",
+                  "const snapshotEffectiveBody = pm.response.json();",
+                  "const snapshotEffectiveData = snapshotEffectiveBody.data;",
+                  "const replacementRevisionId = pm.environment.get('snapshot_revision_id');",
+                  "const acceptedRevisionId = pm.environment.get('accepted_platform_revision_id');",
+                  "pm.test('platform effective policy moved to the replacement revision', function () {",
+                  "  pm.expect(snapshotEffectiveData.platformRevision.id).to.eql(replacementRevisionId);",
+                  "  if (acceptedRevisionId) {",
+                  "    pm.expect(snapshotEffectiveData.platformRevision.id).to.not.eql(acceptedRevisionId);",
+                  "  }",
+                  "});",
+                  "pm.test('platform effective value reflects the changed payment hold', function () {",
+                  "  const changedHold = Number(pm.environment.get('snapshot_changed_payment_hold'));",
+                  "  const previousPlatformHold = pm.environment.get('platform_payment_hold_value');",
+                  "  pm.expect(snapshotEffectiveData.values.PAYMENT_HOLD_DURATION.value).to.eql(changedHold);",
+                  "  if (previousPlatformHold !== null && previousPlatformHold !== undefined && previousPlatformHold !== '') {",
+                  "    pm.expect(changedHold).to.not.eql(Number(previousPlatformHold));",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read accepted booking after activation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/me/reservations/{{snapshot_reservation_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "reservations",
+                "{{snapshot_reservation_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('booking_id_before')) {",
+                  "  pm.test.skip('SKIPPED: no linked confirmed booking baseline', function () {});",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('linked confirmed booking retains the same accepted financial and booking fields', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const booking = pm.response.json().data;",
+                  "  const before = JSON.parse(pm.environment.get('snapshot_booking_before'));",
+                  "  ['reservationId','state','siteId','requestedSlotId','start','end','orderId','bookedAmount','depositAmount','currency','confirmedAt','createdAt'].forEach(function (key) {",
+                  "    pm.expect(booking).to.have.property(key);",
+                  "    pm.expect(booking[key], key).to.eql(before[key]);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "Observable booking fields are compared here. Read the same linked row before and after in PostgreSQL to verify the persisted snapshot JSON."
+        },
+        {
+          "name": "Compare historical raw platform settings after activation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{accepted_platform_revision_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{accepted_platform_revision_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('snapshot_platform_before')) {",
+                  "  pm.test.skip('SKIPPED: no raw platform baseline from these terms', function () {});",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function policySettings(row) {",
+                  "  const fields = ['paymentHoldDurationMinutes','minReservationDurationMinutes','maxReservationDurationHours','maxAdvanceBookingDays','interBookingBufferMinutes','reservationProtectionWindowHours','allocationLeadTimeMinutes','facilityFailureRefundLeadMinutes','occupancyValidityTimespanHours','arrivalLateToleranceMinutes','arrivalLateToleranceEnabled','rapidCancellationCount','rapidCancellationWindowMinutes','rapidCancellationRestrictionMinutes','dailyCancellationLimit','cancellationTimezone','overrideBounds'];",
+                  "  const settings = {};",
+                  "  fields.forEach(function (field) {",
+                  "    pm.expect(row).to.have.property(field);",
+                  "    settings[field] = row[field];",
+                  "  });",
+                  "  return settings;",
+                  "}",
+                  "pm.test('same historical platform revision retains its original policy settings', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const row = pm.response.json().data;",
+                  "  pm.expect(row.id).to.eql(pm.environment.get('accepted_platform_revision_id'));",
+                  "  pm.expect(String(row.version)).to.eql(pm.environment.get('accepted_platform_version'));",
+                  "  pm.expect(policySettings(row)).to.deep.eql(JSON.parse(pm.environment.get('snapshot_platform_before')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "The old platform interval can close. Compare its policy settings against the same raw row captured before activation. Site-effective terms can contain authorized overrides."
+        }
+      ]
+    },
+    {
+      "name": "05 - Scheduling & Write RBAC",
+      "description": "Creates a future scheduled activation, proves the SCHEDULED listing contains it, proves an overlapping activation is rejected with 409 OVERLAPPING_POLICY_INTERVAL, and proves Owner/Driver cannot create, update, or activate platform revisions (403).",
+      "item": [
+        {
+          "name": "Create scheduled draft - future effectiveFrom fixture",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 7,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const scheduledEffectiveFrom = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();",
+                  "pm.environment.set('scheduled_effective_from', scheduledEffectiveFrom);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('scheduled draft is created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const scheduledDraftEnvelope = pm.response.json();",
+                  "  pm.expect(scheduledDraftEnvelope.success).to.eql(true);",
+                  "  pm.expect(scheduledDraftEnvelope.data.status).to.eql('DRAFT');",
+                  "});",
+                  "const scheduledDraftBody = pm.response.json();",
+                  "if (scheduledDraftBody.data && scheduledDraftBody.data.id) {",
+                  "  pm.environment.set('scheduled_draft_id', scheduledDraftBody.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Creates an isolated draft for the scheduled-activation case."
+        },
+        {
+          "name": "Activate scheduled revision - future effectiveFrom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{scheduled_draft_id}}/activate",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{scheduled_draft_id}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"effectiveFrom\": \"{{scheduled_effective_from}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('future activation returns SCHEDULED', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const scheduledActivationEnvelope = pm.response.json();",
+                  "  pm.expect(scheduledActivationEnvelope.success).to.eql(true);",
+                  "  pm.expect(scheduledActivationEnvelope.data.status).to.eql('SCHEDULED');",
+                  "  pm.expect(scheduledActivationEnvelope.data.isActive).to.eql(true);",
+                  "  const requested = pm.environment.get('scheduled_effective_from');",
+                  "  pm.expect(new Date(scheduledActivationEnvelope.data.effectiveFrom).getTime()).to.eql(new Date(requested).getTime());",
+                  "});",
+                  "const scheduledActivationBody = pm.response.json();",
+                  "if (scheduledActivationBody.data && scheduledActivationBody.data.id) {",
+                  "  pm.environment.set('scheduled_revision_id', scheduledActivationBody.data.id);",
+                  "  pm.environment.set('scheduled_revision_version', String(scheduledActivationBody.data.version));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List revisions - SCHEDULED contains scheduled revision",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions?status=SCHEDULED&scope=PLATFORM",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "SCHEDULED"
+                },
+                {
+                  "key": "scope",
+                  "value": "PLATFORM"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200 and SCHEDULED items are non-empty', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const scheduledListEnvelope = pm.response.json();",
+                  "  pm.expect(scheduledListEnvelope.data.items).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "const scheduledListBody = pm.response.json();",
+                  "const scheduledRevisionId = pm.environment.get('scheduled_revision_id');",
+                  "pm.test('SCHEDULED filter contains the revision scheduled by this run', function () {",
+                  "  const scheduledIds = scheduledListBody.data.items.map(function (i) { return i.id; });",
+                  "  pm.expect(scheduledIds).to.include(scheduledRevisionId);",
+                  "});",
+                  "pm.test('every returned item is SCHEDULED', function () {",
+                  "  scheduledListBody.data.items.forEach(function (i) { pm.expect(i.status).to.eql('SCHEDULED'); });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create overlapping draft - same future effectiveFrom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 8,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('overlapping draft is created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const overlapDraftEnvelope = pm.response.json();",
+                  "  pm.expect(overlapDraftEnvelope.success).to.eql(true);",
+                  "  pm.expect(overlapDraftEnvelope.data.status).to.eql('DRAFT');",
+                  "});",
+                  "const overlapDraftBody = pm.response.json();",
+                  "if (overlapDraftBody.data && overlapDraftBody.data.id) {",
+                  "  pm.environment.set('overlap_draft_id', overlapDraftBody.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "description": "Creates a second isolated draft whose activation will collide with the scheduled timestamp."
+        },
+        {
+          "name": "Activate overlapping revision - 409 OVERLAPPING_POLICY_INTERVAL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{overlap_draft_id}}/activate",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{overlap_draft_id}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"effectiveFrom\": \"{{scheduled_effective_from}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('overlapping activation is rejected with 409 OVERLAPPING_POLICY_INTERVAL', function () {",
+                  "  pm.response.to.have.status(409);",
+                  "  const overlapBody = pm.response.json();",
+                  "  pm.expect(overlapBody.success).to.eql(false);",
+                  "  pm.expect(overlapBody.code).to.eql('OVERLAPPING_POLICY_INTERVAL');",
+                  "  pm.expect(overlapBody.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner cannot create platform draft - 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownerToken = pm.environment.get('owner_token');",
+                  "if (!ownerToken) {",
+                  "  pm.test.skip('SKIPPED: owner_token is not configured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('owner write is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Driver cannot create platform draft - 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const driverToken = pm.environment.get('driver_token');",
+                  "if (!driverToken) {",
+                  "  pm.test.skip('SKIPPED: driver_token is not configured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('driver write is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner cannot update platform draft - 403",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{expected_updated_at}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft/{{rbac_write_target_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft",
+                "{{rbac_write_target_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 20,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  },\n  \"expectedUpdatedAt\": \"{{expected_updated_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownerToken = pm.environment.get('owner_token');",
+                  "if (!ownerToken) {",
+                  "  pm.test.skip('SKIPPED: owner_token is not configured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('owner write is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Driver cannot update platform draft - 403",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{expected_updated_at}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft/{{rbac_write_target_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft",
+                "{{rbac_write_target_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 20,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": null,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  },\n  \"expectedUpdatedAt\": \"{{expected_updated_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const driverToken = pm.environment.get('driver_token');",
+                  "if (!driverToken) {",
+                  "  pm.test.skip('SKIPPED: driver_token is not configured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('driver write is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner cannot activate platform revision - 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{rbac_write_target_id}}/activate",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{rbac_write_target_id}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ownerToken = pm.environment.get('owner_token');",
+                  "if (!ownerToken) {",
+                  "  pm.test.skip('SKIPPED: owner_token is not configured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('owner write is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Driver cannot activate platform revision - 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{driver_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/revisions/{{rbac_write_target_id}}/activate",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "revisions",
+                "{{rbac_write_target_id}}",
+                "activate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const driverToken = pm.environment.get('driver_token');",
+                  "if (!driverToken) {",
+                  "  pm.test.skip('SKIPPED: driver_token is not configured', function () {});",
+                  "  return;",
+                  "}",
+                  "pm.test('driver write is forbidden with 403', function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "snapshot_start",
+      "value": ""
+    },
+    {
+      "key": "snapshot_end",
+      "value": ""
+    },
+    {
+      "key": "snapshot_fixture_ready",
+      "value": "false"
+    },
+    {
+      "key": "scheduled_effective_from",
+      "value": ""
+    },
+    {
+      "key": "rbac_write_target_id",
+      "value": "00000000-0000-4000-8000-0000000000ff"
+    }
+  ]
+}

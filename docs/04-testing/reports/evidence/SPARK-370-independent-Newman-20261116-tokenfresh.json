@@ -1,0 +1,620 @@
+{
+    "artifact":  "SPARK-370 independent Newman verification (sanitized)",
+    "generatedAtUtc":  "2026-11-16T13:49:19Z",
+    "repoContext":  {
+                        "branch":  "feat/SPARK-340-admin-platform-policies",
+                        "head":  "055da4591ee9a1822eb9870dc261c9685ca3258b",
+                        "workingTreePorcelainEntries":  100
+                    },
+    "collection":  "docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json",
+    "collectionDefinedRequests":  54,
+    "run":  {
+                "requestsExecuted":  48,
+                "requestsSkipRequested":  6,
+                "assertionsPassed":  75,
+                "assertionsFailed":  0,
+                "assertionsSkipped":  3,
+                "testScripts":  {
+                                    "total":  48,
+                                    "pending":  0,
+                                    "failed":  0
+                                },
+                "preRequestScripts":  {
+                                          "total":  9,
+                                          "pending":  0,
+                                          "failed":  0
+                                      }
+            },
+    "requests":  [
+                     {
+                         "name":  "Operations policies - Anonymous -\u003e 401",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/catalogue",
+                         "code":  401,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Operations policies - Driver -\u003e 403",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/catalogue",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Operations policies - Owner -\u003e 403",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/catalogue",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Operations policies - Admin -\u003e 200",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/catalogue",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Payment integration - Anonymous -\u003e 401",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  401,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Payment integration - Driver -\u003e 403",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Payment integration - Owner -\u003e 403",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Payment integration - Admin -\u003e 200",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Notification integration - Anonymous -\u003e 401",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/notifications",
+                         "code":  401,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Notification integration - Driver -\u003e 403",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/notifications",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Notification integration - Owner -\u003e 403",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/notifications",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Notification integration - Admin -\u003e 200",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/notifications",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Catalogue - 14 canonical keys with null vs configured bounds",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/catalogue",
+                         "code":  200,
+                         "assertionsPassed":  6,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Create platform draft",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/draft",
+                         "code":  201,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "List revisions - DRAFT contains created draft",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions",
+                         "code":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "List revisions - SQL pagination",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Read revision by id - 200",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions/897cf634-e6f0-4a3d-b9de-e0360c3784ec",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Read revision by id - 404",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions/11111111-1111-1111-1111-111111111111",
+                         "code":  404,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Update draft with If-Match - success",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/policies/operations/draft/897cf634-e6f0-4a3d-b9de-e0360c3784ec",
+                         "code":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Update draft with stale If-Match - 409",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/policies/operations/draft/897cf634-e6f0-4a3d-b9de-e0360c3784ec",
+                         "code":  409,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Activate revision - immediate",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/revisions/897cf634-e6f0-4a3d-b9de-e0360c3784ec/activate",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "List revisions - status CURRENT",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions",
+                         "code":  200,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "List revisions - status SCHEDULED",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions",
+                         "code":  200,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "List revisions - status SUPERSEDED",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions",
+                         "code":  200,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Effective policies - PLATFORM provenance",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/effective",
+                         "code":  200,
+                         "assertionsPassed":  4,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Effective policies - SITE provenance",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/effective",
+                         "code":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  1,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Get payment integration - secrets masked",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  200,
+                         "assertionsPassed":  5,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Switch to FIXTURE mode - success",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Disallowed BaseUrl - 400 INVALID_PAYMENT_BASE_URL",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  400,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Invalid mode - 400 VALIDATION_FAILED",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  400,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Blank credential - 400 VALIDATION_FAILED",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  400,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Configure SANDBOX credentials - masked (optional)",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/integrations/payment",
+                         "code":  400,
+                         "assertionsPassed":  0,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  1,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Get notification integrations - 4 fixed channels ACTIVE",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/integrations/notifications",
+                         "code":  200,
+                         "assertionsPassed":  4,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Accept reservation terms - capture accepted snapshot",
+                         "method":  "POST",
+                         "path":  "api/reservation-terms",
+                         "code":  400,
+                         "assertionsPassed":  0,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  1,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Create replacement platform draft - change payment hold",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/draft",
+                         "code":  201,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Activate replacement platform revision",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/revisions/1ba10f1e-82fa-47a0-83e4-06d5e598df1c/activate",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Effective platform reflects the changed revision",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/effective",
+                         "code":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Create scheduled draft - future effectiveFrom fixture",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/draft",
+                         "code":  201,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Activate scheduled revision - future effectiveFrom",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/revisions/032eead8-6e6d-4d4f-87ab-47f3159787b2/activate",
+                         "code":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "List revisions - SCHEDULED contains scheduled revision",
+                         "method":  "GET",
+                         "path":  "api/v1/admin/policies/operations/revisions",
+                         "code":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Create overlapping draft - same future effectiveFrom",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/draft",
+                         "code":  201,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Activate overlapping revision - 409 OVERLAPPING_POLICY_INTERVAL",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/revisions/2c65d68d-c7f2-4293-beb1-1d12a658067f/activate",
+                         "code":  409,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Owner cannot create platform draft - 403",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/draft",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Driver cannot create platform draft - 403",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/draft",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Owner cannot update platform draft - 403",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/policies/operations/draft/897cf634-e6f0-4a3d-b9de-e0360c3784ec",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Driver cannot update platform draft - 403",
+                         "method":  "PUT",
+                         "path":  "api/v1/admin/policies/operations/draft/897cf634-e6f0-4a3d-b9de-e0360c3784ec",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Owner cannot activate platform revision - 403",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/revisions/897cf634-e6f0-4a3d-b9de-e0360c3784ec/activate",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     },
+                     {
+                         "name":  "Driver cannot activate platform revision - 403",
+                         "method":  "POST",
+                         "path":  "api/v1/admin/policies/operations/revisions/897cf634-e6f0-4a3d-b9de-e0360c3784ec/activate",
+                         "code":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ]
+                     }
+                 ],
+    "notRunRequests":  [
+                           "Submit exactly the reviewed terms for admission",
+                           "Read admission receipt until this booking is confirmed",
+                           "Capture raw historical platform settings before activation",
+                           "Read accepted booking before activation",
+                           "Read accepted booking after activation",
+                           "Compare historical raw platform settings after activation"
+                       ],
+    "skippedAssertions":  [
+                              "Effective SITE provenance (SITE_OVERRIDE key absent -\u003e PLATFORM_DEFAULT, SITE_OVERRIDE unobservable)",
+                              "Configure SANDBOX credentials (payment_test_* blank, no creds supplied)",
+                              "Accept reservation terms (vehicle/site/slot fixture not configured)"
+                          ],
+    "redaction":  "No tokens, Authorization headers, request/response bodies, query values, or credentials are included. URLs reduced to path only."
+}

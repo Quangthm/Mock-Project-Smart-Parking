@@ -1,0 +1,817 @@
+﻿{
+    "ticket":  "SPARK-340 / SPARK-370",
+    "title":  "Independent re-verification after 16/11/2026 environment repair",
+    "executedAtUtc":  "2026-11-17T01:37:51.6117226Z",
+    "executedAtLocal":  "2026-11-17T08:37:51.6195847+07:00",
+    "commit":  "055da4591ee9a1822eb9870dc261c9685ca3258b",
+    "branch":  "feat/SPARK-340-admin-platform-policies",
+    "workingTreePorcelainEntries":  108,
+    "sourceUnderTest":  "uncommitted working tree (no commits on feature branch)",
+    "collection":  "docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json",
+    "requestsDefined":  54,
+    "requestsExecuted":  48,
+    "requestsNotRun":  [
+                           "Submit exactly the reviewed terms for admission",
+                           "Read admission receipt until this booking is confirmed",
+                           "Capture raw historical platform settings before activation",
+                           "Read accepted booking before activation",
+                           "Read accepted booking after activation",
+                           "Compare historical raw platform settings after activation"
+                       ],
+    "stats":  {
+                  "assertionPassed":  76,
+                  "assertionFailed":  2,
+                  "assertionSkipped":  1,
+                  "requestFailures":  0,
+                  "testScriptFailures":  0,
+                  "prerequestScriptFailures":  0
+              },
+    "tokensRedacted":  true,
+    "authorizationHeadersRemoved":  true,
+    "requestBodiesRemoved":  true,
+    "requests":  [
+                     {
+                         "name":  "Operations policies - Anonymous -\u003e 401",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  401,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Operations policies - Driver -\u003e 403",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Operations policies - Owner -\u003e 403",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Operations policies - Admin -\u003e 200",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Payment integration - Anonymous -\u003e 401",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  401,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Payment integration - Driver -\u003e 403",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Payment integration - Owner -\u003e 403",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Payment integration - Admin -\u003e 200",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Notification integration - Anonymous -\u003e 401",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  401,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Notification integration - Driver -\u003e 403",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Notification integration - Owner -\u003e 403",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Notification integration - Admin -\u003e 200",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Catalogue - 14 canonical keys with null vs configured bounds",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  6,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Create platform draft",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  201,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "List revisions - DRAFT contains created draft",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "List revisions - SQL pagination",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Read revision by id - 200",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Read revision by id - 404",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  404,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Update draft with If-Match - success",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Update draft with stale If-Match - 409",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  409,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Activate revision - immediate",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "List revisions - status CURRENT",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "List revisions - status SCHEDULED",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "List revisions - status SUPERSEDED",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  2,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Effective policies - PLATFORM provenance",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  4,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Effective policies - SITE provenance",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  4,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Get payment integration - secrets masked",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  5,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Switch to FIXTURE mode - success",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Disallowed BaseUrl - 400 INVALID_PAYMENT_BASE_URL",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  400,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Invalid mode - 400 VALIDATION_FAILED",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  400,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Blank credential - 400 VALIDATION_FAILED",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  400,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Configure SANDBOX credentials - masked (optional)",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  400,
+                         "assertionsPassed":  0,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  1,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+                                                   "SKIPPED: payment_test_client_id/payment_test_api_key/payment_test_checksum_key are blank; no SANDBOX credentials supplied"
+                                               ]
+                     },
+                     {
+                         "name":  "Get notification integrations - 4 fixed channels ACTIVE",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  4,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Accept reservation terms - capture accepted snapshot",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  503,
+                         "assertionsPassed":  0,
+                         "assertionsFailed":  2,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+                                                  "terms review succeeds",
+                                                  "terms include identifiers, commercial amounts and resolved site policy"
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Create replacement platform draft - change payment hold",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  201,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Activate replacement platform revision",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Effective platform reflects the changed revision",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Create scheduled draft - future effectiveFrom fixture",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  201,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Activate scheduled revision - future effectiveFrom",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "List revisions - SCHEDULED contains scheduled revision",
+                         "method":  "GET",
+                         "path":  "",
+                         "httpStatus":  200,
+                         "assertionsPassed":  3,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Create overlapping draft - same future effectiveFrom",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  201,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Activate overlapping revision - 409 OVERLAPPING_POLICY_INTERVAL",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  409,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Owner cannot create platform draft - 403",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Driver cannot create platform draft - 403",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Owner cannot update platform draft - 403",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Driver cannot update platform draft - 403",
+                         "method":  "PUT",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Owner cannot activate platform revision - 403",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     },
+                     {
+                         "name":  "Driver cannot activate platform revision - 403",
+                         "method":  "POST",
+                         "path":  "",
+                         "httpStatus":  403,
+                         "assertionsPassed":  1,
+                         "assertionsFailed":  0,
+                         "assertionsSkipped":  0,
+                         "failedAssertions":  [
+
+                                              ],
+                         "skippedAssertions":  [
+
+                                               ]
+                     }
+                 ],
+    "siteOverrideProof":  {
+                              "endpoint":  "GET /api/v1/admin/policies/operations/effective?tenantId=a0000000-0000-4000-8000-000000000001\u0026siteId=b0000000-0000-4000-8000-000000000001",
+                              "scope":  "SITE",
+                              "arrivalLateTolerance":  {
+                                                           "value":  20,
+                                                           "source":  "SITE_OVERRIDE",
+                                                           "inherited":  false
+                                                       },
+                              "reservationMinDuration":  {
+                                                             "value":  15,
+                                                             "source":  "PLATFORM_DEFAULT",
+                                                             "inherited":  true
+                                                         },
+                              "paymentHoldDuration":  {
+                                                          "value":  7,
+                                                          "source":  "PLATFORM_DEFAULT",
+                                                          "inherited":  true
+                                                      },
+                              "collectionAssertions":  [
+                                                           "status 200 for site-scoped evaluation",
+                                                           "inherited site values report source=PLATFORM_DEFAULT",
+                                                           "overridden site values report source=SITE_OVERRIDE",
+                                                           "every site value has a consistent provenance shape"
+                                                       ]
+                          },
+    "bookingSnapshotBlocker":  {
+                                   "request":  "POST /api/reservation-terms",
+                                   "httpStatus":  503,
+                                   "code":  "OWNER_UNAVAILABLE",
+                                   "message":  "Reservation commercial producer is not integrated.",
+                                   "rootCause":  "OperationService registers UnavailableReservationCommercialOwner as the only IReservationCommercialOwner implementation",
+                                   "evidence":  [
+                                                    "src/Services/OperationService/SmartParking.OperationService.Infrastructure/InfrastructureDependencyInjection.cs:49",
+                                                    "src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationOwners.cs:38",
+                                                    "src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs:44",
+                                                    "src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingReviewHandlers.cs:40,53",
+                                                    "src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingProgressHandler.cs:12"
+                                                ],
+                                   "verdict":  "Booking snapshot immutability NOT PROVEN - chain blocked before terms can be issued"
+                               },
+    "paymentDurabilityProof":  {
+                                   "markerMode":  "SANDBOX (values stored encrypted, no outbound call made)",
+                                   "putStatus":  200,
+                                   "clientIdMasked":  "****7f3a",
+                                   "apiKeyConfigured":  true,
+                                   "checksumKeyConfigured":  true,
+                                   "afterRestart":  "unchanged masked values, decrypted successfully",
+                                   "afterForceRecreate":  "unchanged masked values, decrypted successfully",
+                                   "volume":  "smartpark-app_payment-data-protection-keys -\u003e /app/.keys/payment",
+                                   "keyFiles":  1,
+                                   "keyXmlPrinted":  false,
+                                   "rawMarkerInResponses":  "NONE",
+                                   "rawMarkerInLogs":  "NONE",
+                                   "restoredMode":  "FIXTURE"
+                               },
+    "fixture":  {
+                    "tenantId":  "a0000000-0000-4000-8000-000000000001",
+                    "siteId":  "b0000000-0000-4000-8000-000000000001",
+                    "slotId":  "b12892d2-2118-7542-3eb8-ebf992e6cb46",
+                    "vehicleId":  "19b6220a-7d42-448b-ab9b-b302534dd6bd",
+                    "ownerPublish":  "revision 3 ACTIVE, publishNote \"SPARK-340 local UAT environment verification\""
+                }
+}

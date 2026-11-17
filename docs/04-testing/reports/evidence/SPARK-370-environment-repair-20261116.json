@@ -1,0 +1,40 @@
+{
+  "executedAt": "2026-11-16T15:41:48.552Z",
+  "schema": "Approved additive DDL applied; policy rows preserved: 36 before and after",
+  "owner": {
+    "invalidDraftStatus": 400,
+    "validDraftStatus": 200,
+    "publishStatus": 200
+  },
+  "effective": {
+    "status": 200,
+    "arrival": {
+      "value": 20,
+      "unit": "minutes",
+      "inherited": false,
+      "source": "SITE_OVERRIDE",
+      "isZeroNotDisabled": false
+    }
+  },
+  "terms": [
+    {
+      "status": 503,
+      "code": "OWNER_UNAVAILABLE",
+      "message": "Reservation commercial producer is not integrated."
+    },
+    {
+      "status": 503,
+      "code": "OWNER_UNAVAILABLE",
+      "message": "Reservation commercial producer is not integrated."
+    }
+  ],
+  "siteId": "b0000000-0000-4000-8000-000000000001",
+  "slotId": "b12892d2-2118-7542-3eb8-ebf992e6cb46",
+  "vehicleId": "19b6220a-7d42-448b-ab9b-b302534dd6bd",
+  "facility": {
+    "signedInternalGet": 200,
+    "keyPairMatches": true,
+    "repeatedSigningRegression": "PASS"
+  },
+  "remainingBlocker": "Operation registers UnavailableReservationCommercialOwner; real quote/accept producer adapter is missing"
+}

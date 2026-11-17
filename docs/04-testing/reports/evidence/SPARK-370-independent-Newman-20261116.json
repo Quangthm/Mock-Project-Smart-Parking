@@ -1,0 +1,775 @@
+{
+  "executedAt": "2026-11-16T02:29:02.435Z",
+  "status": "PASS_WITH_SKIPS",
+  "stats": {
+    "iterations": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "items": {
+      "total": 51,
+      "pending": 0,
+      "failed": 0
+    },
+    "scripts": {
+      "total": 55,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequests": {
+      "total": 51,
+      "pending": 0,
+      "failed": 0
+    },
+    "requests": {
+      "total": 51,
+      "pending": 0,
+      "failed": 0
+    },
+    "tests": {
+      "total": 51,
+      "pending": 0,
+      "failed": 0
+    },
+    "assertions": {
+      "total": 81,
+      "pending": 0,
+      "failed": 0
+    },
+    "testScripts": {
+      "total": 51,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequestScripts": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    }
+  },
+  "assertionCounts": {
+    "passed": 75,
+    "skipped": 6,
+    "failed": 0
+  },
+  "outcomes": [
+    {
+      "name": "Operations policies - Anonymous -> 401",
+      "status": 401,
+      "assertions": [
+        {
+          "name": "anonymous is rejected with 401",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Operations policies - Driver -> 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "driver is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Operations policies - Owner -> 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "owner is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Operations policies - Admin -> 200",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "admin is authorized with 200",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Payment integration - Anonymous -> 401",
+      "status": 401,
+      "assertions": [
+        {
+          "name": "anonymous is rejected with 401",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Payment integration - Driver -> 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "driver is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Payment integration - Owner -> 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "owner is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Payment integration - Admin -> 200",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "admin is authorized with 200",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Notification integration - Anonymous -> 401",
+      "status": 401,
+      "assertions": [
+        {
+          "name": "anonymous is rejected with 401",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Notification integration - Driver -> 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "driver is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Notification integration - Owner -> 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "owner is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Notification integration - Admin -> 200",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "admin is authorized with 200",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Catalogue - 14 canonical keys with null vs configured bounds",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and success envelope",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "catalogue exposes exactly the 14 canonical policy keys",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "ARRIVAL_LATE_TOLERANCE carries the configured 15..30 bound",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "all other keys have a null bound in the maintained platform catalogue",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "anti-abuse keys are not owner-overridable",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "the ten time and count keys are owner-overridable",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Create platform draft",
+      "status": 201,
+      "assertions": [
+        {
+          "name": "status 201 and success envelope",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "draft response exposes id, version, DRAFT status and updatedAt",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "List revisions - DRAFT contains created draft",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "DRAFT filter contains the draft created by this run",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "every returned item is DRAFT",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "List revisions - SQL pagination",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and pagination echoes request",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Read revision by id - 200",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and id matches the created draft",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Read revision by id - 404",
+      "status": 404,
+      "assertions": [
+        {
+          "name": "unknown revision returns 404",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Update draft with If-Match - success",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 with update message",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "update returns the same draft id and DRAFT status",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "concurrency token advanced after the successful save",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Update draft with stale If-Match - 409",
+      "status": 409,
+      "assertions": [
+        {
+          "name": "stale concurrency token is rejected with 409 RESOURCE_VERSION_CONFLICT",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Activate revision - immediate",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "activation succeeds",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "List revisions - status CURRENT",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and CURRENT items are non-empty",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "CURRENT filter contains the revision activated by this run",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "List revisions - status SCHEDULED",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and items array",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "SCHEDULED filter returns only scheduled revisions",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "List revisions - status SUPERSEDED",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and SUPERSEDED items are non-empty",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "SUPERSEDED filter contains the predecessor closed by activation",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Effective policies - PLATFORM provenance",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and platform scope",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "platform self-resolution reports inherited=false and source=PLATFORM_DEFAULT",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "platform does not decide arrival-late enablement",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "platform effective revision matches the revision activated by this run",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Effective policies - SITE provenance",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 for site-scoped evaluation",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "inherited site values report source=PLATFORM_DEFAULT",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "SKIPPED: the site policy does not override any key, so SITE_OVERRIDE provenance cannot be observed",
+          "skipped": true,
+          "passed": false
+        },
+        {
+          "name": "every site value has a consistent provenance shape",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Get payment integration - secrets masked",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and provider is PAYOS",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "credentials are reported as booleans, never raw values",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "client id is masked",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "capabilities are declared",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "response text carries no raw apiKey or checksumKey property",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Switch to FIXTURE mode - success",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "fixture mode is accepted",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Disallowed BaseUrl - 400 INVALID_PAYMENT_BASE_URL",
+      "status": 400,
+      "assertions": [
+        {
+          "name": "off-allowlist base url is rejected",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Invalid mode - 400 VALIDATION_FAILED",
+      "status": 400,
+      "assertions": [
+        {
+          "name": "unknown mode is rejected",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Blank credential - 400 VALIDATION_FAILED",
+      "status": 400,
+      "assertions": [
+        {
+          "name": "blank credential is rejected",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Configure SANDBOX credentials - masked (optional)",
+      "status": 400,
+      "assertions": [
+        {
+          "name": "SKIPPED: payment_test_client_id/payment_test_api_key/payment_test_checksum_key are blank; no SANDBOX credentials supplied",
+          "skipped": true,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "name": "Get notification integrations - 4 fixed channels ACTIVE",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 with success envelope",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "four fixed channel enums are returned",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "each channel maps to its local fixture provider",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "every channel is ACTIVE and ready",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Accept reservation terms - capture accepted snapshot",
+      "status": 400,
+      "assertions": [
+        {
+          "name": "SKIPPED: vehicle_id/site_id/slot_id are not configured, so accepted reservation terms cannot be captured",
+          "skipped": true,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "name": "Read accepted booking before activation",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "SKIPPED: reservation_id is not configured; provide an existing driver booking to observe persisted booking fields",
+          "skipped": true,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "name": "Create replacement platform draft - change payment hold",
+      "status": 201,
+      "assertions": [
+        {
+          "name": "replacement draft is created",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Activate replacement platform revision",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "replacement revision activates immediately",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Effective platform reflects the changed revision",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and platform scope after activation",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "platform effective policy moved to the replacement revision",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "platform effective value reflects the changed payment hold",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Read accepted booking after activation",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "SKIPPED: reservation_id is not configured; persisted booking fields cannot be re-read",
+          "skipped": true,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "name": "Accepted platform revision still readable and values unchanged",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "SKIPPED: no accepted platform revision was captured from reservation terms",
+          "skipped": true,
+          "passed": false
+        }
+      ]
+    },
+    {
+      "name": "Create scheduled draft - future effectiveFrom fixture",
+      "status": 201,
+      "assertions": [
+        {
+          "name": "scheduled draft is created",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Activate scheduled revision - future effectiveFrom",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "future activation returns SCHEDULED",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "List revisions - SCHEDULED contains scheduled revision",
+      "status": 200,
+      "assertions": [
+        {
+          "name": "status 200 and SCHEDULED items are non-empty",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "SCHEDULED filter contains the revision scheduled by this run",
+          "skipped": false,
+          "passed": true
+        },
+        {
+          "name": "every returned item is SCHEDULED",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Create overlapping draft - same future effectiveFrom",
+      "status": 201,
+      "assertions": [
+        {
+          "name": "overlapping draft is created",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Activate overlapping revision - 409 OVERLAPPING_POLICY_INTERVAL",
+      "status": 409,
+      "assertions": [
+        {
+          "name": "overlapping activation is rejected with 409 OVERLAPPING_POLICY_INTERVAL",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Owner cannot create platform draft - 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "owner write is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Driver cannot create platform draft - 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "driver write is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Owner cannot update platform draft - 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "owner write is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Driver cannot update platform draft - 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "driver write is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Owner cannot activate platform revision - 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "owner write is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "Driver cannot activate platform revision - 403",
+      "status": 403,
+      "assertions": [
+        {
+          "name": "driver write is forbidden with 403",
+          "skipped": false,
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "failures": [],
+  "limitations": [
+    "6 skipped assertions are excluded from passed count",
+    "Operation, Payment and Notification images rebuilt from current working tree before this run",
+    "Confirmed booking snapshot and SITE_OVERRIDE cases were skipped for missing fixtures"
+  ]
+}
