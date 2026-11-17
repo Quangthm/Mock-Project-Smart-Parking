@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 5.1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fixture = Join-Path $root ('.cache/publication-test-' + [guid]::NewGuid().ToString('N'))
@@ -36,16 +36,33 @@ function Reject([scriptblock]$action, [string]$message) {
 $bytes = [IO.File]::ReadAllBytes((Join-Path $output 'smartpark-knowledge.md'))
 $manifestText = [IO.File]::ReadAllText((Join-Path $output 'publication.json'))
 $manifest = $manifestText | ConvertFrom-Json
-$publishedAt = [Text.Json.JsonDocument]::Parse($manifestText).RootElement.GetProperty('publishedAt').GetString()
+# Read the JSON string without PowerShell 7.5 automatic date conversion or System.Text.Json.
+$publishedAt = ([regex]::Match($manifestText, '"publishedAt"\s*:\s*("[^"\\]*")').Groups[1].Value.Trim('"'))
 $text = $utf8.GetString($bytes)
-Assert ($manifest.sha256 -ceq [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))) 'SHA does not match exact deployed bytes.'
+$sha256 = [Security.Cryptography.SHA256]::Create()
+try { $digest = [BitConverter]::ToString($sha256.ComputeHash($bytes)).Replace('-', '') } finally { $sha256.Dispose() }
+Assert ($manifest.sha256 -ceq $digest) 'SHA does not match exact deployed bytes.'
 Assert ($bytes[0] -eq 45) 'Published Markdown must not have a UTF-8 BOM.'
 Assert ($manifest.version -ceq 'fixture-1' -and $manifest.role -ceq 'admin' -and $manifest.approvalReference -ceq $params.ApprovalReference) 'Manifest metadata mismatch.'
 Assert ($text.Contains('publication_state: published') -and $text.Contains('review_status: approved') -and $text.Contains('published_at: ' + $publishedAt)) 'Published frontmatter mismatch.'
 Assert ([DateTimeOffset]::Parse($publishedAt) -le [DateTimeOffset]::UtcNow) 'Publication timestamp is future.'
 Assert ([IO.File]::ReadAllText($sourcePath) -ceq $source) 'Editing source was changed.'
+# Verify the entire UTF-8 publication, including Vietnamese text and LF normalization.
+$expected = $source.Replace("`r`n", "`n").Replace('publication_state: draft', 'publication_state: published').Replace('review_status: pending', 'review_status: approved').Replace('published_at: null', 'published_at: ' + $publishedAt).Replace('published_by: null', 'published_by: ' + ($params.ApprovedBy | ConvertTo-Json -Compress))
+Assert ([Convert]::ToBase64String($bytes) -ceq [Convert]::ToBase64String($utf8.GetBytes($expected))) 'Published UTF-8 bytes differ from the exact expected corpus.'
+Assert ($text.Contains('Dữ liệu kiểm thử') -and $text.Contains('Đây là dữ liệu tổng hợp')) 'Vietnamese text was corrupted.'
 Reject { & $helper @params } 'Existing publication must be preserved.'
 Assert ([IO.File]::ReadAllText((Join-Path $output 'publication.json')) -ceq $manifestText) 'Existing manifest was overwritten.'
+# A BOM and CRLF in the editing source must not leak into deployment bytes.
+$bomSource = [Text.UTF8Encoding]::new($true).GetPreamble() + $utf8.GetBytes($source.Replace("`r`n", "`n").Replace("`n", "`r`n"))
+[IO.File]::WriteAllBytes($sourcePath, $bomSource)
+$params.OutputDirectory = Join-Path $fixture 'published-bom-crlf'
+& $helper @params
+$normalizedBytes = [IO.File]::ReadAllBytes((Join-Path $params.OutputDirectory 'smartpark-knowledge.md'))
+$normalizedManifestText = [IO.File]::ReadAllText((Join-Path $params.OutputDirectory 'publication.json'))
+$normalizedAt = ([regex]::Match($normalizedManifestText, '"publishedAt"\s*:\s*("[^"\\]*")').Groups[1].Value.Trim('"'))
+Assert ([Convert]::ToBase64String($normalizedBytes) -ceq [Convert]::ToBase64String($utf8.GetBytes($expected.Replace($publishedAt, $normalizedAt)))) 'BOM/CRLF source did not produce exact normalized UTF-8 bytes.'
+Assert ([Convert]::ToBase64String([IO.File]::ReadAllBytes($sourcePath)) -ceq [Convert]::ToBase64String($bomSource)) 'BOM/CRLF editing source bytes were changed.'
 $params.OutputDirectory = Join-Path $fixture 'rejected'
 foreach ($placeholder in @('', 'admin', '<actual-admin>', 'REPLACE_WITH_ADMIN', 'your-admin')) {
     $params.ApprovedBy = $placeholder

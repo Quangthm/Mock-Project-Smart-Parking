@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 <# Preserve an explicitly selected existing UserService key in a private local file.
    First run inspect-assistant-signing.ps1. Source must exactly match its output.
    Without a live JWKS check, ConfirmExistingSource asserts that the operator has
@@ -16,6 +16,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+. (Join-Path $PSScriptRoot 'assistant-signing-native.ps1')
 if (!$UserJwksUri -and !$ConfirmExistingSource) {
     throw 'Supply UserJwksUri to verify the live key, or ConfirmExistingSource after independently confirming the existing UserService source.'
 }
@@ -46,30 +48,23 @@ if ($Source.StartsWith('process:')) {
         $UserSecretsPath = Join-Path $directory "$id/secrets.json"
     } elseif (![IO.Path]::IsPathRooted($UserSecretsPath)) { $UserSecretsPath=Join-Path $root $UserSecretsPath }
     try {
-        $secrets = [IO.File]::ReadAllText($UserSecretsPath) | ConvertFrom-Json -AsHashtable
+        $secrets = ConvertFrom-AssistantSigningJson ([IO.File]::ReadAllText($UserSecretsPath))
         $name = $Source.Substring('UserService user-secrets:'.Length)
         if ($name.StartsWith('nested Jwt.')) { $value=$secrets['Jwt'][$name.Substring('nested Jwt.'.Length)] }
         else { $value=$secrets[$name] }
         $base64 = $name.EndsWith('Base64', [StringComparison]::OrdinalIgnoreCase)
     } catch { throw 'Selected user-secrets source could not be read; nothing exported.' }
 } else { throw 'Export supports process and UserService user-secrets sources only. Existing .env sources already have a provisioning path.' }
-$rsa = [Security.Cryptography.RSA]::Create()
-try {
-    try {
-        if ($base64) { $value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($value)) }
-        $rsa.ImportFromPem($value)
-        $fingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo()))
-        if ($fingerprint -cne $selected[0].PublicSpkiSha256) { throw 'Source changed.' }
-        $bytes = [Text.Encoding]::UTF8.GetBytes($rsa.ExportPkcs8PrivateKeyPem())
-    } catch { throw 'Selected signing source changed or is invalid; nothing exported.' }
-    $directory = Split-Path $OutputPath -Parent
-    $null = New-Item -ItemType Directory -Path $directory -Force
-    # Reject junctions/symlinks in the destination ancestry before writing secrets.
-    for ($current=$directory; $current -and $current -ne $root; $current=Split-Path $current -Parent) {
-        if ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Destination contains a link; nothing exported.' }
-    }
-    $stream = [IO.File]::Open($OutputPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try { $stream.Write($bytes,0,$bytes.Length) } finally { $stream.Dispose() }
-    Write-Host 'Existing signing key preserved in the requested .cache file. No .env or source values changed.'
-    Write-Host ('Public SPKI SHA256: ' + $fingerprint)
-} finally { $rsa.Dispose() }
+if ($base64) {
+    try { $value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($value)) }
+    catch { throw 'Selected signing source changed or is invalid; nothing exported.' }
+}
+$directory = Split-Path $OutputPath -Parent
+$null = New-Item -ItemType Directory -Path $directory -Force
+# Reject junctions/symlinks in the destination ancestry before writing secrets.
+for ($current=$directory; $current -and $current -ne $root; $current=Split-Path $current -Parent) {
+    if ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Destination contains a link; nothing exported.' }
+}
+$result = Invoke-AssistantCrypto @{Operation='export';Pem=$value;ExpectedFingerprint=$selected[0].PublicSpkiSha256;OutputPath=$OutputPath}
+Write-Host 'Existing signing key preserved in the requested .cache file. No .env or source values changed.'
+Write-Host ('Public SPKI SHA256: ' + $result.Fingerprint)

@@ -353,3 +353,9 @@ Theo yêu cầu người dùng, bỏ SESSION/ngày khỏi tên file chatbot; dù
 - Bổ sung quy trình Windows mới, kiểm nguồn JWT trước full setup, khôi phục khóa cũ và kiểm kết nối Gemini khi chưa có corpus. Ba reviewer đối chiếu signing, publication và toàn bộ luồng setup. Sửa thứ tự để người copy lệnh có thể dừng kiểm fingerprint trước initializer.
 - Chạy fixture inspector, exporter, initializer và publication thành công. Kiểm JWKS dùng dữ liệu mô phỏng. Bộ đọc PublicKnowledgeFile thực tế chấp nhận cặp publication do script tạo từ dữ liệu thử. Không dùng khóa hay publication của môi trường tester.
 - Chờ tester xác minh Test connection bằng Gemini key QA. Sau khi có corpus được duyệt, kiểm riêng FAQ và từng role theo mục 4.
+
+### Windows PowerShell 5.1 cho tester — 17/11/2026
+
+- Inspector/export, initializer JWT/TLS, xuất knowledge và Discovery setup chạy trực tiếp từ Windows PowerShell 5.1. Phần PEM dùng SDK .NET 10 sẵn có của dự án qua stdin UTF-8. Cập nhật lệnh trong handoff.
+- PASS trên 5.1.26100.9818: khởi tạo mới, dùng lại signer, đọc/khôi phục user-secrets tại đường dẫn Unicode, publication tiếng Việt và Discovery fixture. Fixture signing, initializer, publication và Discovery cũng được kiểm bằng PS7. Không thay đổi Docker hoặc cấu hình QA.
+- Trên checkout hiện tại, inspector xác nhận nguồn FILE đã cấu hình. JWKS localhost:5035 chưa trả tập khóa hợp lệ lúc kiểm. Không ghi nhận đối chiếu khóa live hay Test connection Gemini PASS.

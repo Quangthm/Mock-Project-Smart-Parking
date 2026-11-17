@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 param([string]$EnvPath, [switch]$UseExistingSigningKey)
 
 $ErrorActionPreference = 'Stop'
@@ -48,80 +48,27 @@ if (!$UseExistingSigningKey -and (Test-Path -LiteralPath $userSecretsPath -PathT
     throw 'Existing UserService signing material found in .NET user-secrets. Preserve it and configure Assistant manually.'
 }
 
-$jwt = [Security.Cryptography.RSA]::Create(3072)
+# Windows PowerShell 5.1 uses .NET Framework, which lacks the modern PEM and
+# certificate APIs. Run only cryptography in the already-required .NET 10 SDK.
+$cryptoInput = @{ Directory = $directory; UseExistingSigningKey = [bool]$UseExistingSigningKey }
 if ($UseExistingSigningKey) {
     $file = $settings[$signingNames[0]]
     $inline = $settings[$signingNames[1]]
     $base64 = $settings[$signingNames[2]]
     if (!($signingNames | Where-Object { Test-JwtConfiguredValue $settings[$_] })) {
-        $jwt.Dispose()
         throw 'Set the existing UserService signing key in .env before using -UseExistingSigningKey. If it lives in user-secrets, preserve the same key in a private PEM file and configure SMARTPARK_JWT_PRIVATE_KEY_FILE.'
     }
-    try {
-        $pem = if (Test-JwtConfiguredValue $file) { Read-JwtPrivateKeyFile $file $envDirectory }
-            elseif (Test-JwtConfiguredValue $inline) { $inline.Replace('\n', "`n") }
-        $publicKey = $null
-        if ($pem) {
-            $jwt.ImportFromPem($pem)
-            $null = $jwt.ExportParameters($true)
-            $publicKey = $jwt.ExportSubjectPublicKeyInfoPem()
-        }
-        if (Test-JwtConfiguredValue $base64) {
-            $jwt.ImportFromPem([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($base64)))
-            $null = $jwt.ExportParameters($true)
-            if ($publicKey -and $publicKey -cne $jwt.ExportSubjectPublicKeyInfoPem()) { throw 'Conflicting signing keys.' }
-        } elseif ($pem -and $base64 -like 'replace-with-*') {
-            throw 'Clear the Base64 template placeholder before using an existing PEM signing key.'
-        }
-    } catch {
-        $jwt.Dispose()
-        throw 'The existing signing inputs must supply a valid RSA private key. Ensure multiple active inputs represent the same key and clear any Base64 template placeholder when using the PEM file.'
+    if (Test-JwtConfiguredValue $file) { $cryptoInput['Pem'] = Read-JwtPrivateKeyFile $file $envDirectory }
+    elseif (Test-JwtConfiguredValue $inline) { $cryptoInput['Pem'] = $inline.Replace('\n', "`n") }
+    if (Test-JwtConfiguredValue $base64) { $cryptoInput['Base64'] = $base64 }
+    elseif ($cryptoInput['Pem'] -and $base64 -like 'replace-with-*') {
+        throw 'Clear the Base64 template placeholder before using an existing PEM signing key.'
     }
 }
-
-$null = New-Item -ItemType Directory -Path $directory
-$null = New-Item -ItemType Directory -Path (Join-Path $directory 'keyring'), (Join-Path $directory 'knowledge')
-$protection = [Security.Cryptography.RSA]::Create(3072)
-$caKey = [Security.Cryptography.RSA]::Create(3072)
-$serverKey = [Security.Cryptography.RSA]::Create(3072)
-$protectionCert = $ca = $leaf = $serverCert = $null
-$pfx = [Security.Cryptography.X509Certificates.X509ContentType]::Pfx
-$hash = [Security.Cryptography.HashAlgorithmName]::SHA256
-$padding = [Security.Cryptography.RSASignaturePadding]::Pkcs1
-$now = [DateTimeOffset]::UtcNow
-$protectionPassword = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$serverPassword = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-try {
-    if (!$UseExistingSigningKey) {
-        [IO.File]::WriteAllText((Join-Path $directory 'user-private.pem'), $jwt.ExportPkcs8PrivateKeyPem())
-    }
-    [IO.File]::WriteAllText((Join-Path $directory 'user-public.pem'), $jwt.ExportSubjectPublicKeyInfoPem())
-    $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=SmartPark local Assistant keyring', $protection, $hash, $padding)
-    $protectionCert = $request.CreateSelfSigned($now.AddMinutes(-5), $now.AddYears(3))
-    [IO.File]::WriteAllBytes((Join-Path $directory 'assistant.pfx'), $protectionCert.Export($pfx, $protectionPassword))
-
-    $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=SmartPark local User CA', $caKey, $hash, $padding)
-    $request.CertificateExtensions.Add([Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new($true, $false, 0, $true))
-    $request.CertificateExtensions.Add([Security.Cryptography.X509Certificates.X509KeyUsageExtension]::new(
-        [Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyCertSign, $true))
-    $ca = $request.CreateSelfSigned($now.AddMinutes(-5), $now.AddDays(100))
-    [IO.File]::WriteAllText((Join-Path $directory 'user-ca.crt'), $ca.ExportCertificatePem())
-    $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=user-service', $serverKey, $hash, $padding)
-    $san = [Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
-    $san.AddDnsName('user-service')
-    $request.CertificateExtensions.Add($san.Build())
-    $request.CertificateExtensions.Add([Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new($false, $false, 0, $true))
-    $usage = [Security.Cryptography.OidCollection]::new()
-    $null = $usage.Add([Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.1'))
-    $request.CertificateExtensions.Add([Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($usage, $true))
-    $leaf = $request.Create($ca, $now.AddMinutes(-1), $now.AddDays(90), [Security.Cryptography.RandomNumberGenerator]::GetBytes(16))
-    $serverCert = [Security.Cryptography.X509Certificates.RSACertificateExtensions]::CopyWithPrivateKey($leaf, $serverKey)
-    [IO.File]::WriteAllBytes((Join-Path $directory 'user-service.pfx'), $serverCert.Export($pfx, $serverPassword))
-} finally {
-    foreach ($material in @($serverCert, $leaf, $ca, $protectionCert, $serverKey, $caKey, $protection, $jwt)) {
-        if ($material) { $material.Dispose() }
-    }
-}
+. (Join-Path $PSScriptRoot 'assistant-signing-native.ps1')
+$material = Invoke-AssistantCrypto -Request $cryptoInput -HelperName 'assistant-docker-crypto.cs'
+$protectionPassword = $material.ProtectionPassword
+$serverPassword = $material.ServerPassword
 
 $changes = @{
     SMARTPARK_USER_DOCKER_TLS_ENABLED = 'true'
@@ -158,7 +105,7 @@ foreach ($name in ($changes.Keys | Sort-Object)) {
 $temporary = $EnvPath + '.assistant-' + [Guid]::NewGuid().ToString('N') + '.tmp'
 try {
     [IO.File]::WriteAllLines($temporary, $updated, [Text.UTF8Encoding]::new($false))
-    [IO.File]::Move($temporary, $EnvPath, $true)
+    [IO.File]::Replace($temporary, $EnvPath, [System.Management.Automation.Language.NullString]::Value)
 } finally {
     if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary }
 }

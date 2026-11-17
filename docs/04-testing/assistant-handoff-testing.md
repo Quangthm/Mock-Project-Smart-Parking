@@ -24,7 +24,7 @@ Các khối `.env` bên dưới đã điền giá trị cho Docker local. Mật 
 
 ### 2.1. Cần chuẩn bị gì?
 
-- Cài **Git**, **Docker Desktop**, **.NET SDK 10** và **PowerShell 7**. Mở Docker Desktop, chọn Linux containers và đợi engine chạy.
+- Cài **Git**, **Docker Desktop** và **.NET SDK 10**. Mở Docker Desktop, chọn Linux containers và đợi engine chạy.
 - Mở PowerShell tại **thư mục gốc dự án**, nơi có `setup.ps1` và `.env.example`. Các lệnh bên dưới đều chạy tại đây.
 - Nhận từ người bàn giao **hai file knowledge đã duyệt**: `smartpark-knowledge.md` và `publication.json`. Thiếu hai file này thì chưa test chat được; vẫn có thể setup và test kết nối Gemini theo **2.7 mốc A**.
 - Chuẩn bị API key Gemini hoặc OpenAI nếu cần test AI trả lời thật. Key này sẽ nhập trong giao diện Admin ở mục 2.5.
@@ -33,7 +33,6 @@ Trên máy Windows mới có WinGet, mở PowerShell và cài các công cụ c�
 
 ```powershell
 winget install --id Git.Git -e
-winget install --id Microsoft.PowerShell -e
 winget install --id Microsoft.DotNet.SDK.10 -e
 winget install --id Docker.DockerDesktop -e
 ```
@@ -45,21 +44,20 @@ Nếu chưa có repo, sau khi nhánh của PR #93 đã nhận bản handoff mớ
 ```powershell
 git clone --branch AI-ChatBot https://github.com/Quangthm/Mock-Project-Smart-Parking.git
 cd Mock-Project-Smart-Parking
-pwsh
 ```
 
-Nếu đã có repo, dùng checkout chứa bản bàn giao và mở PowerShell 7 ở root. Kiểm công cụ và phiên bản repo:
+Nếu đã có repo, dùng checkout chứa bản bàn giao và mở Windows PowerShell 5.1 có sẵn ở root (PowerShell 7 cũng dùng được). Kiểm công cụ và phiên bản repo:
 
 ```powershell
-pwsh --version
+$PSVersionTable.PSVersion
 dotnet --version
 docker info
 docker compose version
 git rev-parse --short HEAD
-Test-Path scripts/inspect-assistant-signing.ps1
+Get-Content scripts/inspect-assistant-signing.ps1 -TotalCount 1
 ```
 
-Lệnh cuối cần trả `True`. Nếu checkout còn ở `3406d221`, lấy bản cập nhật của nhánh trước khi chạy các helper mới. Nếu `docker info` báo lỗi, mở lại Docker Desktop trước khi làm tiếp. Chạy FE bằng Docker thì không cần cài Node trên máy.
+Lệnh cuối cần hiện `#requires -Version 5.1`. Nếu file còn yêu cầu 7.0 hoặc chưa tồn tại, hãy lấy bản cập nhật của nhánh. Nếu `docker info` báo lỗi, mở lại Docker Desktop trước khi làm tiếp. Chạy FE bằng Docker thì không cần cài Node trên máy.
 
 ### 2.2. Máy mới dùng Docker
 
@@ -69,7 +67,7 @@ Copy chạy nguyên khối này:
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
-pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1
+./scripts/initialize-assistant-docker.ps1
 ```
 
 Script tự tạo khóa đăng nhập, chứng chỉ kết nối và thư mục lưu khóa chatbot. Nó cũng tự điền đường dẫn/mật khẩu tương ứng vào `.env`. Nếu báo đã có khóa UserService, chuyển sang **2.3**, không xóa khóa cũ.
@@ -192,7 +190,7 @@ Giữ `.env` đang dùng. Không copy đè `.env.example` và **không dán kh�
 **Kiểm tra khóa trước khi chạy setup.** Khi root `.env` đang trống, bước đồng bộ của full `setup.ps1` có thể xóa signing key trong user-secrets. Từ root, chạy:
 
 ```powershell
-pwsh -NoProfile -File scripts/inspect-assistant-signing.ps1
+./scripts/inspect-assistant-signing.ps1
 ```
 
 Công cụ kiểm ba dạng khóa trong root `.env`, biến của process hiện tại và user-secrets UserService của tài khoản Windows hiện tại. Kết quả chỉ gồm tên nguồn, trạng thái và dấu vân tay **public key**, không in private key. Công cụ không thấy biến của một container/process khác hoặc secrets của tài khoản Windows khác.
@@ -208,7 +206,7 @@ Công cụ kiểm ba dạng khóa trong root `.env`, biến của process hiện
 Nếu UserService hiện đang chạy, dùng đúng cổng UserService của máy (Docker mặc định 5035), kiểm public JWKS:
 
 ```powershell
-pwsh -NoProfile -File scripts/inspect-assistant-signing.ps1 -UserJwksUri http://localhost:5035/.well-known/jwks.json
+./scripts/inspect-assistant-signing.ps1 -UserJwksUri http://localhost:5035/.well-known/jwks.json
 ```
 
 Chỉ nguồn có `MatchesLiveJwks=true` mới có bằng chứng khớp khóa public đang phục vụ; `UNAVAILABLE_OR_INVALID` là chưa xác minh được, không phải khóa sai. Xem cổng thực tế bằng `docker ps` nếu đã đổi cấu hình. JWKS chỉ chứa public key, không thể dùng nó tạo lại private key.
@@ -219,7 +217,7 @@ Khi inspector tìm được nguồn đúng, copy **tên nguồn** ở trường 
 
 ```powershell
 $signingSource = Read-Host 'Dán chính xác Source có CONFIGURED và khớp UserService'
-pwsh -NoProfile -File scripts/export-assistant-signing.ps1 -Source $signingSource -UserJwksUri http://localhost:5035/.well-known/jwks.json
+./scripts/export-assistant-signing.ps1 -Source $signingSource -UserJwksUri http://localhost:5035/.well-known/jwks.json
 ```
 
 Script chỉ xuất khi public fingerprint khớp JWKS, giữ nguyên khóa cũ, ghi vào `.cache/assistant-signing/user-private.pem`, không in private key và không ghi đè file. **Không đặt file khôi phục vào `.cache/assistant-docker` trước initializer**, vì initializer từ chối thư mục vật liệu đã tồn tại.
@@ -227,7 +225,7 @@ Script chỉ xuất khi public fingerprint khớp JWKS, giữ nguyên khóa cũ,
 Nếu UserService đang tắt nên không kiểm JWKS được, chỉ người đã xác nhận độc lập nguồn này thuộc môi trường hiện tại mới dùng lệnh thay thế sau. Tham số này là xác nhận của người chạy, không phải công cụ tự chứng minh nguồn đúng:
 
 ```powershell
-pwsh -NoProfile -File scripts/export-assistant-signing.ps1 -Source $signingSource -ConfirmExistingSource
+./scripts/export-assistant-signing.ps1 -Source $signingSource -ConfirmExistingSource
 ```
 
 Sau khi export thành công, sửa **đúng ba dòng** trong root `.env`, giữ nguyên KeyId/Issuer/Audience và mọi cấu hình DB:
@@ -248,13 +246,13 @@ Clear-JwtSigningEnvironment
 **Kiểm tra lại trước khi khởi tạo Assistant.** Áp dụng cho cả khóa có sẵn trong root `.env` và khóa vừa khôi phục:
 
 ```powershell
-pwsh -NoProfile -File scripts/inspect-assistant-signing.ps1
+./scripts/inspect-assistant-signing.ps1
 ```
 
 Chỉ tiếp tục khi thấy nguồn khóa trong root `.env` là `CONFIGURED`, không có nguồn lỗi hoặc xung đột, và đã đối chiếu đúng khóa của UserService. Nếu dùng file/PEM, xóa giá trị mẫu `replace-with-*` ở dòng Base64. Chạy:
 
 ```powershell
-pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey
+./scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey
 ```
 
 Initializer tạo vật liệu riêng cho Assistant và giữ khóa ký đã chọn. Nếu nguồn chỉ tồn tại trong container hay máy của người triển khai khác, người đó cần cấu hình file khóa trên máy test qua kênh secret của nhóm. Giữ private key, nội dung `.env` và output `docker inspect` ngoài ticket/chat.
@@ -437,7 +435,7 @@ Chạy `setup.ps1 -AssistantCheck`, rồi runner tương ứng ở 2.2/2.3. Đă
 ```powershell
 $knowledgeApprover = Read-Host 'Tên hoặc ID Admin đã duyệt bản nội dung này'
 $knowledgeApproval = Read-Host 'Link hoặc mã biên bản duyệt của Admin'
-pwsh -NoProfile -File scripts/publish-assistant-knowledge.ps1 -ApprovedBy $knowledgeApprover -ApprovalReference $knowledgeApproval
+./scripts/publish-assistant-knowledge.ps1 -ApprovedBy $knowledgeApprover -ApprovalReference $knowledgeApproval
 ```
 
 Script tạo **bản triển khai riêng** và manifest với SHA-256, version, thời gian UTC đồng nhất, UTF-8 không BOM. Script không sửa bản nháp trong repo, không sửa `.env`, không thay thế quyết định phê duyệt. Nếu chưa có Admin duyệt thì dừng ở mốc A; trạng thái bàn giao là **chưa đủ điều kiện test chat**. Đây là đầu vào người bàn giao phải cung cấp, không phải lỗi thao tác của tester.
@@ -850,9 +848,9 @@ Initializer local đã cấu hình User TLS + public CA + User read. Sau chạy 
 Khi User TLS, Assistant keyring/corpus và DB nền đã xong:
 
 ```powershell
-pwsh -NoProfile -File scripts/initialize-discovery-docker.ps1
-pwsh -NoProfile -File scripts/initialize-discovery-docker.ps1 -CheckOnly
-pwsh -NoProfile -File scripts/run-discovery-docker.ps1
+./scripts/initialize-discovery-docker.ps1
+./scripts/initialize-discovery-docker.ps1 -CheckOnly
+./scripts/run-discovery-docker.ps1
 ```
 
 Initializer tạo CA/PFX riêng cho Facility/Operations/Payment và credential discovery có hạn 90 ngày trong thư mục được `.env` tham chiếu, không rotate JWT/User/keyring. Runner build app, probe schema, kiểm API HTTPS thật rồi mới mở Search. DB mới nhận migration discovery từ Compose; **volume cũ không tự chạy lại init SQL**. Nếu probe thiếu schema, backup và nhờ DB owner review/áp `scripts/database/migrations/20261106_facility_discovery_publication.sql`; không reset volume. `-ReplaceLegacyContainers` chỉ dùng khi có container parking/reservation cũ cần đổi tên, theo LOCAL-SETUP.

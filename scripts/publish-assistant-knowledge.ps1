@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
 Prepare a deployment copy AFTER recorded Admin approval of the exact source.
@@ -113,8 +113,11 @@ for ($i = 0; $i -lt $headings.Count; $i++) {
 }
 $bytes = $utf8.GetBytes($published)
 if ($bytes.Length -gt 262144) { throw 'Published corpus exceeds the runtime 256 KiB limit.' }
+# SHA256.Create/ComputeHash and BitConverter also work on .NET Framework (Windows PowerShell 5.1).
+$sha256 = [Security.Cryptography.SHA256]::Create()
+try { $digest = [BitConverter]::ToString($sha256.ComputeHash($bytes)).Replace('-', '') } finally { $sha256.Dispose() }
 $manifest = [ordered]@{
-    sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    sha256 = $digest
     version = $version
     approvedBy = $ApprovedBy
     approvalReference = $ApprovalReference
@@ -127,7 +130,7 @@ $manifest = [ordered]@{
 $null = [IO.Directory]::CreateDirectory($OutputDirectory)
 foreach ($file in @(@($markdownPath, $bytes), @($manifestPath, $utf8.GetBytes($manifest + "`n")))) {
     $stream = [IO.File]::Open($file[0], [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try { $stream.Write($file[1]); $stream.Flush($true) } finally { $stream.Dispose() }
+    try { $stream.Write($file[1], 0, $file[1].Length); $stream.Flush($true) } finally { $stream.Dispose() }
 }
 Write-Host "Prepared deployment copy version $version in $OutputDirectory."
 Write-Host 'Approval metadata records your supplied review; it does not verify Admin identity. Run setup.ps1 -AssistantCheck before starting the Assistant.'

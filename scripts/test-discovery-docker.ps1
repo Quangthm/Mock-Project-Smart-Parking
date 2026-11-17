@@ -1,17 +1,18 @@
-#requires -Version 7.0
+#requires -Version 5.1
 # Offline fixtures only; no real .env, Docker, keyring or database changes.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path $root ('.cache/discovery-fixture-' + [Guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $scratch
-$rsa = [Security.Cryptography.RSA]::Create(2048)
+. (Join-Path $PSScriptRoot 'discovery-docker.ps1')
+$rsa = New-DiscoveryRsa 2048
 $cert = $null
 try {
     $csr = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=fixture', $rsa,
         [Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)
     $cert = $csr.CreateSelfSigned([DateTimeOffset]::UtcNow.AddMinutes(-1),[DateTimeOffset]::UtcNow.AddDays(1))
     $caPath = Join-Path $scratch 'user-ca.crt'
-    [IO.File]::WriteAllText($caPath,$cert.ExportCertificatePem())
+    [IO.File]::WriteAllText($caPath,(ConvertTo-DiscoveryCertificatePem $cert))
 } finally { if($cert){$cert.Dispose()}; $rsa.Dispose() }
 $fixture = Join-Path $scratch '.env'
 [IO.File]::WriteAllLines($fixture,@('SMARTPARK_USER_DOCKER_TLS_ENABLED=true',"SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH=$caPath",'UNRELATED_FIXTURE=keep-me'))

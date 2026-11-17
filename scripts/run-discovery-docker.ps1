@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 param([switch]$NoBuild, [switch]$BuildOnly, [switch]$ReplaceLegacyContainers)
 $ErrorActionPreference = 'Stop'
 if ($NoBuild -and $BuildOnly) { throw '-NoBuild and -BuildOnly cannot be combined.' }
@@ -7,7 +7,7 @@ $envFile = Join-Path $root '.env'
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
 . (Join-Path $PSScriptRoot 'discovery-docker.ps1')
 $discovery = Get-DiscoveryDockerEnvironment $settings $root
-if ($discovery.Count -eq 0) { throw 'Run pwsh -File scripts/initialize-discovery-docker.ps1 first.' }
+if ($discovery.Count -eq 0) { throw 'Run ./scripts/initialize-discovery-docker.ps1 first.' }
 function Invoke-DiscoveryDocker {
     param([string[]]$Arguments, [switch]$Capture)
     if ($Capture) {

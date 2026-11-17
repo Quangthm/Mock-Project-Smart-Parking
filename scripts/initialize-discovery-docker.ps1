@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 param([string]$EnvPath, [switch]$CheckOnly)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -29,10 +29,16 @@ if ($settings['Discovery__PaymentServiceKey'] -or $settings['DiscoveryPricing__O
 $relativeDirectory = '.cache/discovery-docker-' + [Guid]::NewGuid().ToString('N')
 $directory = Join-Path $envDirectory $relativeDirectory
 $null = New-Item -ItemType Directory -Path $directory
-$password = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$serviceKey = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+function Get-DiscoveryRandomBytes([int]$size) {
+    $bytes = [byte[]]::new($size)
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    return ,$bytes
+}
+$password = [BitConverter]::ToString((Get-DiscoveryRandomBytes 32)).Replace('-','')
+$serviceKey = [BitConverter]::ToString((Get-DiscoveryRandomBytes 32)).Replace('-','')
 $now = [DateTimeOffset]::UtcNow
-$caKey = [Security.Cryptography.RSA]::Create(3072)
+$caKey = New-DiscoveryRsa 3072
 $ca = $null
 try {
     $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=SmartPark local discovery CA', $caKey,
@@ -41,9 +47,9 @@ try {
     $request.CertificateExtensions.Add([Security.Cryptography.X509Certificates.X509KeyUsageExtension]::new(
         [Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyCertSign, $true))
     $ca = $request.CreateSelfSigned($now.AddMinutes(-5), $now.AddDays(100))
-    [IO.File]::WriteAllText((Join-Path $directory 'discovery-ca.crt'), $ca.ExportCertificatePem())
+    [IO.File]::WriteAllText((Join-Path $directory 'discovery-ca.crt'), (ConvertTo-DiscoveryCertificatePem $ca))
     foreach ($service in @('facility-service','operation-service','payment-service')) {
-        $rsa = [Security.Cryptography.RSA]::Create(3072)
+        $rsa = New-DiscoveryRsa 3072
         $leaf = $withKey = $null
         try {
             $csr = [Security.Cryptography.X509Certificates.CertificateRequest]::new(('CN=' + $service), $rsa,
@@ -55,7 +61,7 @@ try {
             $usage = [Security.Cryptography.OidCollection]::new()
             $null = $usage.Add([Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.1'))
             $csr.CertificateExtensions.Add([Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($usage,$true))
-            $leaf = $csr.Create($ca, $now.AddMinutes(-1), $now.AddDays(90), [Security.Cryptography.RandomNumberGenerator]::GetBytes(16))
+            $leaf = $csr.Create($ca, $now.AddMinutes(-1), $now.AddDays(90), (Get-DiscoveryRandomBytes 16))
             $withKey = [Security.Cryptography.X509Certificates.RSACertificateExtensions]::CopyWithPrivateKey($leaf,$rsa)
             [IO.File]::WriteAllBytes((Join-Path $directory ($service + '.pfx')),
                 $withKey.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx,$password))

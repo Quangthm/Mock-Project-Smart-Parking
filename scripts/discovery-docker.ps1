@@ -83,3 +83,16 @@ function Get-DiscoveryDockerEnvironment {
     $result['SMARTPARK_DISCOVERY_DOCKER_CERT_PASSWORD'] = $password
     return $result
 }
+
+
+function New-DiscoveryRsa([int]$size) {
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+        return [Security.Cryptography.RSACng]::new($size)
+    }
+    return [Security.Cryptography.RSA]::Create($size)
+}
+
+function ConvertTo-DiscoveryCertificatePem($certificate) {
+    $body = [Convert]::ToBase64String($certificate.RawData, [Base64FormattingOptions]::InsertLineBreaks)
+    return (('-----BEGIN CERTIFICATE-----', $body, '-----END CERTIFICATE-----') -join [Environment]::NewLine)
+}

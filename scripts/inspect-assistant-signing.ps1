@@ -1,4 +1,4 @@
-#requires -Version 7.0
+#requires -Version 5.1
 <# Read-only diagnostic. Prints source names and PUBLIC key fingerprints only.
    It does not choose, export, generate or replace a private key.
    Relative EnvPath/UserSecretsPath arguments resolve from the repository root.
@@ -9,6 +9,7 @@ param([string]$EnvPath = '.env', [string]$UserSecretsPath, [uri]$UserJwksUri)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+. (Join-Path $PSScriptRoot 'assistant-signing-native.ps1')
 if ($UserJwksUri -and ($UserJwksUri.Scheme -notin @('http','https') -or
     !$UserJwksUri.IsLoopback -or $UserJwksUri.UserInfo -or $UserJwksUri.Fragment)) {
     throw 'UserJwksUri must be an explicit loopback HTTP(S) endpoint without credentials or fragment.'
@@ -20,19 +21,14 @@ function Add-KeySource([string]$Source, [string]$Value, [string]$Kind) {
     $status = 'MISSING'; $fingerprint = $null
     if (Test-JwtConfiguredValue $Value) {
         $status = 'INVALID'
-        $rsa = [Security.Cryptography.RSA]::Create()
         try {
             if ($Kind -eq 'FILE') { $Value = Read-JwtPrivateKeyFile $Value $envDirectory }
             elseif ($Kind -eq 'BASE64') { $Value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value)) }
             elseif ($Kind -eq 'ENVPEM') { $Value = $Value.Replace('\n', "`n") }
             elseif ($Kind -ne 'PEM') { throw 'Unsupported signing alias.' }
-            $rsa.ImportFromPem($Value)
-            if ($rsa.KeySize -lt 2048) { throw 'RSA key is too small.' }
-            # Signing requires a private key, not just a public PEM.
-            $null = $rsa.ExportParameters($true)
-            $fingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo()))
+            $fingerprint = (Invoke-AssistantCrypto @{Operation='private';Pem=$Value}).Fingerprint
             $status = 'CONFIGURED'
-        } catch { $status = 'INVALID' } finally { $rsa.Dispose() }
+        } catch [InvalidOperationException] { throw } catch { $status = 'INVALID' }
     }
     $records.Add([pscustomobject]@{ Source=$Source; Status=$status; PublicSpkiSha256=$fingerprint; MatchesLiveJwks=$null })
 }
@@ -65,7 +61,7 @@ if (!$UserSecretsPath) {
 } elseif (![IO.Path]::IsPathRooted($UserSecretsPath)) { $UserSecretsPath = Join-Path $root $UserSecretsPath }
 $secrets = @{}
 if (Test-Path -LiteralPath $UserSecretsPath -PathType Leaf) {
-    try { $secrets = [IO.File]::ReadAllText($UserSecretsPath) | ConvertFrom-Json -AsHashtable }
+    try { $secrets = ConvertFrom-AssistantSigningJson ([IO.File]::ReadAllText($UserSecretsPath)) }
     catch { $records.Add([pscustomobject]@{Source='UserService user-secrets file';Status='UNREADABLE';PublicSpkiSha256=$null;MatchesLiveJwks=$null}) }
 }
 foreach ($name in @('PrivateKeyPem','PrivateKeyPemBase64')) {
@@ -82,18 +78,7 @@ if ($UserJwksUri) {
         $jwks = Invoke-RestMethod -Uri $UserJwksUri -TimeoutSec 10 -MaximumRedirection 0 -ErrorAction Stop
         foreach ($key in $jwks.keys) {
             if ($key.kty -ne 'RSA') { continue }
-            $parameters = [Security.Cryptography.RSAParameters]::new()
-            foreach ($part in @('n','e')) {
-                $encoded = ([string]$key.$part).Replace('-','+').Replace('_','/')
-                $encoded = $encoded.PadRight($encoded.Length + ((4 - $encoded.Length % 4) % 4), '=')
-                $bytes = [Convert]::FromBase64String($encoded)
-                if ($part -eq 'n') { $parameters.Modulus = $bytes } else { $parameters.Exponent = $bytes }
-            }
-            $rsa = [Security.Cryptography.RSA]::Create()
-            try {
-                $rsa.ImportParameters($parameters)
-                $liveFingerprints += [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo()))
-            } finally { $rsa.Dispose() }
+            $liveFingerprints += (Invoke-AssistantCrypto @{Operation='public';Modulus=[string]$key.n;Exponent=[string]$key.e}).Fingerprint
         }
         if (!$liveFingerprints.Count) { throw 'No RSA public keys.' }
         $jwksStatus = 'READ'

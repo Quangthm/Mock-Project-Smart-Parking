@@ -59,19 +59,19 @@ Hướng dẫn QA hiện hành: [setup máy mới/add-on, dữ liệu và test t
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
-pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1
+./scripts/initialize-assistant-docker.ps1
 ```
 
-Initializer ghi đường dẫn tương đối từ root `.env` tới `.cache/assistant-docker`, tạo JWT/PFX/TLS riêng và bảo toàn bộ cấu hình đã có. Nó không xuất bản corpus: đặt cặp Markdown + `publication.json` đã được Admin duyệt vào thư mục knowledge, sau đó bật Guest release và làm các bước setup bên dưới. Cả chat đăng nhập cũng cần corpus hợp lệ. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey`: giữ nguyên private key và xuất đúng public key, tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Bộ Assistant/TLS đã có phải giữ và cấu hình thủ công; không rotate bằng initializer.
+Initializer ghi đường dẫn tương đối từ root `.env` tới `.cache/assistant-docker`, tạo JWT/PFX/TLS riêng và bảo toàn bộ cấu hình đã có. Nó không xuất bản corpus: đặt cặp Markdown + `publication.json` đã được Admin duyệt vào thư mục knowledge, sau đó bật Guest release và làm các bước setup bên dưới. Cả chat đăng nhập cũng cần corpus hợp lệ. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `./scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey`: giữ nguyên private key và xuất đúng public key, tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Bộ Assistant/TLS đã có phải giữ và cấu hình thủ công; không rotate bằng initializer.
 
 
 #### Tìm bãi qua Docker (Discovery local)
 
-Sau khi User TLS, Assistant JWT/keyring/corpus và DB nền đã được setup, dùng PowerShell 7:
+Sau khi User TLS, Assistant JWT/keyring/corpus và DB nền đã được setup, dùng Windows PowerShell 5.1 hoặc PowerShell 7:
 
 ```powershell
-pwsh -NoProfile -File scripts/initialize-discovery-docker.ps1
-pwsh -NoProfile -File scripts/run-discovery-docker.ps1
+./scripts/initialize-discovery-docker.ps1
+./scripts/run-discovery-docker.ps1
 ```
 
 Initializer tạo CA public và ba PFX riêng cho Facility/Operations/Payment trong `.cache`, sinh credential Operations→Payment có hạn 90 ngày, cập nhật các biến Discovery trong `.env`, giữ nguyên JWT/User TLS/keyring cũ. Chạy lại giữ nguyên credential, không tự rotate. Search vẫn tắt cho tới khi runner kiểm được HTTPS và API tìm bãi thật. Bộ thiết lập này chỉ dành cho Docker local, không phải provisioning production. Freshness dev là 60 giây, clock skew 5 giây; không phải cam kết SLA.
@@ -80,11 +80,11 @@ Runner build các image mới, kiểm metadata Facility trước khi dừng app 
 
 ```powershell
 # Build trước, chưa đổi container hoặc DB
-pwsh -NoProfile -File scripts/run-discovery-docker.ps1 -BuildOnly
+./scripts/run-discovery-docker.ps1 -BuildOnly
 # Sau khi image và schema phù hợp; dùng switch cuối chỉ khi chuyển container legacy
-pwsh -NoProfile -File scripts/run-discovery-docker.ps1 -NoBuild -ReplaceLegacyContainers
+./scripts/run-discovery-docker.ps1 -NoBuild -ReplaceLegacyContainers
 # Những lần sau, khi không đổi source
-pwsh -NoProfile -File scripts/run-discovery-docker.ps1 -NoBuild
+./scripts/run-discovery-docker.ps1 -NoBuild
 ```
 
 `compose.discovery.yml` dùng DNS nội bộ `facility-service`, `operation-service`, `payment-service` trên HTTPS 8443, không mở thêm cổng host. Facility nhận CA User hiện có. Assistant chỉ nhận thêm CA public Discovery, không nhận private PFX hoặc key Payment. Facility và Operations có volume keyring cursor riêng. App runner tự chọn overlay khi `SMARTPARK_DISCOVERY_DOCKER_ENABLED=true`; thay `.env` phải chạy lại runner để recreate, không chỉ Docker Desktop Start.
@@ -93,7 +93,7 @@ Catalogue chỉ hiển thị bãi đã được Owner publish qua API đúng quy
 
 Chứng chỉ và service key hết hạn sau 90 ngày. Checker báo lỗi thay vì tự tạo bộ mới; gia hạn có kiểm soát và cập nhật cả producer/consumer. Thiết lập lại credential chỉ áp dụng cho môi trường mới hoặc quy trình rotate được duyệt, không xóa keyring hoặc `.env` cũ.
 
-Kiểm offline: `pwsh -NoProfile -File scripts/test-discovery-docker.ps1`. Kiểm đầu vào máy hiện tại: `pwsh -NoProfile -File scripts/initialize-discovery-docker.ps1 -CheckOnly`. Hai lệnh này không thay thế nghiệm thu API/Driver thật.
+Kiểm offline: `./scripts/test-discovery-docker.ps1`. Kiểm đầu vào máy hiện tại: `./scripts/initialize-discovery-docker.ps1 -CheckOnly`. Hai lệnh này không thay thế nghiệm thu API/Driver thật.
 
 **Smoke test cách ly cho tester.** Mở Docker Desktop ở chế độ Linux containers và chạy từ thư mục gốc bằng Windows PowerShell 5.1+ hoặc PowerShell 7+:
 
