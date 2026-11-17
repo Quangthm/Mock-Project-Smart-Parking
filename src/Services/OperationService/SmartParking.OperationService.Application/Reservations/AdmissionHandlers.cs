@@ -15,7 +15,8 @@ public sealed class AdmissionMapperProfile : Profile
 {
     public AdmissionMapperProfile() => CreateMap<ReservationRequest, ReservationReceipt>()
         .ForCtorParam(nameof(ReservationReceipt.RequestId), opt => opt.MapFrom(x => x.Id))
-        .ForCtorParam(nameof(ReservationReceipt.ReservationId), opt => opt.MapFrom(x => x.ReservationId));
+        .ForCtorParam(nameof(ReservationReceipt.ReservationId), opt => opt.MapFrom(x => x.ReservationId))
+        .ForCtorParam(nameof(ReservationReceipt.ContractVersion), opt => opt.MapFrom(_ => 2));
 }
 
 public sealed class AdmitReservationValidator : AbstractValidator<AdmitReservationCommand>
@@ -111,13 +112,6 @@ public sealed class RecordAccountAccessDecisionHandler(IReservationRequestReposi
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
     }
-}
-
-internal static class AdmissionActor
-{
-    public static (Guid User, Guid Account) RequireDriver(ICurrentActor actor) =>
-        actor.UserId is { } user && user != Guid.Empty && actor.AccountId is { } account && account != Guid.Empty && actor.Role == "driver"
-            ? (user, account) : throw new ReservationGateException(403, "FORBIDDEN", "Driver access is required.");
 }
 
 internal static class AdmissionMessage

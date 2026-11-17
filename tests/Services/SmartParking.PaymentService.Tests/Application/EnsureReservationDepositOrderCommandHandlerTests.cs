@@ -90,10 +90,14 @@ public class EnsureReservationDepositOrderCommandHandlerTests
         Assert.Equal(OrderType.RESERVATION_FEE, createdOrder.OrderType);
         Assert.Equal(ReferenceType.RESERVATION, createdOrder.ReferenceType);
         Assert.Equal(resId, createdOrder.ReferenceId);
+        Assert.Equal(quoteId, createdOrder.QuoteId);
+        Assert.Equal("1", createdOrder.TermsVersion);
         Assert.Equal(60000m, createdOrder.Amount);
         Assert.Equal(PaymentOrderStatus.PENDING, createdOrder.Status);
         Assert.Equal(opId.ToString(), createdOrder.IdempotencyKey);
         Assert.Equal(expiresAt, createdOrder.ExpiresAt);
+        Assert.Equal(quoteId, result.AcceptedRequest.QuoteId);
+        Assert.Equal("1", result.AcceptedRequest.TermsVersion);
         Assert.True(uow.SaveCount > 0);
     }
 
@@ -135,6 +139,8 @@ public class EnsureReservationDepositOrderCommandHandlerTests
         var tombstone = orderRepo.Orders[0];
         Assert.Equal(PaymentOrderStatus.CANCELLED, tombstone.Status);
         Assert.Equal(opId.ToString(), tombstone.IdempotencyKey);
+        Assert.Equal(requestDto.QuoteId, tombstone.QuoteId);
+        Assert.Equal(requestDto.TermsVersion, tombstone.TermsVersion);
         Assert.True(uow.SaveCount > 0);
 
         // Act 2: Calling again with the same OperationId

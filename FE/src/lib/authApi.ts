@@ -260,8 +260,9 @@ async function performRequest<T>(
       ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
-    requireSessionGeneration(generation)
-    throw new ApiConnectionError()
+    throw new Error(apiPrefix === "/api/auth"
+      ? "Cannot reach the authentication server. Please try again."
+      : "The service could not be reached or the request timed out. Please try again.")
   }
 
   const payload =

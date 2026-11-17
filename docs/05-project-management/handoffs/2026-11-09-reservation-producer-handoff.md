@@ -1,6 +1,8 @@
 # Reservation producers — Payment and coverage handoff (11 November alignment)
 
-Payment owner handoff, rechecked against the local source on 11 November 2026 at checkout `fff33f8f` (after the Payment merge). This is source review, not live verification. **Payment implementation remains with the Payment teammate. Facility producer implementation is now included in the Operations/Facility task.** No Payment implementation is changed by that task. Operations ports are in [BookingContracts.cs](../../../src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs); these service-local C# ports specify required semantics, **not delivered Payment HTTP endpoints or agreed Payment wire authentication**. There is no `src/Shared` build dependency.
+Payment owner handoff, rechecked against the local source on 11 November 2026 at checkout `fff33f8f` (after the Payment merge). This is source review, not live verification. **Payment implementation remains with the Payment teammate. Facility producer implementation is now included in the Operations/Facility task.** Operations ports are in [BookingContracts.cs](../../../src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs); these service-local C# ports specify required semantics, **not agreed production Payment wire authentication**. There is no `src/Shared` build dependency.
+
+**12 November source update:** The Operations Payment adapter and dedicated confirmation consumer now exist locally, with minimal Payment compatibility fixes for preview/quote/order idempotency. This does not change Payment ownership or close the production authentication, zero-price, collection-binding, reconciliation or event-contract gates. The active generic `PaymentSucceededV1` path is an open deviation requiring owner review; tests and live integration are NOT RUN.
 
 ## Delivery requested from the Payment teammate
 
@@ -79,14 +81,21 @@ This affects the parking fee collected at exit for a vehicle that entered on a r
 
 **Acceptance evidence:** Delay RabbitMQ delivery after confirming a 0 VND cash checkout. Keep the parking record open and verify it updates to `Completed` with the recorded exit time after Operations commits, without a manual reload. Verify that duplicate notifications are harmless, reconnect recovers a missed update, and operators at another site receive no checkout notification. Live verification is pending.
 
-## Operations work still required before live sales
+## Operations source status — 12 November 2026
 
-The local draft contains review/preview/receipt/own-booking routes, persisted binding, guarded evaluation-time confirmation. Facility producer/transport, quota/capacity and booking-restriction checks are implemented in the unverified Commit 1 draft. The commercial adapter still returns explicit unavailable errors; no live paid booking is enabled. The following are **Operations work**, not delegated Payment fixes:
+The local Operations source now has the short `HOLD_CREATED` receipt, hold-event dispatch, persisted order/zero-price provisioning, a real Payment preview/quote/order HTTP adapter, immutable payment-evidence validation and guarded paid/zero-price confirmation. The five-second order/hold/confirmation due-work worker remains as a temporary recovery mechanism; it is not a durable scheduled command at H. See the [current integration alignment and deferred backlog](2026-11-11-SPARK-273-implementation-alignment.md).
 
-- Verify Commit 1 against both services: selected-slot first hold wins, quota/narrower scope limits, mixed-category resource accounting, plate exclusion, expiry, cancellation evidence and durable Facility recovery. See [the integration handoff](2026-11-10-reservation-events-and-facility-integration.md).
-- Move external calls out of guarded database transactions and finish durable stages/replay/compensation for ambiguous owner acceptance. Current draft progression still makes owner calls while holding locks and is not release-ready.
-- Integrate the agreed owner transports, collection notifications and post-terminal reconciliation. The current worker only polls open receipts; it cannot discover money arriving after completion by itself.
-- Complete bounded readiness, failure handling and deployment evidence. Do not turn unavailable implementations into permissive success to demonstrate a happy path.
+**Current paid-confirmation path:** Operations consumes `PaymentSucceededV1` through a reservation-specific queue and filters `ReferenceType=RESERVATION`; the Gate consumer filters `PARKING_SESSION`. The local event URN was confirmed against Payment's MessageUrn convention. The event itself lacks quote/terms binding, so Operations validates the event against the persisted accepted order/reservation snapshot. This deviates from the 11 November preference for `ReservationDepositCollectedV1`/equivalent schema and requires architecture-owner review; `ReservationDepositCollectedV1` remains registered but has no producer.
+
+**Still blocked before live sales:** zero-price acceptance and reconciliation remain fail-closed; `CollectionsAsync` fails closed unless Payment persists/supplies quote/terms binding; production Operations→Payment machine authentication is unresolved because `X-Internal-Service-Key` is honored only in Payment Development; and the Payment event schema/topology, durable confirmation/decline outcome delivery, provider verification and reliable late/additional-collection handling remain unverified. There is no EF Inbox on the Payment endpoint and no general persisted `EventId` inbox. No end-to-end Payment/Operations flow or live delivery is claimed.
+
+The following remain **Operations/source acceptance and joint integration work**, not permission to change Payment ownership:
+
+- Verify the existing hold/receipt, one-time Account-current authorization, selected-slot/plate/quota/capacity guards, Facility dependency, cancellation evidence and persisted UoW/outbox behavior against both services. Build passes; tests and live acceptance are **NOT RUN — USER VERIFICATION REQUIRED**.
+- Keep owner calls outside guarded Operations transactions; preserve exact reviewed terms, stable operation identity, authoritative returned `orderId`, `UNKNOWN` semantics and exact H. The adapter currently calls Payment preview, quote and `PUT /internal/reservation-deposit-orders/{operationId}` and validates the echoed accepted request.
+- Resolve the approved event-contract deviation: either accept and version the generic event with compensating server-side binding or implement the dedicated collection event with quote/terms/collection identity. Also implement reliable confirmation/decline delivery, late/additional collections and targeted reconciliation, with Payment as financial authority.
+- Replace Development-only service-key trust with an approved production machine-auth contract before enabling real sales.
+- Preserve the current Facility confirmation dependency and authoritative pre-T evaluation until the fast-path invariant gate is proved. Complete deployment evidence before claiming integration readiness; unavailable operations must remain fail-closed.
 
 ## Joint acceptance evidence
 

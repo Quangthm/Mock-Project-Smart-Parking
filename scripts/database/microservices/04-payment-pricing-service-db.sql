@@ -172,6 +172,8 @@ CREATE TABLE payment_orders (
     order_type VARCHAR(50) NOT NULL CHECK (order_type IN ('PARKING_FEE', 'MONTHLY_PASS_FEE', 'OVERNIGHT_FEE', 'RESERVATION_FEE')), 
     reference_type VARCHAR(50) NOT NULL CHECK (reference_type IN ('RESERVATION', 'PARKING_SESSION', 'MONTHLY_PASS')),
     reference_id UUID NOT NULL, -- Logical ID trỏ sang OperationsDb
+    quote_id UUID,
+    terms_version VARCHAR(50),
     plate_number VARCHAR(50),
     
     amount DECIMAL(14,2) NOT NULL CHECK (amount >= 0),

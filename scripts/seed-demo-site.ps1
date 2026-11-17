@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     # Accepted for command-line parity with setup.ps1; this script never prompts.
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+    [string]$DriverEmail = 'driver@gmail.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,7 @@ if ([string]::IsNullOrWhiteSpace($ownerEmail)) { $ownerEmail = 'owner@smartpark.
 if ([string]::IsNullOrWhiteSpace($operatorEmail)) { $operatorEmail = 'operator@smartpark.local' }
 if ($ownerEmail -cnotmatch '^[^@\s]+@[^@\s]+$') { throw "Invalid SMARTPARK_OWNER_EMAIL: $ownerEmail" }
 if ($operatorEmail -cnotmatch '^[^@\s]+@[^@\s]+$') { throw "Invalid SMARTPARK_OPERATOR_EMAIL: $operatorEmail" }
+if ($DriverEmail -cnotmatch '^[^@\s]+@[^@\s]+$') { throw 'DriverEmail must be a valid demo Driver email.' }
 if ($ownerEmail -eq $operatorEmail) { throw 'Owner and operator demo emails must differ.' }
 
 $ids = @{
@@ -37,6 +39,7 @@ $ids = @{
     slot8     = 'd0000000-0000-4000-8000-000000000008'
     owner_email = $ownerEmail
     operator_email = $operatorEmail
+    driver_email = $DriverEmail
 }
 
 $composeArgs = @(
@@ -46,7 +49,7 @@ $composeArgs = @(
     '-f', $composeFile
 )
 
-Write-Host '[1/6] Checking schema containers...' -ForegroundColor Cyan
+Write-Host '[1/7] Checking schema containers...' -ForegroundColor Cyan
 $running = & docker @composeArgs ps --status running --services 2>$null
 if ($LASTEXITCODE -ne 0) {
     throw 'Cannot inspect schema containers. Start Docker Desktop, then run setup.ps1.'
@@ -59,7 +62,7 @@ foreach ($service in @('user-db','facility-db','operations-db')) {
 }
 Write-Host '      OK (user-db, facility-db, operations-db)' -ForegroundColor DarkGray
 
-Write-Host '[2/6] Resolving demo accounts...' -ForegroundColor Cyan
+Write-Host '[2/7] Resolving demo accounts...' -ForegroundColor Cyan
 Write-Host "      owner=$ownerEmail operator=$operatorEmail" -ForegroundColor DarkGray
 $accountCheckSql = @'
 SELECT
@@ -172,7 +175,7 @@ function Assert-Counts {
 
 $demoDir = Join-Path $PSScriptRoot 'database/seeds/demo'
 
-Write-Host '[3/6] Seeding identity DB...' -ForegroundColor Cyan
+Write-Host '[3/7] Seeding identity DB...' -ForegroundColor Cyan
 Invoke-SeedFile -Service 'user-db' -DatabaseUser 'smartpark_user' -DatabaseName 'smartpark_user' -Path (Join-Path $demoDir '01-identity.sql')
 $identityCounts = Get-SeedCounts -Service 'user-db' -DatabaseUser 'smartpark_user' -DatabaseName 'smartpark_user' -Sql @'
 SELECT
@@ -193,7 +196,7 @@ SELECT
 Assert-Counts -Label 'identity' -Actual $identityCounts -Expected @('1','1','1')
 Write-Host '      OK (tenant + 2 accounts + 1 grant)' -ForegroundColor DarkGray
 
-Write-Host '[4/6] Seeding facility DB...' -ForegroundColor Cyan
+Write-Host '[4/7] Seeding facility DB...' -ForegroundColor Cyan
 Invoke-SeedFile -Service 'facility-db' -DatabaseUser 'smartpark_facility' -DatabaseName 'smartpark_facility' -Path (Join-Path $demoDir '02-facility.sql')
 $facilityCounts = Get-SeedCounts -Service 'facility-db' -DatabaseUser 'smartpark_facility' -DatabaseName 'smartpark_facility' -Sql @'
 SELECT
@@ -206,7 +209,7 @@ SELECT
 Assert-Counts -Label 'facility' -Actual $facilityCounts -Expected @('1','2','48','2','48')
 Write-Host '      OK (1 site, 2 units, 48 slots)' -ForegroundColor DarkGray
 
-Write-Host '[5/6] Seeding reservation DB...' -ForegroundColor Cyan
+Write-Host '[5/7] Seeding reservation DB...' -ForegroundColor Cyan
 Invoke-SeedFile -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Path (Join-Path $demoDir '03-reservation.sql')
 $reservationCounts = Get-SeedCounts -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Sql @'
 SELECT
@@ -220,7 +223,45 @@ SELECT
 Assert-Counts -Label 'reservation' -Actual $reservationCounts -Expected @('2','2','1')
 Write-Host '      OK (2 pools, 2 configs, 1 policy)' -ForegroundColor DarkGray
 
-Write-Host '[6/6] Demo data ready.' -ForegroundColor Green
+Write-Host '[6/7] Seeding demo Driver reservation history...' -ForegroundColor Cyan
+$driver = Get-SeedCounts -Service 'user-db' -DatabaseUser 'smartpark_user' -DatabaseName 'smartpark_user' -Sql @'
+SELECT count(*)::text || '|' || coalesce(min(u.id::text), '') || '|' || coalesce(min(a.id::text), '')
+FROM users u
+JOIN accounts a ON a.user_id = u.id
+WHERE lower(u.email) = lower(:'driver_email')
+  AND u.deleted_at IS NULL AND u.status = 'ACTIVE'
+  AND a.deleted_at IS NULL AND a.status = 'ACTIVE' AND a.role_code = 'DRIVER';
+'@
+$driverParts = @($driver -split '\|')
+if ($driverParts[0] -eq '0') {
+    Write-Warning "No active demo Driver Account found for $DriverEmail. Reservation history was skipped."
+    Write-Host '      For the standard demo Driver, run .\scripts\repair-demo-identity.ps1 -Apply, then rerun this seed.' -ForegroundColor Yellow
+}
+elseif ($driverParts[0] -ne '1' -or $driverParts.Count -ne 3) {
+    Write-Warning "Expected exactly one active demo Driver Account for $DriverEmail. Reservation history was skipped."
+}
+else {
+    $ids['driver_user_id'] = ([guid]$driverParts[1]).ToString()
+    $ids['driver_account_id'] = ([guid]$driverParts[2]).ToString()
+    $historySlots = Get-SeedCounts -Service 'facility-db' -DatabaseUser 'smartpark_facility' -DatabaseName 'smartpark_facility' -Sql @'
+SELECT string_agg(id::text, '|' ORDER BY slot_code)
+FROM parking_slots
+WHERE tenant_id = :'tenant_id'::uuid AND site_id = :'site_id'::uuid AND deleted_at IS NULL
+  AND slot_code IN ('CarParkingSpace_001', 'CarParkingSpace_002', 'CarParkingSpace_013',
+                    'CarParkingSpace_014', 'CarParkingSpace_015');
+'@
+    $slotParts = @($historySlots -split '\|')
+    if ($slotParts.Count -ne 5) {
+        throw 'Expected five DEMO-HQ CAR slots for reservation history. Check the Facility demo seed.'
+    }
+    for ($i = 0; $i -lt $slotParts.Count; $i++) {
+        $ids["history_slot$($i + 1)"] = ([guid]$slotParts[$i]).ToString()
+    }
+    Invoke-SeedFile -Service 'operations-db' -DatabaseUser 'smartpark_operations' -DatabaseName 'smartpark_operations' -Path (Join-Path $demoDir '06-reservation-history.sql')
+    Write-Host "      OK (reservation history for $DriverEmail)" -ForegroundColor DarkGray
+}
+
+Write-Host '[7/7] Demo data ready.' -ForegroundColor Green
 Write-Host "      Site: DEMO-HQ ($($ids['site_id']))"
 Write-Host "      Owner: $ownerEmail (password: SMARTPARK_OWNER_PASSWORD in .env)"
 Write-Host "      Operator: $operatorEmail (password: SMARTPARK_OPERATOR_PASSWORD in .env)"
