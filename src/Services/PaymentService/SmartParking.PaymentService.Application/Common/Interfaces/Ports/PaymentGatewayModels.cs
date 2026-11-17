@@ -13,7 +13,8 @@ public record PaymentInitiateRequest(
     string Description,
     string ReturnUrl,
     string CancelUrl,
-    DateTimeOffset ExpiresAt
+    DateTimeOffset ExpiresAt,
+    Guid? PaymentOrderId = null
 );
 
 public record PaymentInitiateResult(

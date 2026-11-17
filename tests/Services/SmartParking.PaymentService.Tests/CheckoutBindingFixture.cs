@@ -11,7 +11,8 @@ internal sealed class CheckoutBindingFixture : ICheckoutBindingRepository
 
     public static CheckoutSigningBindings Create() => new(new CheckoutBindingFixture(), new EphemeralDataProtectionProvider());
 
-    public Task StoreIfAbsentAsync(long orderCode, string protectedBinding, CancellationToken cancellationToken)
+    public Task StoreIfAbsentAsync(long orderCode, string protectedBinding, CancellationToken cancellationToken,
+        CheckoutBindingProvenance? provenance = null)
     {
         bindings.TryAdd(orderCode, protectedBinding);
         return Task.CompletedTask;
@@ -19,4 +20,6 @@ internal sealed class CheckoutBindingFixture : ICheckoutBindingRepository
 
     public Task<string?> ReadAsync(long orderCode, CancellationToken cancellationToken) =>
         Task.FromResult(bindings.TryGetValue(orderCode, out var value) ? value : null);
+
+    public Task<string?> ReadLegacyAsync(long orderCode, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
 }

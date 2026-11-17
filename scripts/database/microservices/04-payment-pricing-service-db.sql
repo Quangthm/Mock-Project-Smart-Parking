@@ -195,6 +195,19 @@ CREATE INDEX idx_payment_orders_pending_checkout
     ON payment_orders(site_id, status, expires_at)
     WHERE status = 'PENDING';
 
+-- SPARK-340 F6/F7: verification metadata is owned by Payment, not pricing history.
+CREATE TABLE checkout_signing_bindings (
+    order_code BIGINT PRIMARY KEY CHECK (order_code > 0),
+    payment_order_id UUID NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
+    protected_binding TEXT NOT NULL CHECK (length(protected_binding) > 0),
+    source VARCHAR(24) NOT NULL CHECK (source IN ('CHECKOUT', 'LEGACY_IMPORT', 'LEGACY_POLICY')),
+    evidence_reference VARCHAR(256),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX ux_checkout_signing_binding_order ON checkout_signing_bindings(payment_order_id);
+COMMENT ON TABLE checkout_signing_bindings IS
+    'Immutable protected checkout verification metadata. Retain with financial history; no tariff pruning or automatic TTL.';
+
 -- 4. BẢNG GIAO DỊCH DÒNG TIỀN (PAYMENT TRANSACTIONS)
 CREATE TABLE payment_transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

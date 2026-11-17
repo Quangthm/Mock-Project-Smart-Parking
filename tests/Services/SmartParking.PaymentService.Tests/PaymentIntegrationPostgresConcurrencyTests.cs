@@ -10,6 +10,8 @@ using SmartParking.PaymentService.Infrastructure.Options;
 using SmartParking.PaymentService.Infrastructure.Services;
 using SmartParking.PaymentService.Persistence;
 using SmartParking.PaymentService.Persistence.Repositories;
+using SmartParking.PaymentService.Domain.Entities;
+using SmartParking.PaymentService.Domain.Enums;
 using Xunit;
 
 namespace SmartParking.PaymentService.Tests;
@@ -40,12 +42,13 @@ public sealed class PaymentPostgresFactAttribute : FactAttribute
 /// with a transaction-scoped PostgreSQL advisory lock on the deterministic policy id, so every
 /// writer observes a distinct, contiguous revision number.
 /// </summary>
-public class PaymentIntegrationPostgresConcurrencyTests
+public partial class PaymentIntegrationPostgresConcurrencyTests
 {
     [PaymentPostgresFact, Trait("Category", "Postgres")]
     public async Task CheckoutBinding_IsCommittedAndReadableByIndependentConnectionBeforeOutbound()
     {
         await using var fixture = await PaymentTempDatabase.CreateAsync();
+        await SeedCheckoutAsync(fixture, 741852965);
         var protection = new EphemeralDataProtectionProvider();
         var options = Options.Create(new PayOsOptions
         {
@@ -54,10 +57,12 @@ public class PaymentIntegrationPostgresConcurrencyTests
         });
         var settings = new PaymentIntegrationSettingsStore(options);
         await using var writer = fixture.Open();
+        var writerPid = await BackendPidAsync(writer);
         var bindings = new CheckoutSigningBindings(new CheckoutBindingRepository(writer), protection);
         using var handler = new BindingVisibilityHandler(async () =>
         {
             await using var reader = fixture.Open();
+            Assert.NotEqual(writerPid, await BackendPidAsync(reader));
             var recovered = new CheckoutSigningBindings(new CheckoutBindingRepository(reader), protection);
             Assert.Equal("synthetic-commit-checksum", await recovered.ReadChecksumKeyAsync(741852965, default));
         });
@@ -99,6 +104,7 @@ public class PaymentIntegrationPostgresConcurrencyTests
             return services.BuildServiceProvider();
         }
         const long orderCode = 741852963;
+        await SeedCheckoutAsync(fixture, orderCode);
         await using var initial = fixture.Open();
         var initialCount = await initial.PolicyRevisions.CountAsync();
         var issued = new PaymentConfigurationSnapshot(7, "SANDBOX", "https://api-merchant.payos.vn",
@@ -126,13 +132,41 @@ public class PaymentIntegrationPostgresConcurrencyTests
                     ChecksumKey = "synthetic-rotated-checksum" }, default));
                 Assert.Equal(issued.ChecksumKey, await binding.ReadChecksumKeyAsync(orderCode, default));
                 Assert.Null(await binding.ReadChecksumKeyAsync(orderCode + 1, default));
-                Assert.Equal(initialCount + 1, await db.PolicyRevisions.CountAsync());
+                Assert.Equal(initialCount, await db.PolicyRevisions.CountAsync());
+                Assert.Equal(1, await db.Set<CheckoutSigningBinding>().CountAsync());
             }
         }
         finally
         {
-            keyDirectory.Delete(recursive: true);
+            DeleteTemporaryBindingDirectory(keyDirectory);
         }
+    }
+
+    private static async Task<int> BackendPidAsync(PaymentDbContext db)
+    {
+        await db.Database.OpenConnectionAsync();
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT pg_backend_pid()";
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task SeedCheckoutAsync(PaymentTempDatabase fixture, long code)
+    {
+        await using var db = fixture.Open();
+        var order = new PaymentOrder
+        {
+            Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), SiteId = Guid.NewGuid(), AccountId = Guid.NewGuid(),
+            OrderCode = code.ToString(System.Globalization.CultureInfo.InvariantCulture), ReferenceId = Guid.NewGuid(),
+            Amount = 25000, FinalAmount = 25000
+        };
+        db.PaymentOrders.Add(order);
+        db.PaymentTransactions.Add(new PaymentTransaction
+        {
+            Id = Guid.NewGuid(), TenantId = order.TenantId, PaymentOrderId = order.Id,
+            Amount = 25000, GatewayTransactionId = "legacy-link-" + code,
+            CheckoutUrl = "https://example.invalid/checkout/" + code
+        });
+        await db.SaveChangesAsync();
     }
 
     [PaymentPostgresFact, Trait("Category", "Postgres")]

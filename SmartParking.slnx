@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/scripts/payment/">
+    <Project Path="scripts/payment/SmartParking.CheckoutBindingRepair/SmartParking.CheckoutBindingRepair.csproj" />
+  </Folder>
   <Folder Name="/scripts/architecture/">
     <Project Path="scripts/architecture/SmartParking.Architecture.Tests/SmartParking.Architecture.Tests.csproj" />
   </Folder>

@@ -188,7 +188,8 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             Description: description,
             ReturnUrl: request.ReturnUrl ?? "https://smartparking.vn/driver/checkout/success",
             CancelUrl: request.CancelUrl ?? "https://smartparking.vn/driver/checkout/cancel",
-            ExpiresAt: expiresAt
+            ExpiresAt: expiresAt,
+            PaymentOrderId: order.Id
         );
 
         var gatewayResult = await _paymentGatewayPort.InitiatePaymentAsync(gatewayRequest, cancellationToken);

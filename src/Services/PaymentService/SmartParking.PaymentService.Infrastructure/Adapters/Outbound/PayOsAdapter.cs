@@ -199,7 +199,8 @@ public class PayOsAdapter : IPaymentGatewayPort
                 if (_checkoutBindings is null)
                     throw new InvalidOperationException("Missing checkout signing binding repository.");
 
-                if (!await _checkoutBindings.BindAsync(request.OrderCode, snapshot, cancellationToken))
+                if (!await _checkoutBindings.BindAsync(request.OrderCode, snapshot, cancellationToken,
+                    new Application.Common.Interfaces.Persistence.CheckoutBindingProvenance("CHECKOUT", PaymentOrderId: request.PaymentOrderId)))
                     return BindingFailure("CHECKOUT_BINDING_CONFLICT", "This checkout belongs to another signing configuration.");
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

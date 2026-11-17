@@ -115,7 +115,8 @@ public sealed class CheckoutBindingOutboundOrderingTests
         public bool FailStore { get; init; }
         public bool FailRead { get; init; }
 
-        public async Task StoreIfAbsentAsync(long orderCode, string protectedBinding, CancellationToken cancellationToken)
+        public async Task StoreIfAbsentAsync(long orderCode, string protectedBinding, CancellationToken cancellationToken,
+            CheckoutBindingProvenance? provenance = null)
         {
             StoreEntered.TrySetResult();
             await ReleaseStore.Task.WaitAsync(cancellationToken);
@@ -124,7 +125,9 @@ public sealed class CheckoutBindingOutboundOrderingTests
         }
 
         public Task<string?> ReadAsync(long orderCode, CancellationToken cancellationToken) =>
-            FailRead ? throw new InvalidOperationException("Synthetic readback outage.") : Task.FromResult(value);
+            FailRead && value is not null ? throw new InvalidOperationException("Synthetic readback outage.") : Task.FromResult(value);
+
+        public Task<string?> ReadLegacyAsync(long orderCode, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
     }
 
     private sealed class RecordingHandler(Func<CancellationToken, Task> atSend) : HttpMessageHandler
