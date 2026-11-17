@@ -38,6 +38,14 @@ public sealed class EffectiveReservationPolicy
 
 public sealed class ReservationPolicyUnavailableException(string message) : Exception(message);
 
+// Raised when activating a platform revision would make an intersecting, already-published
+// site policy (or one of its explicit overrides) incompatible with the new platform bounds.
+public sealed class PolicyBoundsConflictException(Guid siteId, string policyKey, string message) : Exception(message)
+{
+    public Guid SiteId { get; } = siteId;
+    public string PolicyKey { get; } = policyKey;
+}
+
 public static class ReservationPolicyResolver
 {
     // Values are minutes except COUNT/LIMIT. These are required keys, never runtime business defaults.
@@ -66,9 +74,11 @@ public static class ReservationPolicyResolver
             if (site.Values.TryGetValue(key, out var overridden) && overridden != value)
             {
                 if (key.StartsWith("RAPID_CANCELLATION_", StringComparison.Ordinal) || key == "DAILY_CANCELLATION_LIMIT" ||
-                    !platform.OverrideBounds.TryGetValue(key, out var bound) || bound.Minimum > bound.Maximum ||
-                    overridden < bound.Minimum || overridden > bound.Maximum)
+                    !platform.OverrideBounds.TryGetValue(key, out var bound) || bound.Minimum > bound.Maximum)
                     throw new ReservationPolicyUnavailableException($"Policy {key} override has no applicable approved bounds.");
+                if (overridden < bound.Minimum || overridden > bound.Maximum)
+                    throw new ReservationPolicyUnavailableException(
+                        $"Policy {key} override {overridden} is outside the approved bounds {bound.Minimum}..{bound.Maximum}.");
                 value = overridden;
             }
             if (value < 0) throw new ReservationPolicyUnavailableException($"Policy {key} cannot be negative.");

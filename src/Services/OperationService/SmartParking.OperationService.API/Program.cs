@@ -26,7 +26,10 @@ public static class OperationHost
         var admissionEnabled = builder.Configuration.GetValue<bool>("ReservationAdmission:Enabled");
         builder.Services.AddAuthorization();
         builder.Services.AddScoped<ICurrentActor, HttpCurrentActor>();
-        if (admissionEnabled)
+        var jwtConfigured = !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:Issuer"]) &&
+                            !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:Audience"]) &&
+                            !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:JwksUri"]);
+        if (admissionEnabled || jwtConfigured)
         {
             builder.Services.AddConsumerAuthentication(builder.Configuration);
             builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
@@ -97,7 +100,7 @@ public static class OperationHost
             await next(context);
         });
         app.UseMiddleware<InternalServiceKeyMiddleware>();
-        if (admissionEnabled) app.UseAuthentication();
+        if (admissionEnabled || jwtConfigured) app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
         app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout");

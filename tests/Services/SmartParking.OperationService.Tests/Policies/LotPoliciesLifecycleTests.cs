@@ -47,7 +47,7 @@ public class LotPoliciesLifecycleTests
             OccupancyValidityTimespanHours = 4,
             MaxAdvanceBookingDays = 7,
             InterBookingBufferMinutes = 0,
-            OverrideBounds = "{\"PAYMENT_HOLD_DURATION\":{\"Minimum\":5,\"Maximum\":30}}"
+            OverrideBounds = "{\"PAYMENT_HOLD_DURATION\":{\"Minimum\":5,\"Maximum\":30},\"ARRIVAL_LATE_TOLERANCE\":{\"Minimum\":15,\"Maximum\":30},\"RESERVATION_MIN_DURATION\":{\"Minimum\":15,\"Maximum\":60}}"
         });
         db.SaveChanges();
 

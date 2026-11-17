@@ -3,8 +3,15 @@ using SmartParking.OperationService.Application.Policies.Commands;
 
 namespace SmartParking.OperationService.Application.Policies.Validators;
 
+// Owner draft values are validated only against technical/sanity limits here. Business bounds are
+// Admin-configured and enforced at publish time (LotPolicyRepository) and by the domain resolver,
+// so a value such as 75 minutes must be accepted whenever Admin has approved a matching range.
 public sealed class SaveLotPolicyDraftCommandValidator : AbstractValidator<SaveLotPolicyDraftCommand>
 {
+    private const int MaxMinuteValue = int.MaxValue;
+    private const int MaxHourValue = int.MaxValue / 60;
+    private const int MaxDayValue = int.MaxValue / 1440;
+
     public SaveLotPolicyDraftCommandValidator()
     {
         RuleFor(x => x.SiteId)
@@ -13,10 +20,11 @@ public sealed class SaveLotPolicyDraftCommandValidator : AbstractValidator<SaveL
 
         // Flat properties validation
         RuleFor(x => x.Request.PaymentHoldDurationMinutes)
-            .InclusiveBetween(5, 30)
+            .GreaterThan(0)
+            .LessThanOrEqualTo(MaxMinuteValue)
             .When(x => x.Request.PaymentHoldDurationMinutes.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("paymentHoldDurationMinutes must be between 5 and 30 minutes.");
+            .WithMessage("paymentHoldDurationMinutes must be greater than 0.");
 
         RuleFor(x => x.Request.ArrivalLateToleranceMinutes)
             .InclusiveBetween(15, 30)
@@ -25,67 +33,77 @@ public sealed class SaveLotPolicyDraftCommandValidator : AbstractValidator<SaveL
             .WithMessage("arrivalLateToleranceMinutes must be between 15 and 30 minutes.");
 
         RuleFor(x => x.Request.MinReservationDurationMinutes)
-            .InclusiveBetween(15, 60)
+            .GreaterThan(0)
+            .LessThanOrEqualTo(MaxMinuteValue)
             .When(x => x.Request.MinReservationDurationMinutes.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("minReservationDurationMinutes must be between 15 and 60 minutes.");
+            .WithMessage("minReservationDurationMinutes must be greater than 0.");
 
         RuleFor(x => x.Request.MaxReservationDurationHours)
-            .InclusiveBetween(1, 168)
+            .GreaterThan(0)
+            .LessThanOrEqualTo(MaxHourValue)
             .When(x => x.Request.MaxReservationDurationHours.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("maxReservationDurationHours must be between 1 and 168 hours.");
+            .WithMessage($"maxReservationDurationHours must be between 1 and {MaxHourValue} hours.");
 
         RuleFor(x => x.Request.ReservationProtectionWindowHours)
-            .InclusiveBetween(1, 12)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxHourValue)
             .When(x => x.Request.ReservationProtectionWindowHours.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("reservationProtectionWindowHours must be between 1 and 12 hours.");
+            .WithMessage($"reservationProtectionWindowHours must be between 0 and {MaxHourValue} hours.");
 
         RuleFor(x => x.Request.AllocationLeadTimeMinutes)
-            .InclusiveBetween(15, 180)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxMinuteValue)
             .When(x => x.Request.AllocationLeadTimeMinutes.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("allocationLeadTimeMinutes must be between 15 and 180 minutes.");
+            .WithMessage("allocationLeadTimeMinutes must not be negative.");
 
         RuleFor(x => x.Request.OccupancyValidityTimespanHours)
-            .InclusiveBetween(1, 8)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxHourValue)
             .When(x => x.Request.OccupancyValidityTimespanHours.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("occupancyValidityTimespanHours must be between 1 and 8 hours.");
+            .WithMessage($"occupancyValidityTimespanHours must be between 0 and {MaxHourValue} hours.");
 
         RuleFor(x => x.Request.MaxAdvanceBookingDays)
-            .InclusiveBetween(1, 30)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxDayValue)
             .When(x => x.Request.MaxAdvanceBookingDays.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("maxAdvanceBookingDays must be between 1 and 30 days.");
+            .WithMessage($"maxAdvanceBookingDays must be between 0 and {MaxDayValue} days.");
 
         RuleFor(x => x.Request.InterBookingBufferMinutes)
-            .InclusiveBetween(0, 60)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxMinuteValue)
             .When(x => x.Request.InterBookingBufferMinutes.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("interBookingBufferMinutes must be between 0 and 60 minutes.");
+            .WithMessage("interBookingBufferMinutes must not be negative.");
 
         RuleFor(x => x.Request.DriverReallocationRequestLimit)
-            .InclusiveBetween(0, 5)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxMinuteValue)
             .When(x => x.Request.DriverReallocationRequestLimit.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("driverReallocationRequestLimit must be between 0 and 5.");
+            .WithMessage("driverReallocationRequestLimit must not be negative.");
 
         RuleFor(x => x.Request.FacilityFailureRefundLeadMinutes)
-            .InclusiveBetween(15, 60)
+            .GreaterThanOrEqualTo(0)
+            .LessThanOrEqualTo(MaxMinuteValue)
             .When(x => x.Request.FacilityFailureRefundLeadMinutes.HasValue)
             .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-            .WithMessage("facilityFailureRefundLeadMinutes must be between 15 and 60 minutes.");
+            .WithMessage("facilityFailureRefundLeadMinutes must not be negative.");
 
         // Nested policies envelope validation
         When(x => x.Request.Policies != null, () =>
         {
             RuleFor(x => x.Request.Policies!.PaymentHoldDurationMinutes)
-                .InclusiveBetween(5, 30)
+                .GreaterThan(0)
+                .LessThanOrEqualTo(MaxMinuteValue)
                 .When(x => x.Request.Policies!.PaymentHoldDurationMinutes.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("paymentHoldDurationMinutes must be between 5 and 30 minutes.");
+                .WithMessage("paymentHoldDurationMinutes must be greater than 0.");
 
             RuleFor(x => x.Request.Policies!.ArrivalLateToleranceMinutes)
                 .InclusiveBetween(15, 30)
@@ -94,58 +112,67 @@ public sealed class SaveLotPolicyDraftCommandValidator : AbstractValidator<SaveL
                 .WithMessage("arrivalLateToleranceMinutes must be between 15 and 30 minutes.");
 
             RuleFor(x => x.Request.Policies!.MinReservationDurationMinutes)
-                .InclusiveBetween(15, 60)
+                .GreaterThan(0)
+                .LessThanOrEqualTo(MaxMinuteValue)
                 .When(x => x.Request.Policies!.MinReservationDurationMinutes.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("minReservationDurationMinutes must be between 15 and 60 minutes.");
+                .WithMessage("minReservationDurationMinutes must be greater than 0.");
 
             RuleFor(x => x.Request.Policies!.MaxReservationDurationHours)
-                .InclusiveBetween(1, 168)
+                .GreaterThan(0)
+                .LessThanOrEqualTo(MaxHourValue)
                 .When(x => x.Request.Policies!.MaxReservationDurationHours.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("maxReservationDurationHours must be between 1 and 168 hours.");
+                .WithMessage($"maxReservationDurationHours must be between 1 and {MaxHourValue} hours.");
 
             RuleFor(x => x.Request.Policies!.ReservationProtectionWindowHours)
-                .InclusiveBetween(1, 12)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxHourValue)
                 .When(x => x.Request.Policies!.ReservationProtectionWindowHours.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("reservationProtectionWindowHours must be between 1 and 12 hours.");
+                .WithMessage($"reservationProtectionWindowHours must be between 0 and {MaxHourValue} hours.");
 
             RuleFor(x => x.Request.Policies!.AllocationLeadTimeMinutes)
-                .InclusiveBetween(15, 180)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxMinuteValue)
                 .When(x => x.Request.Policies!.AllocationLeadTimeMinutes.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("allocationLeadTimeMinutes must be between 15 and 180 minutes.");
+                .WithMessage("allocationLeadTimeMinutes must not be negative.");
 
             RuleFor(x => x.Request.Policies!.OccupancyValidityTimespanHours)
-                .InclusiveBetween(1, 8)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxHourValue)
                 .When(x => x.Request.Policies!.OccupancyValidityTimespanHours.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("occupancyValidityTimespanHours must be between 1 and 8 hours.");
+                .WithMessage($"occupancyValidityTimespanHours must be between 0 and {MaxHourValue} hours.");
 
             RuleFor(x => x.Request.Policies!.MaxAdvanceBookingDays)
-                .InclusiveBetween(1, 30)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxDayValue)
                 .When(x => x.Request.Policies!.MaxAdvanceBookingDays.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("maxAdvanceBookingDays must be between 1 and 30 days.");
+                .WithMessage($"maxAdvanceBookingDays must be between 0 and {MaxDayValue} days.");
 
             RuleFor(x => x.Request.Policies!.InterBookingBufferMinutes)
-                .InclusiveBetween(0, 60)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxMinuteValue)
                 .When(x => x.Request.Policies!.InterBookingBufferMinutes.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("interBookingBufferMinutes must be between 0 and 60 minutes.");
+                .WithMessage("interBookingBufferMinutes must not be negative.");
 
             RuleFor(x => x.Request.Policies!.DriverReallocationRequestLimit)
-                .InclusiveBetween(0, 5)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxMinuteValue)
                 .When(x => x.Request.Policies!.DriverReallocationRequestLimit.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("driverReallocationRequestLimit must be between 0 and 5.");
+                .WithMessage("driverReallocationRequestLimit must not be negative.");
 
             RuleFor(x => x.Request.Policies!.FacilityFailureRefundLeadMinutes)
-                .InclusiveBetween(15, 60)
+                .GreaterThanOrEqualTo(0)
+                .LessThanOrEqualTo(MaxMinuteValue)
                 .When(x => x.Request.Policies!.FacilityFailureRefundLeadMinutes.HasValue)
                 .WithErrorCode("POLICY_OUT_OF_BOUNDS")
-                .WithMessage("facilityFailureRefundLeadMinutes must be between 15 and 60 minutes.");
+                .WithMessage("facilityFailureRefundLeadMinutes must not be negative.");
         });
 
         // Time logic: min <= max

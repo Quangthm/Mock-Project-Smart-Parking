@@ -4,6 +4,7 @@ using SmartParking.OperationService.Domain.Reservations;
 using Microsoft.AspNetCore.Diagnostics;
 using Npgsql;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
+using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Domain;
 
 namespace SmartParking.OperationService.API.Middleware;
@@ -14,6 +15,7 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         new Dictionary<Type, Func<Exception, (int, string, string)>>
         {
             [typeof(ReservationPolicyUnavailableException)] = _ => (503, "RESERVATION_POLICY_UNAVAILABLE", "Reservation policy is not configured consistently."),
+            [typeof(PolicyBoundsConflictException)] = error => (409, "POLICY_BOUNDS_CONFLICT", error.Message),
             [typeof(DbUpdateConcurrencyException)] = _ => (409, "RESOURCE_VERSION_CONFLICT", "The resource changed; reload its current state."),
             [typeof(InvalidStructureEditException)] = error => (400, "INVALID_STRUCTURE", error.Message),
             [typeof(ReservationGateException)] = error =>
@@ -29,7 +31,17 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             [typeof(SmartParking.OperationService.Domain.Policies.LotPolicyNotFoundException)] = error => (404, ((SmartParking.OperationService.Domain.Policies.LotPolicyNotFoundException)error).Code, error.Message),
             [typeof(SmartParking.OperationService.Domain.Policies.NoDraftToPublishException)] = error => (409, "NO_DRAFT_TO_PUBLISH", error.Message),
             [typeof(SmartParking.OperationService.Domain.Policies.IdempotencyPayloadMismatchException)] = error => (409, "IDEMPOTENCY_PAYLOAD_MISMATCH", error.Message),
-            [typeof(SmartParking.OperationService.Domain.Policies.PolicyOperationInProgressException)] = error => (409, "OPERATION_IN_PROGRESS", error.Message)
+            [typeof(SmartParking.OperationService.Domain.Policies.PolicyOperationInProgressException)] = error => (409, "OPERATION_IN_PROGRESS", error.Message),
+            [typeof(ForbiddenScopeException)] = error => (403, "FORBIDDEN_SCOPE_WRITE", error.Message),
+            [typeof(PolicyNotFoundException)] = error => (404, "POLICY_NOT_FOUND", error.Message),
+            [typeof(CannotModifyActivePolicyException)] = error => (409, "CANNOT_MODIFY_ACTIVE_POLICY", error.Message),
+            [typeof(ResourceVersionConflictException)] = error => (409, "RESOURCE_VERSION_CONFLICT", error.Message),
+            [typeof(OverlappingPolicyIntervalException)] = error => (409, "OVERLAPPING_POLICY_INTERVAL", error.Message),
+            [typeof(CannotActivateNonDraftException)] = error => (422, "CANNOT_ACTIVATE_NON_DRAFT", error.Message),
+            [typeof(InvalidPolicyBoundsException)] = error => (400, "POLICY_BOUNDS_VIOLATED", error.Message),
+            [typeof(InvalidRequestException)] = error => (400, "INVALID_REQUEST", error.Message),
+            [typeof(SiteTenantMismatchException)] = error => (400, "SITE_TENANT_MISMATCH", error.Message),
+            [typeof(RequestValidationFailedException)] = error => (400, "VALIDATION_FAILED", error.Message)
         };
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
@@ -40,21 +52,28 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         object? errors = null;
         if (exception is ValidationException validation)
         {
-            var primaryError = validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_TIME_DURATION")
-                ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_ACTIVATION_SCHEDULE")
-                ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "POLICY_OUT_OF_BOUNDS")
-                ?? validation.Errors.FirstOrDefault();
-
-            var errorCode = primaryError?.ErrorCode;
-            var machineCode = errorCode switch
+            if (context.Request.Path.StartsWithSegments("/api/v1/admin/policies/operations"))
             {
-                "POLICY_OUT_OF_BOUNDS" => "POLICY_OUT_OF_BOUNDS",
-                "INVALID_TIME_DURATION" => "INVALID_TIME_DURATION",
-                "INVALID_ACTIVATION_SCHEDULE" => "INVALID_ACTIVATION_SCHEDULE",
-                _ => context.Request.Path.StartsWithSegments("/internal/structure") ? "INVALID_STRUCTURE" : "INVALID_REQUEST"
-            };
+                result = (400, "VALIDATION_FAILED", "Request validation failed.");
+            }
+            else
+            {
+                var primaryError = validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_TIME_DURATION")
+                    ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_ACTIVATION_SCHEDULE")
+                    ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "POLICY_OUT_OF_BOUNDS")
+                    ?? validation.Errors.FirstOrDefault();
 
-            result = (400, machineCode, primaryError?.ErrorMessage ?? "Request validation failed.");
+                var errorCode = primaryError?.ErrorCode;
+                var machineCode = errorCode switch
+                {
+                    "POLICY_OUT_OF_BOUNDS" => "POLICY_OUT_OF_BOUNDS",
+                    "INVALID_TIME_DURATION" => "INVALID_TIME_DURATION",
+                    "INVALID_ACTIVATION_SCHEDULE" => "INVALID_ACTIVATION_SCHEDULE",
+                    _ => context.Request.Path.StartsWithSegments("/internal/structure") ? "INVALID_STRUCTURE" : "INVALID_REQUEST"
+                };
+
+                result = (400, machineCode, primaryError?.ErrorMessage ?? "Request validation failed.");
+            }
             errors = validation.Errors.Select(e => new { property = e.PropertyName, message = e.ErrorMessage });
         }
         else if (exception is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn }
@@ -65,9 +84,22 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))
             result = (503, "PROTOTYPE_SCHEMA_NOT_READY", "Reservation data is unavailable until database reconciliation is complete.");
-        else if (FindMapping(exception.GetType()) is { } map) result = map(exception);
+        else if (FindMapping(exception.GetType()) is { } map)
+        {
+            result = map(exception);
+            if (exception is InvalidPolicyBoundsException bounds)
+                errors = bounds.Errors.Select(e => new { property = e.Property, message = e.Message });
+            else if (exception is RequestValidationFailedException requestValidation)
+                errors = requestValidation.Errors.Select(e => new { property = e.Property, message = e.Message });
+            else if (exception is OverlappingPolicyIntervalException { Property: { } property })
+                errors = new[] { new { property, message = exception.Message } };
+        }
         else if (exception is BadHttpRequestException bad)
             result = (bad.StatusCode, "INVALID_REQUEST", "The request body or parameters are invalid.");
+        else if ((exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException)
+            is { SqlState: PostgresErrorCodes.ExclusionViolation, ConstraintName: "operational_policy_effective_scope" })
+            result = (409, "OVERLAPPING_POLICY_INTERVAL",
+                "Activation rejected: The specified effective interval overlaps with another active or scheduled policy revision.");
         else if ((exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException)
             is { SqlState: PostgresErrorCodes.ExclusionViolation or PostgresErrorCodes.UniqueViolation })
             result = (409, "RESOURCE_CONFLICT", "A conflicting write has already claimed this resource.");

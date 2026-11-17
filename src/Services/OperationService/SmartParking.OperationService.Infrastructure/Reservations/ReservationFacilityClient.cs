@@ -42,7 +42,7 @@ public sealed class ReservationFacilityClient(HttpClient client, IConfiguration 
             var token = new JwtSecurityToken("SmartParking.OperationService", "SmartParking.FacilityService",
                 [new Claim("sub", "SmartParking.OperationService"), new Claim("sender", "SmartParking.OperationService"),
                  new Claim("permission", "reservation:facility-dependency"), new Claim("jti", Guid.NewGuid().ToString("N"))],
-                now, now.AddMinutes(1), new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256));
+                now, now.AddMinutes(1), new SigningCredentials(new RsaSecurityKey(rsa.ExportParameters(true)), SecurityAlgorithms.RsaSha256));
             using var request = new HttpRequestMessage(method, route);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
             if (body is not null) request.Content = JsonContent.Create(body);

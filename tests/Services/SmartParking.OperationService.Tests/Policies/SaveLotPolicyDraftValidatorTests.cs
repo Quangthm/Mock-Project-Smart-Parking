@@ -35,14 +35,14 @@ public class SaveLotPolicyDraftValidatorTests
     }
 
     [Fact]
-    public void Validate_PaymentHoldDurationBelowMin_HasValidationError()
+    public void Validate_PaymentHoldDurationZero_HasValidationError()
     {
         var command = new SaveLotPolicyDraftCommand(
             SiteId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Request: new SavePolicyDraftRequest
             {
-                PaymentHoldDurationMinutes = 2 // < 5
+                PaymentHoldDurationMinutes = 0 // technical guard: must be positive
             }
         );
 
@@ -51,19 +51,21 @@ public class SaveLotPolicyDraftValidatorTests
     }
 
     [Fact]
-    public void Validate_PaymentHoldDurationAboveMax_HasValidationError()
+    public void Validate_PaymentHoldDurationAboveLegacyBusinessMaximum_IsAccepted()
     {
+        // Owner draft validation keeps technical limits only. 45 minutes used to be rejected by a
+        // hardcoded 5..30 range; the Admin-configured bound is now enforced at publish time.
         var command = new SaveLotPolicyDraftCommand(
             SiteId: Guid.NewGuid(),
             ActorId: Guid.NewGuid(),
             Request: new SavePolicyDraftRequest
             {
-                PaymentHoldDurationMinutes = 45 // > 30
+                PaymentHoldDurationMinutes = 45
             }
         );
 
         var result = _validator.TestValidate(command);
-        result.ShouldHaveValidationErrorFor(x => x.Request.PaymentHoldDurationMinutes);
+        result.ShouldNotHaveValidationErrorFor(x => x.Request.PaymentHoldDurationMinutes);
     }
 
     [Fact]

@@ -21,7 +21,7 @@ public static class ConsumerAuthenticationRegistration
         if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) ||
             !Uri.TryCreate(address, UriKind.Absolute, out var endpoint) || endpoint.Scheme is not ("https" or "http"))
             throw new InvalidOperationException("Configure JwtValidation issuer, audience and trusted JWKS URL.");
-        if (endpoint.Scheme != "https" && !configuration.GetValue<bool>("JwtValidation:AllowInsecureTransport"))
+        if (endpoint.Scheme != "https" && !IsInsecureTransportAllowed(configuration, endpoint))
             throw new InvalidOperationException("JWKS requires HTTPS unless protected/local HTTP is explicitly configured.");
 
         services.TryAddSingleton(TimeProvider.System);
@@ -65,6 +65,15 @@ public static class ConsumerAuthenticationRegistration
             });
         services.AddAuthorization();
         return services;
+    }
+
+    private static bool IsInsecureTransportAllowed(IConfiguration configuration, Uri endpoint)
+    {
+        var configured = configuration.GetValue<bool?>("JwtValidation:AllowInsecureTransport");
+        if (configured is { } value) return value;
+        var environment = configuration["ASPNETCORE_ENVIRONMENT"] ?? configuration["DOTNET_ENVIRONMENT"];
+        if (string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase)) return true;
+        return endpoint.IsLoopback || !endpoint.Host.Contains('.');
     }
 
     private static bool HasIdentity(ClaimsPrincipal? principal) => principal is not null &&

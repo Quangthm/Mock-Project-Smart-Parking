@@ -3,11 +3,6 @@ using SmartParking.OperationService.Domain.Reservations;
 
 namespace SmartParking.OperationService.Application.Reservations;
 
-public interface IReservationPolicyRepository
-{
-    Task<IReadOnlyList<ReservationPolicyRevision>> ReadEffectiveAsync(Guid tenantId, Guid siteId, DateTimeOffset at, CancellationToken ct);
-}
-
 // Internal composition request: callers must first obtain trusted tenant/site facts from Facility.
 // No policy-management or arbitrary tenant-selected HTTP endpoint is exposed by this task.
 public sealed record ResolveReservationPoliciesQuery(Guid TenantId, Guid SiteId, DateTimeOffset At)
