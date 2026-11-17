@@ -22,7 +22,7 @@ Close the remaining G01 evidence gap without treating counters, checkout or an e
 | FR-CAP-01 / UC-SEARCH-01 | [Discovery](../../01-requirements/srs/modules/03-discovery-visualization.md) |
 | Claim/occupancy policy | [Reservations/allocation](../../01-requirements/srs/modules/04-reservations-allocation.md), including effective protection and occupancy validity settings |
 | Service ownership | [Ownership and events](../../02-architecture/service-boundaries/ownership-and-events.md) |
-| Approved source direction | [P01–P04 packet](assistant-s06-search-owner-proposal.md), [current handoff](../ai/business-data-integration.md) |
+| Approved source direction | [P01–P04 packet](assistant-s06-search-owner-proposal.md), [current handoff](../ai/chatbot-design.md#business-data-integration) |
 | Auth classification | [Operation matrix](../../01-requirements/srs/authorization-operation-classification.md) |
 
 ## Source evidence before evaluator integration

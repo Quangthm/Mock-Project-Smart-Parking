@@ -1,4 +1,4 @@
--- REVIEW ONLY. Do not run automatically. Backup/rollback: docs/03-design/ai/conversation-and-recovery.md.
+-- REVIEW ONLY. Do not run automatically. Backup/rollback: docs/03-design/ai/chatbot-design.md#conversation-and-recovery.
 -- Run in the IoT database/schema used by the existing management datasource.
 BEGIN;
 SET LOCAL lock_timeout = '5s';

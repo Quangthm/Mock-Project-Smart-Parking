@@ -13,13 +13,13 @@ published_by: null
 
 # Kiến thức SmartPark — bản mở rộng
 
-Đây là nguồn biên tập tiếng Việt 0.4.0 cho FAQ công khai và người lái, kế thừa [bản lưu 0.3.1](../../luu-tru/knowledge/smartpark-knowledge-old.md). Nội dung dựa trên các quy tắc sản phẩm đã ghi nhận và mô tả tính năng theo khả năng được triển khai. Chính sách hiệu lực, trạng thái bãi và giao dịch cụ thể cần dữ liệu backend có thẩm quyền.
+Đây là nguồn biên tập tiếng Việt 0.4.0 cho FAQ công khai và người lái, kế thừa [bản lưu 0.3.1](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/7d8b3e3e41a42c26212ad941805f91acab6cce57/docs/03-design/ai/luu-tru/knowledge/smartpark-knowledge-old.md). Nội dung dựa trên các quy tắc sản phẩm đã ghi nhận và mô tả tính năng theo khả năng được triển khai. Chính sách hiệu lực, trạng thái bãi và giao dịch cụ thể cần dữ liệu backend có thẩm quyền.
 
 ### Hướng dẫn biên tập và kiểm tra
 
 - Dùng mã mục ổn định trong dấu ngoặc vuông và các từ khóa Việt/Anh phân cách bằng dấu chấm phẩy. Chỉ phần “Nội dung” của mục được đưa vào ngữ cảnh trả lời. Giữ căn cứ và ghi chú biên tập ở “Đối chiếu — không gửi đến AI”.
 - Giữ đơn vị, điều kiện biên, cấu hình mặc định và ngoại lệ trong cùng đoạn quy tắc. Thêm các cách gọi đặc trưng để tìm đúng mục. Duy trì một nguồn nội dung tiếng Việt để diễn đạt sang tiếng Anh.
-- Bản trong repo ở trạng thái nháp. Khi phát hành, tạo bản triển khai đã duyệt mang tên smartpark-knowledge.md cùng manifest khớp theo [Knowledge và xuất bản](../../knowledge-and-faq.md).
+- Bản trong repo ở trạng thái nháp. Khi phát hành, tạo bản triển khai đã duyệt mang tên smartpark-knowledge.md cùng manifest khớp theo [Knowledge và xuất bản](../../chatbot-design.md#knowledge-and-faq).
 
 ## [vehicle-guide] Loại xe được SmartPark phục vụ
 

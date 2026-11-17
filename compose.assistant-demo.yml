@@ -1,5 +1,5 @@
 # Opt-in overlay: use AFTER compose.app.yml in the same smartpark-app project.
-# Start/clean up only the named services; see docs/03-design/ai/chatbot-scaffold.md.
+# Start/clean up only the named services; see docs/03-design/ai/chatbot-design.md#chatbot-scaffold.
 services:
   assistant-demo:
     build:

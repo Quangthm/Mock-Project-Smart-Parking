@@ -15,7 +15,7 @@ git branch --show-current          # nhánh làm việc mặc định: develop
 
 ## 1. Prerequisites
 
-Chatbot API demo độc lập: xem [hướng dẫn chạy và phạm vi dữ liệu mẫu](docs/03-design/ai/chatbot-scaffold.md#demo-api--hướng-dẫn-chạy-và-phạm-vi). Chạy opt-in bằng tham số lệnh, không thuộc `setup.ps1`/Compose; chưa kết nối tài khoản, DB hay dịch vụ AI.
+Chatbot API demo độc lập: xem [hướng dẫn chạy và phạm vi dữ liệu mẫu](docs/03-design/ai/archive/design-history.md#legacy-guide--chatbot-scaffold--demo-api--hướng-dẫn-chạy-và-phạm-vi). Chạy opt-in bằng tham số lệnh, không thuộc `setup.ps1`/Compose; chưa kết nối tài khoản, DB hay dịch vụ AI.
 
 Checklist trước khi setup:
 
@@ -114,7 +114,7 @@ Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bả
 | `Assistant__Jwt__PublicKeyFile`, `Assistant__Jwt__Issuer`, `Assistant__Jwt__Audience` | Public PEM tương ứng và issuer/audience đang dùng của UserService. Docker mặc định dùng `SmartParking.UserService` và `SmartParking`. |
 | `Assistant__Management__KeyDirectory` | Thư mục keyring ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
 | `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
-| `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). |
+| `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/archive/design-history.md#legacy-guide--knowledge-and-faq--publication-manual-admin-controlled-deployment). |
 | `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
 
 Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`; Admin nhập trong Settings sau khi container đã chạy.
@@ -189,7 +189,7 @@ Chạy lần lượt hai runner sau. User mở HTTPS cổng 8443 trong Docker ne
 
 `User`/`All` chọn `compose.user-tls.yml` khi TLS được bật. Setup Assistant chọn `compose.assistant-trust.yml` khi có CA public. Khi gia hạn, dùng đường dẫn chứng chỉ mới rồi chạy lại hai runner để Compose cập nhật mount. Nghiệm thu bằng Driver thật hỏi `Xe của tôi`, đối chiếu với My Vehicles. Danh sách rỗng cần hiện rõ rỗng; lỗi TLS hoặc owner cần hiện lỗi nguồn.
 
-Với volume IoT có sẵn mà phần chatbot còn trống, runner Assistant bổ sung các bảng trong một transaction. Với DB đã chạy S05, sao lưu, dừng Assistant cũ và áp migration mới theo [hướng dẫn hội thoại](docs/03-design/ai/conversation-and-recovery.md#approval-and-scope) trước khi dựng bản mới. Setup kiểm tra schema đã nâng cấp. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
+Với volume IoT có sẵn mà phần chatbot còn trống, runner Assistant bổ sung các bảng trong một transaction. Với DB đã chạy S05, sao lưu, dừng Assistant cũ và áp migration mới theo [hướng dẫn hội thoại](docs/03-design/ai/archive/design-history.md#legacy-guide--conversation-and-recovery--approval-and-scope) trước khi dựng bản mới. Setup kiểm tra schema đã nâng cấp. Nếu DB đã có credential hoặc lịch sử, kiểm tra keyring và PFX là bộ gốc rồi đặt `SMARTPARK_ASSISTANT_DOCKER_USE_EXISTING_KEYRING=true` để dùng tiếp. Keyring DPAPI từ host Windows cần quy trình chuyển đổi riêng trước khi dùng Linux container. Khi sao lưu, giữ DB, keyring và PFX cùng nhau. Xem [ma trận nghiệm thu](docs/04-testing/assistant-handoff-testing.md).
 
 ### Cảnh báo ghi đè và mất dữ liệu
 

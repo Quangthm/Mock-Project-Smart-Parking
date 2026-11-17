@@ -1,6 +1,6 @@
 # SmartPark Assistant — P0 API theo phương án B
 
-**Amendment 10/11/2026.** The current-chat contract supersedes historical Driver-only and conversation expiry rules in this document. Driver, Admin and Business/Owner each have one current chat per Account and role. Confirmed reset hides the old chat and makes it due for deletion after seven days. See [current chat and recovery](../ai/conversation-and-recovery.md#approval-and-scope).
+**Amendment 10/11/2026.** The current-chat contract supersedes historical Driver-only and conversation expiry rules in this document. Driver, Admin and Business/Owner each have one current chat per Account and role. Confirmed reset hides the old chat and makes it due for deletion after seven days. See [current chat and recovery](../ai/archive/design-history.md#legacy-guide--conversation-and-recovery--approval-and-scope).
 
 | Metadata | Giá trị |
 | --- | --- |
@@ -11,14 +11,14 @@
 | Requirements baseline | [SRS v1.1](../../01-requirements/srs/smartpark-srs-v1.1.md); không thay status của requirements |
 | Implementation | R1 PARTIAL trên working tree AI-ChatBot, base 78336604fbe1adc3c3a685e0165a5253c3deca6c: JWT/actor/errors/capabilities kiểm chứng qua TestServer; chưa có production host/config lifecycle; R2–R4 chưa triển khai |
 | Provenance | Chọn lọc schema/route/retry từ recovery a9b8c8ef3abe353044bfeafabc097c65639193b8; bỏ evidence cũ và auth A |
-| Approval evidence | Người dùng xác nhận nhóm chọn B và đồng ý chuyển đổi trong chat 02/11/2026; [session](../../../ai/tasks/archive/chatbot-implementation-history.md#nhat-ky-1) ghi scope |
-| Plan | [Kế hoạch chuyển đổi](../ai/luu-tru/design-history.md#tai-lieu-2) |
+| Approval evidence | Người dùng xác nhận nhóm chọn B và đồng ý chuyển đổi trong chat 02/11/2026; [session](../../../ai/tasks/active/chatbot-development-progress.md#nhat-ky-1) ghi scope |
+| Plan | [Kế hoạch chuyển đổi](../ai/archive/design-history.md#tai-lieu-2) |
 
 ## Overview
 
 S01 ngày 05/11/2026 bổ sung [target end-to-end v0.4.1](assistant-s01-end-to-end-api-design.md) cho guest, Driver tools/draft và configuration model riêng. Đây là overlay IN REVIEW: giữ P0 làm nguồn token/ledger/history và behavior demo hiện tại; không suy ra target đã được duyệt hay triển khai. Retention và các delta mới phải theo quyết định D01–D05 của S01 khi được duyệt.
 
-Ngày 03/11/2026, người dùng duyệt host demo riêng để kiểm thử trước, chưa mở rộng actor hoặc doanh thu. Demo không thay contract Driver bên dưới: xem phụ lục demo cuối tài liệu và [hướng dẫn chạy](../ai/chatbot-scaffold.md).
+Ngày 03/11/2026, người dùng duyệt host demo riêng để kiểm thử trước, chưa mở rộng actor hoặc doanh thu. Demo không thay contract Driver bên dưới: xem phụ lục demo cuối tài liệu và [hướng dẫn chạy](../ai/chatbot-design.md#chatbot-scaffold).
 
 Driver FAQ có nguồn, hội thoại thuộc Account và lookup sau timeout. IoT tự validate JWT do UserService cấp; không gọi current-actor mỗi request. Bảy endpoint dưới đây là target để review và triển khai từng phần; không phải cam kết đã chạy. Chi tiết kế thừa từ recovery vẫn PROPOSED nếu chưa có quyết định rõ; không dùng việc phục hồi tài liệu để phê duyệt policy.
 
@@ -57,7 +57,7 @@ R1 đề xuất chuẩn JwtBearer tại API với MapInboundClaims=false, inward
 
 B-02: đề xuất public PEM do vận hành cấp qua config IoT, issuer/audience tương ứng; không tự tạo JWKS endpoint hoặc fetch key từ URL trong token. Cách phân phối/rotation/key overlap vẫn OPEN; test dùng RSA test keys, không đọc private key thật. Cấu hình thiếu/sai không có fallback key cho production và không được báo ready. Cụ thể startup fail-fast hay liveness-only unhealthy host cần chốt khi R1 thiết kế config.
 
-Theo yêu cầu người dùng, các lựa chọn B-02 và tác động vận hành được trình bày trong [phiếu quyết định cho leader](../ai/luu-tru/design-history.md#tai-lieu-3). Phiếu đang PROPOSED, không tự cấp phép triển khai runtime. B-01 được người dùng xác nhận tiếp tục B sau khi giải thích độ trễ tối đa 15 phút; không hứa thu hồi tức thời.
+Theo yêu cầu người dùng, các lựa chọn B-02 và tác động vận hành được trình bày trong [phiếu quyết định cho leader](../ai/archive/design-history.md#tai-lieu-3). Phiếu đang PROPOSED, không tự cấp phép triển khai runtime. B-01 được người dùng xác nhận tiếp tục B sau khi giải thích độ trễ tối đa 15 phút; không hứa thu hồi tức thời.
 
 ## API Specification
 
@@ -361,7 +361,7 @@ sequenceDiagram
 | ID | Gap / proposal | Affected part / owner | Approval |
 | --- | --- | --- | --- |
 | B-01 | Chấp nhận token cũ đến exp khi revoke/lock/role change; không immediate invalidation | R1 auth acceptance / lead + User owner | Người dùng xác nhận giữ B sau giải thích độ trễ tối đa 15 phút trong chat R1; deployment chưa verified |
-| B-02 | Public PEM config, trusted issuer/audience, key rotation/overlap và restart behavior | R1 config/integration / User + IoT + ops | Chờ leader duyệt theo [phiếu quyết định](../ai/luu-tru/design-history.md#tai-lieu-3); chưa có config bridge/production host |
+| B-02 | Public PEM config, trusted issuer/audience, key rotation/overlap và restart behavior | R1 config/integration / User + IoT + ops | Chờ leader duyệt theo [phiếu quyết định](../ai/archive/design-history.md#tai-lieu-3); chưa có config bridge/production host |
 | B-03 | Terminal persist rồi expiry check trước delivery; lookup bằng phiên mới cùng Account; không cancel theo revocation live | R2 lifecycle / lead + security | PROPOSED |
 | B-04 | Empty conversation expiry; purge/backup/holds/provider retention | R2 schema và release / data owner | 90 ngày từ last message có SRS; empty từ create còn PROPOSED |
 | B-05 | Recovery wire details, 16 KiB/4000 input, budgets 25s/30s/60s, rate/cost limits | R1–R4 / FE + BE + QA + lead | IN REVIEW; không claim SLA; không invent rate defaults |
@@ -386,7 +386,7 @@ Không còn blocker “cần endpoint User current-actor” cho B. Những gap t
 
 ## Phụ lục — API demo độc lập, được phép triển khai ngày 03/11/2026
 
-Phạm vi: kiểm chứng HTTP, lỗi, trạng thái mẫu và gửi tin nhắn nhận câu trả lời mô phỏng trên giao diện demo. Không xác thực tài khoản giả, không mở quyền mới cho role, không thay các endpoint Driver đã đặc tả. Host chỉ chạy khi environment Demo và Assistant:Demo:Enabled=true. Hướng dẫn cấu hình/chạy ở [scaffold](../ai/chatbot-scaffold.md); evidence tại session.
+Phạm vi: kiểm chứng HTTP, lỗi, trạng thái mẫu và gửi tin nhắn nhận câu trả lời mô phỏng trên giao diện demo. Không xác thực tài khoản giả, không mở quyền mới cho role, không thay các endpoint Driver đã đặc tả. Host chỉ chạy khi environment Demo và Assistant:Demo:Enabled=true. Hướng dẫn cấu hình/chạy ở [scaffold](../ai/chatbot-design.md#chatbot-scaffold); evidence tại session.
 
 | Method / route | Auth / quyền / phạm vi | Request | Response |
 | --- | --- | --- | --- |

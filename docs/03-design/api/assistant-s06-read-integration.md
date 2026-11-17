@@ -11,7 +11,7 @@
 | Baseline | HEAD 3d3def763870f66f8da71386357a66f776fa61e5 plus preserved S01–S05 working tree |
 | Implementation | User vehicles adapter and Operations minimal own list/detail implemented; search NOT IMPLEMENTED; offline evidence in S06 handoff |
 
-Approval on 2026-11-05: after the two concrete D01-S06 and D05-S06/G03 questions, user answered “Phương án nào ổn an toàn và hiệu quả thì áp dụng” and “Phương án nào ổn thì áp dụng vào”. Selected A for both: request-memory delegated Bearer and minimal Operations DTO. This approval includes the required local Operations JWT ingress for these reads only, not unrelated Operator/Payment authorization changes. No runtime trust acceptance, new dependency, migration or provider egress permission is implied. [Implementation handoff](../ai/business-data-integration.md).
+Approval on 2026-11-05: after the two concrete D01-S06 and D05-S06/G03 questions, user answered “Phương án nào ổn an toàn và hiệu quả thì áp dụng” and “Phương án nào ổn thì áp dụng vào”. Selected A for both: request-memory delegated Bearer and minimal Operations DTO. This approval includes the required local Operations JWT ingress for these reads only, not unrelated Operator/Payment authorization changes. No runtime trust acceptance, new dependency, migration or provider egress permission is implied. [Implementation handoff](../ai/chatbot-design.md#business-data-integration).
 
 ## Overview
 
@@ -20,7 +20,7 @@ Scoped approval packet for S06 reads only. No mutation, quote, hold, payment, S0
 | Traceability | Reference |
 | --- | --- |
 | Requirements | [AI module](../../01-requirements/srs/modules/10-ai-assistance.md), [AI rules](../../01-requirements/business-rules/10-ai-assistance.md) |
-| Contracts | [S01 §§11–14 / D01 / D05](assistant-s01-end-to-end-api-design.md), [matrix G01–G03](../ai/assistant-s01-api-matrix.md) |
+| Contracts | [S01 §§11–14 / D01 / D05](assistant-s01-end-to-end-api-design.md), [matrix G01–G03](../ai/chatbot-design.md#assistant-s01-api-matrix) |
 | Authorization | [Approved classification](../../01-requirements/srs/authorization-operation-classification.md); TOKEN/REQUEST/SERVICE unchanged |
 
 ## Current source evidence

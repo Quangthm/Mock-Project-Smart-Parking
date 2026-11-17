@@ -43,7 +43,7 @@ Vì vậy branch giữ **arch làm thiết kế**, còn runtime dùng bộ base 
 
 **Operations DB:** `01-base` (03b) → `02-overlay-capacity-pools` → `03-overlay-structure-safety` → `04-overlay-receipts` → `05-overlay-confirmation`.
 
-**IoT DB:** `01-base` (06) → `02-assistant-management` → `03-assistant-s02` → `04-assistant-s05` → `05-assistant-current-chat`. Compose initializes this chain on a new volume. For existing Assistant schemas, follow the [Assistant upgrade guide](../../03-design/ai/conversation-and-recovery.md#approval-and-scope).
+**IoT DB:** `01-base` (06) → `02-assistant-management` → `03-assistant-s02` → `04-assistant-s05` → `05-assistant-current-chat`. Compose initializes this chain on a new volume. For existing Assistant schemas, follow the [Assistant upgrade guide](../../03-design/ai/archive/design-history.md#legacy-guide--conversation-and-recovery--approval-and-scope).
 
 `microservices/02-facility-service-db.sql` defines Facility's owner-onboarding provisioning table. Existing Facility databases missing this relation require a separately reviewed migration; the base script is for clean database initialization only. `reservation-site-capacity-pools.sql` phải chạy trước `reservation-structure-safety.sql` vì guard trigger tham chiếu `site_capacity_pools`.
 

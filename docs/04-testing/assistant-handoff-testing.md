@@ -82,7 +82,7 @@ Mở thư mục sau và chép hai file được bàn giao vào đó:
 └── publication.json
 ```
 
-Dùng nguyên cặp file được bàn giao. File Markdown trong repo còn là bản soạn thảo; chỉ copy bản đó vào đây sẽ chưa bật chat được. Nếu nhóm chưa có hai file triển khai, làm theo **2.7** để kiểm kết nối Gemini trước hoặc tạo bộ triển khai sau khi được Admin duyệt. Quy trình duyệt thuộc [hướng dẫn xuất bản knowledge](../03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). `publication.json` cần UTF-8 không BOM.
+Dùng nguyên cặp file được bàn giao. File Markdown trong repo còn là bản soạn thảo; chỉ copy bản đó vào đây sẽ chưa bật chat được. Nếu nhóm chưa có hai file triển khai, làm theo **2.7** để kiểm kết nối Gemini trước hoặc tạo bộ triển khai sau khi được Admin duyệt. Quy trình duyệt thuộc [hướng dẫn xuất bản knowledge](../03-design/ai/archive/design-history.md#legacy-guide--knowledge-and-faq--publication-manual-admin-controlled-deployment). `publication.json` cần UTF-8 không BOM.
 
 **Bước 3 — Copy cấu hình chatbot vào `.env` ở root**
 
@@ -970,7 +970,7 @@ Lỗi rò dữ liệu Account, trả credential hoặc tạo đơn ngoài xác n
 
 ### Chốt bàn giao trên môi trường test của nhóm
 
-Người QA ghi biên bản smoke Settings/FAQ/Driver trên UserService và provider test thật. Leader chốt chấp nhận kết quả theo phạm vi. Toàn bộ S01–S10 và luồng đặt chỗ chỉ đóng khi các điều kiện ở [bản tổng quan leader](../03-design/ai/system-overview-and-review.md) đạt. Trước khi gửi bản test, developer đóng gói source, test, script và tài liệu cùng một commit/nhánh review, rà secret và kiểm candidate đó.
+Người QA ghi biên bản smoke Settings/FAQ/Driver trên UserService và provider test thật. Leader chốt chấp nhận kết quả theo phạm vi. Toàn bộ S01–S10 và luồng đặt chỗ chỉ đóng khi các điều kiện ở [bản tổng quan leader](../03-design/ai/chatbot-design.md) đạt. Trước khi gửi bản test, developer đóng gói source, test, script và tài liệu cùng một commit/nhánh review, rà secret và kiểm candidate đó.
 
 
 ### Kịch bản demo ngắn sau khi smoke PASS
