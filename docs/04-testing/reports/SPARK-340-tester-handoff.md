@@ -4,6 +4,8 @@ Branch kiểm thử: `feat/SPARK-340-admin-platform-policies`, repository `Quang
 
 > Bản sửa F6–F8 cần additive DDL cho Payment DB cũ trước khi rebuild/restart service. Xem [rollout/repair guide](SPARK-340-F6-F8-rollout-guide.md). Owner duyệt thiết kế/schema exception; implementation agent chưa áp dụng vào DB đang chạy. Collection hiện58 requests, gồm4 negative cases F8. Không dùng số PASS của collection54 requests làm kết quả bản mới.
 
+> Follow-up F-A/F-B/F-C đã bỏ current-key webhook fallback, kiểm tra provider code từ order trong DB và báo từng dòng inventory unsupported thay vì abort. Không có DDL bổ sung trong follow-up. [Báo cáo kiểm chứng](SPARK-340-FA-FC-implementation-20261117.md) ghi1190BE pass/114skip vàPG9/9; vẫn cần reviewer và kiểm thử live theo window riêng.
+
 Initial published snapshot: `9a84aeaf197a5e770bb573108b20157b31354a00` (five feature/test/docs commits). Branch đã push thành công lên origin ngày17/11/2026. Các commit ghi nhận publication sau đó chỉ cập nhật tài liệu; tester vẫn ghi HEAD thực tế đã checkout vào report.
 
 ## Lấy bản và chuẩn bị môi trường

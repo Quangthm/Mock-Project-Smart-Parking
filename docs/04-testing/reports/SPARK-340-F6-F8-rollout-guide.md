@@ -9,6 +9,12 @@ Thiết kế bảng riêng và công cụ offline đã được user duyệt, g�
 - F6: checkout chưa từng có binding chỉ được khôi phục bằng mapping có provider link khớp transaction PAYOS/PAYMENT của đúng order/tenant, với key/mode/version do owner xác nhận. Dry-run là mặc định. Mapping sai/thiếu evidence/conflict không được ghi. Đây không phải chứng minh tự động rằng một key do operator nhập là key lịch sử đúng; nguồn dữ liệu và callback verification vẫn phải được owner xác nhận.
 - F8: platform create/update chỉ nhận omitted/null cho arrivalLateToleranceEnabled. true/false trả validation error trước khi persistence; Owner site flow giữ quyền enablement.
 
+### Follow-up F-A/F-B/F-C
+
+Webhook verification luôn đọc exact per-order binding, kể cả khi adapter được tạo trực tiếp không có settings store; key trong options không còn là nguồn fallback. Checkout thật bắt buộc có cả settings authority và signing binding. Options-only chỉ còn hỗ trợ các nhánh emulation vốn không gửi HTTP.
+
+Checkout issuance và repository dùng chung PayOsOrderCodes.Resolve để đối chiếu provider code với order đọc từ DB, gồm cả mapping Guid fallback đã có. INSERT cũng so sánh local code đã quan sát để không nhận thay đổi chen giữa bước kiểm tra/ghi. Đây là bảo đảm của các supported application writers, không phải trigger chặn mọi DML thủ công ngoài quy trình; không thêm schema trong follow-up này.
+
 ## Thứ tự rollout do owner thực hiện
 
 1. Xác định Payment DB đích và sao lưu theo quy trình nhóm; giữ nguyên Payment DataProtection volume/key ring. Không dùng `.env` hoặc key XML trong Git/evidence.
@@ -33,7 +39,9 @@ dotnet run --project scripts/payment/SmartParking.CheckoutBindingRepair --no-bui
 dotnet run --project scripts/payment/SmartParking.CheckoutBindingRepair --no-build -- --manifest C:\Secure\private-bindings.json --apply
 ```
 
-Inventory paginates over PAYOS checkout transactions without a dedicated binding and reports order code/provider link/state only. Capture all pages on a quiescent snapshot **before** applying imports; applying changes between offset pages changes membership. After apply, rescan from offset0. BOUND_LEGACY_POLICY means an authentic protected policy row exists and can be migrated, not that tariff cleanup is already safe. Unsupported nonnumeric historical local order codes require owner investigation/reconciliation rather than guessed lookup. New checkout writes carry trusted PaymentOrderId from Application, so provider-code fallback does not create an orphan binding.
+Inventory paginates over PAYOS checkout transactions without a dedicated binding. Each row reports PaymentOrderId, OriginalOrderCode, nullable numeric OrderCode, ProviderLinkId and State. Nonnumeric, nonpositive or noncanonical historical codes return UNSUPPORTED_ORDER_CODE with OrderCode=null; the scan continues through following rows. These rows require owner investigation/reconciliation rather than guessed lookup. Exit0 means the inventory report completed, **not** that all rows are ready: MISSING_BINDING and UNSUPPORTED_ORDER_CODE remain rollout actions.
+
+Capture all pages on a quiescent snapshot **before** applying imports; applying changes between offset pages changes membership. After apply, rescan from offset0. BOUND_LEGACY_POLICY means an authentic protected policy row exists and can be migrated, not that tariff cleanup is already safe. New checkout writes validate provider code against the stored order using the shared issuance mapping; a caller-supplied PaymentOrderId alone is insufficient. The existing nonnumeric webhook local-order lookup limitation is not repaired by reporting the inventory row.
 
 Private manifest is an array, absolute path outside repository, max1MiB/1000 unique order codes. Template for manual legacy import (invalid until owner supplies actual evidence and key):
 
@@ -55,7 +63,7 @@ Use LIVE or SANDBOX, positive configuration version and actual checksum from the
 
 For an existing reserved-policy binding, use `source: LEGACY_POLICY`, same real orderCode/providerLinkId/evidenceReference, omit mode/version/checksumKey. The tool decrypts the exact old protected row and writes the dedicated row; no new key is guessed. Old policy row is retained. No automatic deletion is implemented; owner may only archive the legacy namespace after migration verification, backup and retention approval. Ordinary pricing rows are not migrated or deleted.
 
-Exit0 = READY dry-run, APPLIED apply or successful inventory. Exit2 = invalid/conflicting per-entry result or usage validation. Exit1 = safe generic failure such as schema/key access/invalid JSON. Output never includes checksum or protected payload. Exit codes and individual states must be checked; process completion alone is not proof of application.
+Exit0 = READY dry-run, APPLIED apply or completed inventory report. Exit2 = invalid/conflicting per-entry result and the no-arguments usage path. Other malformed usage currently follows the generic exit1 path (known low finding). Exit1 also covers schema/key access/invalid JSON. Output never includes checksum or protected payload. Exit codes and individual states must be checked; process completion alone is not proof of application.
 
 ## Reviewer checklist
 
