@@ -119,7 +119,7 @@ test('zero prices remain zero and unknown amounts do not become zero', () => {
     'react': {},
     'react/jsx-runtime': {}, '../../../context/AppContext': {}, '../../../lib/authApi': {}, '../../../lib/operationalLayout': {},
     '../../../components/history/ParkingHistory': {}, '../../../components/ui/PageHeader': {}, '../../../components/ui/Modal': {},
-    '../../../components/ui/Badge': {}, '../../../components/icon/UntitledIcon': {}, './useReservationHistory': {},
+    '../../../components/ui/Badge': {}, '../../../components/icon/UntitledIcon': {}, './useReservationHistory': {}, './ReservationInvoice': {},
   });
   assert.equal(historyMoney(0, 'VND'), '0 VND'); assert.equal(historyMoney(null, 'VND'), 'Unavailable');
   assert.equal(historyMoney(25000, 'VND'), '25,000 VND');
@@ -132,7 +132,7 @@ test('parking scans show provided images and explain absent or broken evidence',
     'react': { useState: () => [failed, value => { failed = value; }] },
     'react/jsx-runtime': { jsx, jsxs: jsx }, '../../../context/AppContext': {}, '../../../lib/authApi': {}, '../../../lib/operationalLayout': {},
     '../../../components/history/ParkingHistory': {}, '../../../components/ui/PageHeader': {}, '../../../components/ui/Modal': {},
-    '../../../components/ui/Badge': {}, '../../../components/icon/UntitledIcon': {}, './useReservationHistory': {},
+    '../../../components/ui/Badge': {}, '../../../components/icon/UntitledIcon': {}, './useReservationHistory': {}, './ReservationInvoice': {},
   });
   const src = 'https://example.test/check-in.jpg';
   let scan = ReservationScan({ label: 'Check-in', src });
