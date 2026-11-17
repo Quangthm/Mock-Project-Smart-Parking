@@ -95,7 +95,9 @@ public class PayOsAdapterTests
             ChecksumKey = checksumKey
         });
 
-        var adapter = new PayOsAdapter(httpClient, options, NullLogger<PayOsAdapter>.Instance);
+        var bindings = CheckoutBindingFixture.Create();
+        Assert.True(await bindings.BindAsync(123456, new(1, "SANDBOX", string.Empty, null, null, checksumKey), default));
+        var adapter = new PayOsAdapter(httpClient, options, NullLogger<PayOsAdapter>.Instance, checkoutBindings: bindings);
 
         var payloadData = new Dictionary<string, object?>
         {
@@ -134,7 +136,9 @@ public class PayOsAdapterTests
     {
         var httpClient = new HttpClient();
         var options = Options.Create(new PayOsOptions { ChecksumKey = "secret-key" });
-        var adapter = new PayOsAdapter(httpClient, options, NullLogger<PayOsAdapter>.Instance);
+        var bindings = CheckoutBindingFixture.Create();
+        Assert.True(await bindings.BindAsync(123456, new(1, "SANDBOX", string.Empty, null, null, "secret-key"), default));
+        var adapter = new PayOsAdapter(httpClient, options, NullLogger<PayOsAdapter>.Instance, checkoutBindings: bindings);
 
         var webhookJson = """
         {

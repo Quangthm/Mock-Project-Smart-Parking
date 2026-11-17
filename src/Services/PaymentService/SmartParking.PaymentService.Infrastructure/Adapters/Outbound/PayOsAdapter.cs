@@ -192,22 +192,21 @@ public class PayOsAdapter : IPaymentGatewayPort
                 ErrorMessage: "PayOS base URL is not configured as an absolute URI.");
         }
 
-        if (_settings is not null)
+        // Options-only construction remains useful for local emulation, but it must
+        // never bypass the settings authority or durable binding on a real checkout.
+        try
         {
-            try
-            {
-                if (_checkoutBindings is null)
-                    throw new InvalidOperationException("Missing checkout signing binding repository.");
+            if (_settings is null || _checkoutBindings is null)
+                throw new InvalidOperationException("Missing checkout signing authority.");
 
-                if (!await _checkoutBindings.BindAsync(request.OrderCode, snapshot, cancellationToken,
-                    new Application.Common.Interfaces.Persistence.CheckoutBindingProvenance("CHECKOUT", PaymentOrderId: request.PaymentOrderId)))
-                    return BindingFailure("CHECKOUT_BINDING_CONFLICT", "This checkout belongs to another signing configuration.");
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError("Could not persist the signing configuration for order {OrderCode}.", request.OrderCode);
-                return BindingFailure("CHECKOUT_BINDING_UNAVAILABLE", "The checkout signing configuration could not be recorded.");
-            }
+            if (!await _checkoutBindings.BindAsync(request.OrderCode, snapshot, cancellationToken,
+                new Application.Common.Interfaces.Persistence.CheckoutBindingProvenance("CHECKOUT", PaymentOrderId: request.PaymentOrderId)))
+                return BindingFailure("CHECKOUT_BINDING_CONFLICT", "This checkout belongs to another signing configuration.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError("Could not persist the signing configuration for order {OrderCode}.", request.OrderCode);
+            return BindingFailure("CHECKOUT_BINDING_UNAVAILABLE", "The checkout signing configuration could not be recorded.");
         }
 
         try
@@ -386,11 +385,9 @@ public class PayOsAdapter : IPaymentGatewayPort
             long orderCode = dataEl.TryGetProperty("orderCode", out var oc) ? oc.GetInt64() : 0;
 
             lookupInProgress = true;
-            var trustedKey = _settings is null
-                ? _options.ChecksumKey
-                : _checkoutBindings is null
-                    ? null
-                    : await _checkoutBindings.ReadChecksumKeyAsync(orderCode, cancellationToken);
+            var trustedKey = _checkoutBindings is null
+                ? null
+                : await _checkoutBindings.ReadChecksumKeyAsync(orderCode, cancellationToken);
             lookupInProgress = false;
             if (string.IsNullOrWhiteSpace(trustedKey))
             {
