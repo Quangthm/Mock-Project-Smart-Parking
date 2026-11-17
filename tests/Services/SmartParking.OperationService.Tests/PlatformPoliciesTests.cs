@@ -197,13 +197,13 @@ public class PlatformPoliciesTests
 
         var valid = validator.Validate(new CreatePolicyDraftCommand(
             null, null, 15, 15, 24, 7, 0, 4, 60, 15, 4, 15, 2, 15, 180, 5,
-            true, "Asia/Ho_Chi_Minh", null));
+            null, "Asia/Ho_Chi_Minh", null));
         Assert.True(valid.IsValid);
 
         var invalid = validator.Validate(new CreatePolicyDraftCommand(
             null, null, 15, 15, int.MaxValue / 60 + 1, int.MaxValue / 1440 + 1, 0, int.MaxValue / 60 + 1,
             60, 15, int.MaxValue / 60 + 1, 15, 2, 15, 180, 5,
-            true, "Asia/Ho_Chi_Minh", null));
+            null, "Asia/Ho_Chi_Minh", null));
 
         Assert.False(invalid.IsValid);
         Assert.Contains(invalid.Errors, error => error.PropertyName == "MaxReservationDurationHours");

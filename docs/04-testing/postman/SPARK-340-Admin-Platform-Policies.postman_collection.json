@@ -823,6 +823,240 @@
           ]
         },
         {
+          "name": "F8 - create rejects site enablement true",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": true,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('site-only enablement is rejected with field validation', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql('VALIDATION_FAILED');",
+                  "  pm.expect(JSON.stringify(body.errors)).to.match(/arrivalLateToleranceEnabled/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "Admin platform writes must reject explicit site-only true/false. No draft/version mutation is expected."
+        },
+        {
+          "name": "F8 - create rejects site enablement false",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 15,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": false,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('site-only enablement is rejected with field validation', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql('VALIDATION_FAILED');",
+                  "  pm.expect(JSON.stringify(body.errors)).to.match(/arrivalLateToleranceEnabled/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "Admin platform writes must reject explicit site-only true/false. No draft/version mutation is expected."
+        },
+        {
+          "name": "F8 - update rejects site enablement true",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{original_updated_at}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft/{{draft_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft",
+                "{{draft_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 20,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": true,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  },\n  \"expectedUpdatedAt\": \"{{original_updated_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('site-only enablement is rejected with field validation', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql('VALIDATION_FAILED');",
+                  "  pm.expect(JSON.stringify(body.errors)).to.match(/arrivalLateToleranceEnabled/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "Admin platform writes must reject explicit site-only true/false. No draft/version mutation is expected."
+        },
+        {
+          "name": "F8 - update rejects site enablement false",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{original_updated_at}}"
+              }
+            ],
+            "url": {
+              "raw": "{{operation_base_url}}/api/v1/admin/policies/operations/draft/{{draft_id}}",
+              "host": [
+                "{{operation_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "policies",
+                "operations",
+                "draft",
+                "{{draft_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": null,\n  \"siteId\": null,\n  \"paymentHoldDurationMinutes\": 5,\n  \"minReservationDurationMinutes\": 20,\n  \"maxReservationDurationHours\": 24,\n  \"maxAdvanceBookingDays\": 7,\n  \"interBookingBufferMinutes\": 0,\n  \"reservationProtectionWindowHours\": 4,\n  \"allocationLeadTimeMinutes\": 60,\n  \"facilityFailureRefundLeadMinutes\": 15,\n  \"occupancyValidityTimespanHours\": 4,\n  \"arrivalLateToleranceMinutes\": 15,\n  \"rapidCancellationCount\": 2,\n  \"rapidCancellationWindowMinutes\": 15,\n  \"rapidCancellationRestrictionMinutes\": 180,\n  \"dailyCancellationLimit\": 5,\n  \"arrivalLateToleranceEnabled\": false,\n  \"cancellationTimezone\": \"Asia/Ho_Chi_Minh\",\n  \"overrideBounds\": {\n    \"ARRIVAL_LATE_TOLERANCE\": {\n      \"minimum\": 15,\n      \"maximum\": 30\n    }\n  },\n  \"expectedUpdatedAt\": \"{{original_updated_at}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('site-only enablement is rejected with field validation', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql('VALIDATION_FAILED');",
+                  "  pm.expect(JSON.stringify(body.errors)).to.match(/arrivalLateToleranceEnabled/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "description": "Admin platform writes must reject explicit site-only true/false. No draft/version mutation is expected."
+        },
+        {
           "name": "Update draft with If-Match - success",
           "request": {
             "method": "PUT",

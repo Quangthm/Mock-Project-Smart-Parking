@@ -44,3 +44,26 @@ test('all collection event scripts compile in the Postman function scope', () =>
   }
   assert.ok(scripts > 0);
 });
+
+test('all four F8 cases require 400, canonical code and the site-only field error', () => {
+  const cases = requests.filter(item => item.name.startsWith('F8 -'));
+  assert.equal(cases.length, 4);
+  assert.deepEqual(cases.map(item => [item.request.method, /"arrivalLateToleranceEnabled": true/.test(item.request.body.raw)]),
+    [['POST', true], ['POST', false], ['PUT', true], ['PUT', false]]);
+  for (const item of cases) {
+    function run(status, body) {
+      const outcomes = [];
+      const pm = {
+        response: { to: { have: { status: expected => assert.equal(status, expected) } }, json: () => body },
+        expect: value => ({ to: { eql: expected => assert.deepEqual(value, expected), match: pattern => assert.match(value, pattern) } }),
+        test: (name, fn) => { try { fn(); outcomes.push(true); } catch { outcomes.push(false); } }
+      };
+      vm.runInNewContext(`(function () {\n${item.event[0].script.exec.join('\n')}\n})();`, { pm }, { timeout: 1000 });
+      return outcomes;
+    }
+    const expected = { code: 'VALIDATION_FAILED', errors: [{ property: 'ArrivalLateToleranceEnabled' }] };
+    assert.deepEqual(run(400, expected), [true]);
+    assert.deepEqual(run(200, { success: true }), [false]);
+    assert.deepEqual(run(400, { code: 'VALIDATION_FAILED', errors: [{ property: 'OtherField' }] }), [false]);
+  }
+});

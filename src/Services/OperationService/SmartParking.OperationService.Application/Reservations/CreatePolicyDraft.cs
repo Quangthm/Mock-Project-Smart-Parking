@@ -68,6 +68,8 @@ public sealed class CreatePolicyDraftCommandValidator : AbstractValidator<Create
     public CreatePolicyDraftCommandValidator()
     {
         this.ApplyPolicyDraftRules();
+        RuleFor(x => x.ArrivalLateToleranceEnabled).Null()
+            .WithMessage("Arrival late tolerance enablement belongs to the site owner and must be null for platform drafts.");
         RuleFor(x => x.CancellationTimezone).Equal("Asia/Ho_Chi_Minh")
             .WithMessage("Cancellation timezone must be Asia/Ho_Chi_Minh.");
     }
