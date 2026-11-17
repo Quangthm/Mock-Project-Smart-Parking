@@ -2,7 +2,7 @@
 
 Ngày 17/11/2026. HEAD `055da4591ee9a1822eb9870dc261c9685ca3258b`, branch `feat/SPARK-340-admin-platform-policies`.
 
-> Delivery follow-up: user subsequently authorized publishing the feature branch for tester access while P5 continues. [Tester handoff](SPARK-340-tester-handoff.md) defines the scope and known issues. The verification/preparation checkpoint below predates that Git delivery; see the latest session section for publication status.
+> Delivery follow-up: user subsequently authorized publishing the feature branch for tester access while P5 continues. Five task-scoped commits were pushed successfully, initial published tip9a84aeaf. [Tester handoff](SPARK-340-tester-handoff.md) defines the scope and known issues. Verification below predates that Git delivery; [publication evidence](evidence/SPARK-340-tester-publication-20261117.json) records the actual commits.
 
 ## Trạng thái phase
 
@@ -11,7 +11,7 @@ Ngày 17/11/2026. HEAD `055da4591ee9a1822eb9870dc261c9685ca3258b`, branch `feat/
 | P4 | **Tạm đóng theo chỉ đạo user**, giữ nguyên FAIL/BLOCKED/NOT RUN và các việc hoãn; không phải tất cả acceptance đã PASS. |
 | P5 | Review đã thực hiện, report đã giao; **CHANGES REQUESTED**, gate0 Critical/High chưa đạt vì F6 trong nhánh. |
 | P6.1 | Verification suite theo planning đã chạy lại. Kết quả bên dưới. |
-| P6.2 | Session, báo cáo review, evidence và PR draft đã chuẩn bị. **Chưa ready-to-merge**; không commit/push/mở PR trên GitHub. |
+| P6.2 | Session, review, evidence và PR draft đã chuẩn bị; feature branch đã commit/push cho tester theo chỉ đạo bổ sung. **Chưa ready-to-merge**, chưa mở PR trên GitHub. |
 
 Session vẫn ở active vì parent task, findings và tester sign-off chưa hoàn tất. Tạm đóng một phase không làm parent story Done.
 
@@ -42,7 +42,7 @@ P6 không chạy lại mutation Newman hoặc restart service trong lượt này
 ## Task 6.2 — Git và PR preparation
 
 - PR title và body theo template được chuẩn bị tại [PR draft](SPARK-340-PR-draft.md), target đề xuất `develop`.
-- `develop...HEAD` local có0/0 commits khác nhau. Tính năng hiện nằm trong working tree, nên publish PR từ HEAD hiện tại sẽ không thể hiện delta. Chưa stage/commit.
+- Tại checkpoint chuẩn bị, `develop...HEAD` local là0/0 và tính năng chưa commit. Sau chỉ đạo giao tester, đã tạo năm task-scoped commits và push feature branch, initial tip9a84aeaf. Không push vào develop/main.
 - Remote freshness chưa xác minh. Không fetch/rebase/merge để tránh thay đổi checkout có nhiều uncommitted work.
 - Không tự chạy git add -A. Inventory audit chứa cả thay đổi ngoài nhóm task, ví dụ collection SPARK-238 và một số test bảo trì. Cần đối soát nguồn thay đổi trước khi stage từng path.
 - Không đưa `.env`, `.cache`, populated environments, raw Newman exports hoặc DataProtection key material vào commit. FE dist là output build, không tự stage.

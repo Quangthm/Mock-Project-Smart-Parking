@@ -1,6 +1,6 @@
 # feat(admin): configure platform policies and integration settings [SPARK-340]
 
-Target: `develop`. Preparation only — not submitted. Keep this PR **DRAFT** until the P5 findings and recorded acceptance gaps have a disposition. All feature changes remain uncommitted.
+Target: `develop`. Preparation only — not submitted. Keep this PR **DRAFT** until the P5 findings and recorded acceptance gaps have a disposition. The feature branch is now committed and published for tester verification; no remote PR has been created.
 
 > Publication follow-up: user authorized committing/pushing the feature branch for tester verification. This draft is not an instruction to merge or submit a PR. Consult [tester handoff](SPARK-340-tester-handoff.md) and the latest session section for actual Git delivery status; earlier baseline descriptions below are historical preparation context.
 
@@ -61,4 +61,4 @@ Payment DataProtection keys use a persistent volume. Durable signing bindings ar
 
 P4 was temporarily closed by user instruction to continue P5/P6. That instruction is a phase handoff, not a retroactive passing test or waiver of in-scope defects. P5 currently requests changes: F6 is an in-branch High rollout issue; F7/F8 and low findings retain their recorded disposition. Baseline/default-auth and reservation order/confirmation findings are delegated to Payment/SPARK-273 under the scoped review.
 
-HEAD and local develop currently have no committed difference; implementation is in the working tree. Before publishing, stage only reviewed task files, create approved commits, refresh/compare develop safely and update this body to describe the final committed delta. Do not auto-close Jira from this draft. Session remains active until actual delivery/acceptance is complete.
+The initial tester snapshot is9a84aeaf, containing five task-scoped commits on top of baseline055da459. The unrelated SPARK-238 collection change remains outside those commits. Current remote develop freshness has not been checked; compare/reconcile it safely before a future merge. Do not auto-close Jira from this draft. Session remains active until actual delivery/acceptance is complete.
