@@ -4,6 +4,8 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using SmartParking.PaymentService.API;
+using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
@@ -11,6 +13,11 @@ using SmartParking.PaymentService.Persistence;
 using SmartParking.PaymentService.Persistence.Outbox;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Uniform error handling per coding skill §7: framework exception-handler middleware
+// driven by a DI-registered IExceptionHandler.
+builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // Add services to the container
 builder.Services.AddControllers()
@@ -82,6 +89,10 @@ else
         });
 }
 
+// Admin payment integration endpoints require a real UserService RS256 token.
+// Registered for every environment; the default scheme above is unchanged.
+builder.Services.AddUserServiceJwtAuthentication(builder.Configuration);
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireMachineOrServiceRole", policy =>
@@ -103,7 +114,7 @@ builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaym
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

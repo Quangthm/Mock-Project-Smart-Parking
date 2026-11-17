@@ -209,13 +209,28 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
 
     public int QueryTransactionCallCount { get; private set; }
 
+    /// <summary>Order creation timestamp supplied by the handler for order-bound key resolution.</summary>
+    public DateTimeOffset? LastVerifiedOrderCreatedAt { get; private set; }
+
     public Task<PaymentInitiateResult> InitiatePaymentAsync(PaymentInitiateRequest request, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(InitiateResult);
     }
 
-    public Task<PaymentCallbackResult> VerifyAndParseWebhookAsync(string rawPayload, string signature, CancellationToken cancellationToken = default)
+    public PaymentWebhookEnvelope ParseWebhookEnvelope(string rawPayload)
     {
+        // Mirror the configured callback order code so handler tests exercise the same
+        // order resolution path as the real adapter.
+        return new PaymentWebhookEnvelope(CallbackResult.OrderCode);
+    }
+
+    public Task<PaymentCallbackResult> VerifyAndParseWebhookAsync(
+        string rawPayload,
+        string signature,
+        DateTimeOffset? orderCreatedAt = null,
+        CancellationToken cancellationToken = default)
+    {
+        LastVerifiedOrderCreatedAt = orderCreatedAt;
         return Task.FromResult(CallbackResult);
     }
 

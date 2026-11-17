@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
@@ -73,6 +74,41 @@ public sealed class DevAuthenticationHandler : AuthenticationHandler<Authenticat
             new("tenant_id", tenantId),
             new("site_id", siteId)
         };
+
+        if (token.Count(c => c == '.') == 2)
+        {
+            try
+            {
+                var jwtHandler = new JwtSecurityTokenHandler();
+                if (jwtHandler.CanReadToken(token))
+                {
+                    var jwt = jwtHandler.ReadJwtToken(token);
+                    foreach (var claim in jwt.Claims)
+                    {
+                        if (claim.Type is "role" or ClaimTypes.Role)
+                        {
+                            claims.Add(new Claim(ClaimTypes.Role, claim.Value.ToUpperInvariant()));
+                        }
+                        else if (claim.Type is "sub" or ClaimTypes.NameIdentifier)
+                        {
+                            claims.Add(new Claim(ClaimTypes.NameIdentifier, claim.Value));
+                            claims.Add(new Claim("account_id", claim.Value));
+                        }
+                        else
+                        {
+                            claims.Add(claim);
+                        }
+                    }
+
+                    var jwtIdentity = new ClaimsIdentity(claims, Scheme.Name);
+                    return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(jwtIdentity), Scheme.Name)));
+                }
+            }
+            catch
+            {
+                // Fall back to dev mock heuristics
+            }
+        }
 
         if (token.Contains("s2s", StringComparison.OrdinalIgnoreCase))
         {

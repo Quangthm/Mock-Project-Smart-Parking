@@ -1,8 +1,6 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using SmartParking.NotificationAuditService.API.Authentication;
 using SmartParking.NotificationAuditService.API.Middleware;
 using SmartParking.NotificationAuditService.API.Services;
 using SmartParking.NotificationAuditService.Application;
@@ -30,56 +28,20 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
+var rawOrigins = builder.Configuration["Cors:AllowedOrigins"];
+var corsOrigins = !string.IsNullOrWhiteSpace(rawOrigins)
+    ? rawOrigins.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443"];
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+{
+    if (corsOrigins.Length > 0) policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod();
+}));
 
-// JWT Authentication Setup (Supporting both RSA Public Key and HMAC SecretKey with dynamic configuration)
+// JWT authentication: validates UserService tokens against explicitly configured key
+// material (JWKS endpoint, RSA public key PEM or symmetric key). Fails closed without it.
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
-
-builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-    .Configure<IConfiguration>((options, configuration) =>
-    {
-        var jwtSection = configuration.GetSection("Jwt");
-        var issuer = jwtSection["Issuer"] ?? "SmartParking.UserService";
-        var audience = jwtSection["Audience"] ?? "SmartParking";
-        var secretKey = jwtSection["SecretKey"] ?? jwtSection["Key"];
-        var rsaPublicKeyPem = jwtSection["PublicKeyPem"] ?? jwtSection["PublicKey"];
-
-        var signingKeys = new List<SecurityKey>();
-
-        if (!string.IsNullOrWhiteSpace(rsaPublicKeyPem))
-        {
-            var rsa = RSA.Create();
-            rsa.ImportFromPem(rsaPublicKeyPem);
-            signingKeys.Add(new RsaSecurityKey(rsa));
-        }
-
-        if (!string.IsNullOrWhiteSpace(secretKey))
-        {
-            signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)));
-        }
-
-        if (signingKeys.Count == 0)
-        {
-            const string defaultDevKey = "SmartParkingDevSecretKeyForLocalJwtTokenVerificationOnlyDoNotUseInProd123456!";
-            signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(defaultDevKey)));
-        }
-
-        options.RequireHttpsMetadata = false;
-        options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuers = new[] { issuer, "SmartParking.UserService", "SmartParking.UserService.Demo" },
-            ValidateAudience = true,
-            ValidAudiences = new[] { audience, "SmartParking", "SmartParking.Postman.Demo" },
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKeys = signingKeys,
-            ClockSkew = TimeSpan.FromMinutes(1),
-            NameClaimType = "sub",
-            RoleClaimType = "role"
-        };
-    });
+builder.Services.AddUserServiceJwtAuthentication(builder.Configuration);
 
 builder.Services.AddAuthorization();
 
@@ -115,6 +77,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 

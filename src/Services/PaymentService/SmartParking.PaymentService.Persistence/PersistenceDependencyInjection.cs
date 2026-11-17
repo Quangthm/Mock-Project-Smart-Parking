@@ -62,6 +62,8 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IRefundRequestRepository, RefundRequestRepository>();
         services.AddScoped<IEventPublisher, OutboxEventPublisher>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IPaymentIntegrationHistoryRepository, PaymentIntegrationHistoryRepository>();
+        services.AddScoped<ICheckoutBindingRepository, CheckoutBindingRepository>();
 
         return services;
     }

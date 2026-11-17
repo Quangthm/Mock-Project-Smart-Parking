@@ -42,17 +42,40 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
 
     public async Task<ProcessPayOsWebhookResult> Handle(ProcessPayOsWebhookCommand request, CancellationToken cancellationToken)
     {
-        // 1. Verify and parse webhook payload
-        var parseResult = await _gatewayPort.VerifyAndParseWebhookAsync(request.RawPayload, request.Signature, cancellationToken);
+        // 1. Resolve the order FIRST (via a non-verifying parse). The order code is the
+        //    routing fact used by the gateway adapter to look up the exact mode/checksum-key
+        //    binding captured when the checkout was signed.
+        var envelope = _gatewayPort.ParseWebhookEnvelope(request.RawPayload);
+        var order = envelope.OrderCode == 0
+            ? null
+            : await _orderRepository.GetByOrderCodeAsync(
+                envelope.OrderCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                cancellationToken);
+
+        // 2. Verify and parse the payload. The adapter trusts the checkout-time binding for
+        //    this order code. Missing bindings are rejected by the store-backed adapter.
+        var parseResult = await _gatewayPort.VerifyAndParseWebhookAsync(
+            request.RawPayload, request.Signature, order?.CreatedAt, cancellationToken);
         if (!parseResult.IsValidSignature)
         {
             _logger.LogWarning("Webhook signature verification failed for payOS callback.");
             return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
+        // Defense in depth: the verified payload must describe the order that was resolved
+        // for key selection. A mismatch is treated as an invalid callback.
+        if (order is not null && parseResult.OrderCode != envelope.OrderCode)
+        {
+            _logger.LogWarning(
+                "Webhook order code mismatch: envelope reported {EnvelopeCode} but verified payload reported {PayloadCode}.",
+                envelope.OrderCode,
+                parseResult.OrderCode);
+            return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
+        }
+
         var eventId = parseResult.BankReference ?? parseResult.GatewayTransactionId ?? parseResult.OrderCode.ToString();
 
-        // 2. Check duplicate webhook idempotency
+        // 3. Check duplicate webhook idempotency
         var existingWebhook = await _webhookRepository.GetByProviderAndEventIdAsync("PAYOS", eventId, cancellationToken);
         if (existingWebhook != null && existingWebhook.ProcessingState == WebhookProcessingState.PROCESSED)
         {
@@ -73,8 +96,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             await _webhookRepository.AddAsync(existingWebhook, cancellationToken);
         }
 
-        // 3. Find payment order
-        var order = await _orderRepository.GetByOrderCodeAsync(parseResult.OrderCode.ToString(), cancellationToken);
+        // 4. Reject callbacks for unknown orders without mutating any financial state.
         if (order == null)
         {
             _logger.LogWarning("PaymentOrder with OrderCode {OrderCode} not found for webhook event {EventId}.", parseResult.OrderCode, eventId);
@@ -84,7 +106,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             return new ProcessPayOsWebhookResult(false, $"No payment order was found for order code {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
         }
 
-        // 4. Validate amount
+        // 5. Validate amount
         if ((long)order.FinalAmount != parseResult.AmountVnd)
         {
             _logger.LogError("Payment amount mismatch for OrderCode {OrderCode}: expected {Expected}, received {Received}.",
@@ -96,7 +118,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             return new ProcessPayOsWebhookResult(false, "The payment amount does not match the order amount.", "AMOUNT_MISMATCH");
         }
 
-        // 5. Update state on SUCCESS
+        // 6. Update state on SUCCESS
         if (parseResult.PaymentStatus == "SUCCESS")
         {
             var now = DateTimeOffset.UtcNow;

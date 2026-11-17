@@ -127,8 +127,15 @@ public class AuditProjectionConsumerIntegrationTests
             // Second publish of identical event (Simulate Broker replay)
             await harness.Bus.Publish(syntheticEvent);
 
-            // Give consumer time to process replay
-            await Task.Delay(300);
+            // Wait for both deliveries to finish instead of assuming the scheduler
+            // completes the replay inside a fixed 300 ms window on a busy test host.
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+            while (consumerHarness.Consumed.Select<AuditProjectionEvent>().Count() < 2 &&
+                DateTimeOffset.UtcNow < deadline)
+            {
+                await Task.Delay(25);
+            }
+            Assert.Equal(2, consumerHarness.Consumed.Select<AuditProjectionEvent>().Count());
 
             using var scope = provider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<NotificationAuditDbContext>();

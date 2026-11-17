@@ -1,14 +1,19 @@
 using MassTransit;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using QuestPDF.Infrastructure;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
 using SmartParking.PaymentService.Application.Common.Interfaces.Services;
+using SmartParking.PaymentService.Application.Integrations;
 using SmartParking.PaymentService.Infrastructure.Adapters;
 using SmartParking.PaymentService.Infrastructure.Adapters.Outbound;
 using SmartParking.PaymentService.Infrastructure.Messaging;
 using SmartParking.PaymentService.Infrastructure.Options;
+using SmartParking.PaymentService.Infrastructure.Services;
 
 namespace SmartParking.PaymentService.Infrastructure;
 
@@ -31,6 +36,33 @@ public static class InfrastructureDependencyInjection
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
         services.AddScoped<IPaymentSucceededPublisher, PaymentSucceededPublisher>();
 
+        // Thread-safe, mode-isolated payment integration settings. Persistence of accepted
+        // changes/history is best-effort through the persistence layer (policy_revisions);
+        // data protection encrypts stored credentials and a missing DB never breaks startup.
+        //
+        // The application discriminator is pinned so encrypted credentials remain decryptable
+        // across container recreation (the default content-root-derived name can change).
+        // When DataProtection:KeysDirectory is configured (expected to be a persistent mounted
+        // volume), keys are persisted there instead of the ephemeral container filesystem.
+        var dataProtection = services.AddDataProtection()
+            .SetApplicationName("SmartParking.PaymentService");
+
+        var dataProtectionKeysDirectory = configuration["DataProtection:KeysDirectory"];
+        if (!string.IsNullOrWhiteSpace(dataProtectionKeysDirectory))
+        {
+            Directory.CreateDirectory(dataProtectionKeysDirectory);
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysDirectory));
+        }
+
+        services.AddSingleton<PaymentIntegrationSettingsStore>(sp => new PaymentIntegrationSettingsStore(
+            sp.GetRequiredService<IOptions<PayOsOptions>>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<IDataProtectionProvider>(),
+            sp.GetService<ILogger<PaymentIntegrationSettingsStore>>()));
+        services.AddSingleton<IPaymentIntegrationSettings>(
+            sp => sp.GetRequiredService<PaymentIntegrationSettingsStore>());
+        services.AddScoped<ICheckoutSigningBindings, CheckoutSigningBindings>();
+
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentActor, CurrentActorAdapter>();
 
@@ -46,6 +78,11 @@ public static class InfrastructureDependencyInjection
             var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "https://api-merchant.payos.vn" : options.BaseUrl;
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = TimeSpan.FromSeconds(10);
+        })
+        // Prevent cross-origin redirects from carrying credentials to an unapproved destination.
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
         });
 
         var useInMemory = configuration.GetValue<bool>("RabbitMQ:UseInMemory");

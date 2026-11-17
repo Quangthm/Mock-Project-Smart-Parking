@@ -374,10 +374,12 @@ public class AdversarialMilestone3ChallengeTests
         }
     }
 
+    // SPARK-340 Round 2 (finding 3.1.1): the demo issuer/audience must no longer be
+    // trusted. Only the configured issuer/audience plus the canonical defaults are valid.
     [Theory]
     [InlineData("SmartParking.UserService.Demo", "SmartParking")]
     [InlineData("SmartParking.UserService", "SmartParking.Postman.Demo")]
-    public async Task Probe2_AlternativeValidIssuersAndAudiences_Returns200Ok(string issuer, string audience)
+    public async Task Probe2_UnlistedDemoIssuerOrAudience_Returns401Unauthorized(string issuer, string audience)
     {
         using var factory = new AdversarialApiFactory();
         var client = factory.CreateClient();
@@ -388,7 +390,7 @@ public class AdversarialMilestone3ChallengeTests
 
         var response = await client.GetAsync("/api/v1/notifications");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     // =========================================================================

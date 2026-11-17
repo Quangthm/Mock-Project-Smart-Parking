@@ -153,4 +153,149 @@ public class PayOsAdapterTests
         Assert.False(result.IsValidSignature);
         Assert.Equal("FAILED", result.PaymentStatus);
     }
+
+    [Fact]
+    public async Task VerifyAndParseWebhookAsync_OrderCreatedBeforeRotation_UsesRetainedKey()
+    {
+        const string retainedKey = "retained-old-key";
+        const string rotatedKey = "rotated-new-key";
+
+        var store = new PaymentIntegrationSettingsStore(Options.Create(new PayOsOptions
+        {
+            Mode = PaymentIntegrationSettingsStore.LiveMode,
+            LiveClientId = "live-client",
+            LiveApiKey = "live-api-key",
+            LiveChecksumKey = retainedKey
+        }));
+
+        var orderCreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var bindings = CheckoutBindingFixture.Create();
+        Assert.True(await bindings.BindAsync(123456L, store.GetCurrentSnapshot(), default));
+        store.Save(
+            PaymentIntegrationSettingsStore.LiveMode,
+            "https://api-merchant.payos.vn",
+            clientId: null,
+            apiKey: null,
+            checksumKey: rotatedKey);
+
+        var adapter = new PayOsAdapter(
+            new HttpClient(),
+            Options.Create(new PayOsOptions()),
+            NullLogger<PayOsAdapter>.Instance,
+            store, bindings);
+
+        var payloadData = new Dictionary<string, object?>
+        {
+            ["amount"] = 25000L,
+            ["orderCode"] = 123456L,
+            ["reference"] = "REF9999",
+            ["paymentLinkId"] = "LINK123"
+        };
+        var retainedSignature = PayOsSignatureService.CreateSignatureFromDictionary(payloadData, retainedKey);
+
+        var result = await adapter.VerifyAndParseWebhookAsync(
+            BuildWebhookJson(), retainedSignature, orderCreatedAt);
+
+        Assert.True(result.IsValidSignature);
+        Assert.Equal("SUCCESS", result.PaymentStatus);
+
+        // A signature made with the newly rotated key must not verify an order created
+        // before the rotation.
+        var rotatedSignature = PayOsSignatureService.CreateSignatureFromDictionary(payloadData, rotatedKey);
+        var rejected = await adapter.VerifyAndParseWebhookAsync(
+            BuildWebhookJson(), rotatedSignature, orderCreatedAt);
+
+        Assert.False(rejected.IsValidSignature);
+        Assert.Equal("FAILED", rejected.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task VerifyAndParseWebhookAsync_OrderCreatedAfterRotation_UsesCurrentKey()
+    {
+        const string retainedKey = "retained-old-key";
+        const string rotatedKey = "rotated-new-key";
+
+        var store = new PaymentIntegrationSettingsStore(Options.Create(new PayOsOptions
+        {
+            Mode = PaymentIntegrationSettingsStore.LiveMode,
+            LiveClientId = "live-client",
+            LiveApiKey = "live-api-key",
+            LiveChecksumKey = retainedKey
+        }));
+
+        store.Save(
+            PaymentIntegrationSettingsStore.LiveMode,
+            "https://api-merchant.payos.vn",
+            clientId: null,
+            apiKey: null,
+            checksumKey: rotatedKey);
+
+        var orderCreatedAt = DateTimeOffset.UtcNow.AddMinutes(1);
+        var bindings = CheckoutBindingFixture.Create();
+        Assert.True(await bindings.BindAsync(123456L, store.GetCurrentSnapshot(), default));
+        var adapter = new PayOsAdapter(
+            new HttpClient(),
+            Options.Create(new PayOsOptions()),
+            NullLogger<PayOsAdapter>.Instance,
+            store, bindings);
+
+        var payloadData = new Dictionary<string, object?>
+        {
+            ["amount"] = 25000L,
+            ["orderCode"] = 123456L,
+            ["reference"] = "REF9999",
+            ["paymentLinkId"] = "LINK123"
+        };
+        var rotatedSignature = PayOsSignatureService.CreateSignatureFromDictionary(payloadData, rotatedKey);
+
+        var result = await adapter.VerifyAndParseWebhookAsync(
+            BuildWebhookJson(), rotatedSignature, orderCreatedAt);
+
+        Assert.True(result.IsValidSignature);
+        Assert.Equal("SUCCESS", result.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task VerifyAndParseWebhookAsync_MissingChecksumKey_RejectsWithoutFallback()
+    {
+        var store = new PaymentIntegrationSettingsStore(Options.Create(new PayOsOptions
+        {
+            Mode = PaymentIntegrationSettingsStore.LiveMode,
+            LiveClientId = "live-client",
+            LiveApiKey = "live-api-key",
+            LiveChecksumKey = string.Empty
+        }));
+
+        var adapter = new PayOsAdapter(
+            new HttpClient(),
+            Options.Create(new PayOsOptions()),
+            NullLogger<PayOsAdapter>.Instance,
+            store);
+
+        var payloadData = new Dictionary<string, object?>
+        {
+            ["amount"] = 25000L,
+            ["orderCode"] = 123456L
+        };
+        var signature = PayOsSignatureService.CreateSignatureFromDictionary(payloadData, "any-key");
+
+        var result = await adapter.VerifyAndParseWebhookAsync(
+            BuildWebhookJson(), signature, DateTimeOffset.UtcNow);
+
+        Assert.False(result.IsValidSignature);
+        Assert.Equal("FAILED", result.PaymentStatus);
+    }
+
+    private static string BuildWebhookJson() => """
+        {
+            "code": "00",
+            "desc": "success",
+            "data": {
+                "orderCode": 123456,
+                "amount": 25000,
+                "reference": "REF9999",
+                "paymentLinkId": "LINK123"
+            }
+        }
+        """;
 }

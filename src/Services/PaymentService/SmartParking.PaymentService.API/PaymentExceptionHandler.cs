@@ -2,35 +2,67 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
-using SmartParking.PaymentService.Domain.Pricing;
+using Microsoft.AspNetCore.Diagnostics;
+using SmartParking.PaymentService.Application.Integrations;
 using SmartParking.PaymentService.Domain.Exceptions;
+using SmartParking.PaymentService.Domain.Pricing;
 
-namespace SmartParking.PaymentService.API.Middleware;
+namespace SmartParking.PaymentService.API;
 
-public sealed class ExceptionHandlingMiddleware
+/// <summary>
+/// Framework <see cref="IExceptionHandler"/> integration (coding skill §7). Preserves the
+/// established payment error envelope and the HTTP-status mapping that previously lived in
+/// the custom catch-all middleware, so API consumers see no response-contract change.
+/// </summary>
+public sealed class PaymentExceptionHandler : IExceptionHandler
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private const string AdminPaymentPathPrefix = "/api/v1/admin/integrations/payment";
 
-    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+    private readonly ILogger<PaymentExceptionHandler> _logger;
+
+    public PaymentExceptionHandler(ILogger<PaymentExceptionHandler> logger)
     {
-        _next = next;
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async ValueTask<bool> TryHandleAsync(
+        HttpContext httpContext,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
-        try
+        // If the response has already started there is nothing safe to rewrite.
+        if (httpContext.Response.HasStarted)
         {
-            await _next(context);
+            return false;
         }
-        catch (Exception ex)
+
+        var response = BuildResponse(httpContext, exception);
+
+        httpContext.Response.ContentType = "application/json";
+        httpContext.Response.StatusCode = response.StatusCode;
+
+        var responsePayload = new
         {
-            await HandleExceptionAsync(context, ex);
-        }
+            success = false,
+            code = response.ErrorCode,
+            errorCode = response.ErrorCode,
+            message = response.Message,
+            traceId = response.TraceId,
+            errors = response.Errors,
+            timestamp = response.Timestamp
+        };
+
+        var json = JsonSerializer.Serialize(responsePayload, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        });
+
+        await httpContext.Response.WriteAsync(json, cancellationToken);
+        return true;
     }
 
-    private async Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private ErrorResponse BuildResponse(HttpContext context, Exception exception)
     {
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
         var timestamp = DateTimeOffset.UtcNow;
@@ -38,23 +70,63 @@ public sealed class ExceptionHandlingMiddleware
         int statusCode;
         string errorCode;
         string message;
-        List<object> errors = new();
+        var errors = new List<object>();
 
         switch (exception)
         {
+            case PaymentIntegrationPersistenceException:
+                statusCode = (int)HttpStatusCode.ServiceUnavailable;
+                errorCode = PaymentIntegrationPersistenceException.ErrorCode;
+                message = "Payment integration configuration is temporarily unavailable. Retry the request.";
+                break;
+            case PaymentIntegrationException pie:
+                statusCode = pie.Code switch
+                {
+                    "INVALID_PAYMENT_BASE_URL" => (int)HttpStatusCode.BadRequest,
+                    "INVALID_CREDENTIALS" => (int)HttpStatusCode.BadRequest,
+                    "VALIDATION_FAILED" => (int)HttpStatusCode.BadRequest,
+                    _ => (int)HttpStatusCode.BadRequest
+                };
+                errorCode = pie.Code;
+                message = pie.Message;
+                if (pie.Errors is not null)
+                {
+                    foreach (var err in pie.Errors)
+                    {
+                        errors.Add(new
+                        {
+                            property = err.Property,
+                            field = err.Property,
+                            message = err.Message
+                        });
+                    }
+                }
+                break;
+
             case ValidationException validationEx:
                 statusCode = (int)HttpStatusCode.BadRequest;
-                errorCode = "VALIDATION_ERROR";
-                message = "Validation failed for the requested operation.";
+                var isAdminPaymentPath = context.Request.Path.StartsWithSegments(AdminPaymentPathPrefix);
+                errorCode = isAdminPaymentPath ? "VALIDATION_FAILED" : "VALIDATION_ERROR";
+                message = isAdminPaymentPath
+                    ? "The request payload failed one or more validation rules."
+                    : "Validation failed for the requested operation.";
                 foreach (var err in validationEx.Errors)
                 {
                     errors.Add(new
                     {
+                        property = err.PropertyName,
                         field = err.PropertyName,
                         code = err.ErrorCode,
                         message = err.ErrorMessage
                     });
                 }
+                break;
+
+            case BadHttpRequestException badRequestEx:
+                statusCode = (int)HttpStatusCode.BadRequest;
+                errorCode = "BAD_REQUEST";
+                message = "The request could not be processed because the payload or format is invalid.";
+                _ = badRequestEx;
                 break;
 
             case KeyNotFoundException keyNotFoundEx:
@@ -152,25 +224,14 @@ public sealed class ExceptionHandlingMiddleware
                 break;
         }
 
-        context.Response.ContentType = "application/json";
-        context.Response.StatusCode = statusCode;
-
-        var responsePayload = new
-        {
-            success = false,
-            errorCode,
-            message,
-            traceId,
-            errors,
-            timestamp
-        };
-
-        var json = JsonSerializer.Serialize(responsePayload, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false
-        });
-
-        await context.Response.WriteAsync(json);
+        return new ErrorResponse(statusCode, errorCode, message, traceId, errors, timestamp);
     }
+
+    private sealed record ErrorResponse(
+        int StatusCode,
+        string ErrorCode,
+        string Message,
+        string TraceId,
+        List<object> Errors,
+        DateTimeOffset Timestamp);
 }
