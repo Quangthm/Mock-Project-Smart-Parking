@@ -61,28 +61,35 @@ public sealed class ImportCheckoutBindingHandler(IPaymentOrderRepository orders,
     }
 }
 
-public sealed record CheckoutBindingCandidate(string OrderCode, string ProviderLinkId);
+public sealed record CheckoutBindingCandidate(Guid PaymentOrderId, string OrderCode, string ProviderLinkId);
+public sealed record CheckoutBindingInventoryRow(Guid PaymentOrderId, string OriginalOrderCode, long? OrderCode,
+    string ProviderLinkId, string State);
 public interface ICheckoutBindingInventoryRepository
 {
     Task<IReadOnlyList<CheckoutBindingCandidate>> ListAsync(int offset, int limit, CancellationToken ct);
 }
 
 public sealed record GetCheckoutBindingInventoryQuery(int Offset = 0, int Limit = 100)
-    : IRequest<IReadOnlyList<ImportCheckoutBindingResult>>;
+    : IRequest<IReadOnlyList<CheckoutBindingInventoryRow>>;
 
 public sealed class GetCheckoutBindingInventoryHandler(ICheckoutBindingInventoryRepository inventory,
-    ICheckoutSigningBindings bindings) : IRequestHandler<GetCheckoutBindingInventoryQuery, IReadOnlyList<ImportCheckoutBindingResult>>
+    ICheckoutSigningBindings bindings) : IRequestHandler<GetCheckoutBindingInventoryQuery, IReadOnlyList<CheckoutBindingInventoryRow>>
 {
-    public async Task<IReadOnlyList<ImportCheckoutBindingResult>> Handle(GetCheckoutBindingInventoryQuery request, CancellationToken ct)
+    public async Task<IReadOnlyList<CheckoutBindingInventoryRow>> Handle(GetCheckoutBindingInventoryQuery request, CancellationToken ct)
     {
         if (request.Offset < 0 || request.Limit is < 1 or > 1000) throw new ArgumentOutOfRangeException(nameof(request));
-        var results = new List<ImportCheckoutBindingResult>();
+        var results = new List<CheckoutBindingInventoryRow>();
         foreach (var candidate in await inventory.ListAsync(request.Offset, request.Limit, ct))
         {
-            if (!long.TryParse(candidate.OrderCode, NumberStyles.None, CultureInfo.InvariantCulture, out var code) || code <= 0)
-                throw new InvalidOperationException("Inventory contains an unsupported provider order code.");
+            if (!long.TryParse(candidate.OrderCode, NumberStyles.None, CultureInfo.InvariantCulture, out var code) || code <= 0 ||
+                candidate.OrderCode != code.ToString(CultureInfo.InvariantCulture))
+            {
+                results.Add(new(candidate.PaymentOrderId, candidate.OrderCode, null, candidate.ProviderLinkId, "UNSUPPORTED_ORDER_CODE"));
+                continue;
+            }
             var key = await bindings.ReadChecksumKeyAsync(code, ct);
-            results.Add(new(code, key is null ? "MISSING_BINDING" : "BOUND_LEGACY_POLICY", candidate.ProviderLinkId));
+            results.Add(new(candidate.PaymentOrderId, candidate.OrderCode, code, candidate.ProviderLinkId,
+                key is null ? "MISSING_BINDING" : "BOUND_LEGACY_POLICY"));
         }
         return results;
     }

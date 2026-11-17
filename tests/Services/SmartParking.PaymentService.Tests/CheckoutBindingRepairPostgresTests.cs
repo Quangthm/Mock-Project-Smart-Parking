@@ -29,19 +29,39 @@ public partial class PaymentIntegrationPostgresConcurrencyTests
         var order = await db.PaymentOrders.SingleAsync(row => row.OrderCode == code.ToString());
         order.OrderCode = "non-numeric-local-reference";
         await db.SaveChangesAsync();
+        var providerCode = PayOsOrderCodes.Resolve(order.OrderCode, order.Id);
         var bindings = new CheckoutSigningBindings(new CheckoutBindingRepository(db), new EphemeralDataProtectionProvider());
         var configuration = new PaymentConfigurationSnapshot(2, "LIVE", string.Empty, null, null, "synthetic-binding-key");
-        Assert.True(await bindings.BindAsync(code, configuration, default,
+        Assert.True(await bindings.BindAsync(providerCode, configuration, default,
             new("CHECKOUT", PaymentOrderId: order.Id)));
         Assert.Equal(order.Id, (await db.Set<CheckoutSigningBinding>().SingleAsync()).PaymentOrderId);
         var differentOrder = await db.PaymentOrders.SingleAsync(row => row.OrderCode == (code + 2).ToString());
-        await Assert.ThrowsAsync<InvalidOperationException>(() => bindings.BindAsync(code, configuration, default,
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bindings.BindAsync(providerCode, configuration, default,
             new("CHECKOUT", PaymentOrderId: differentOrder.Id)));
         await Assert.ThrowsAsync<InvalidOperationException>(() => bindings.BindAsync(code + 1, configuration, default,
             new("CHECKOUT", PaymentOrderId: Guid.NewGuid())));
         await db.PaymentTransactions.Where(row => row.PaymentOrderId == order.Id).ExecuteDeleteAsync();
         var foreignKey = await Assert.ThrowsAsync<PostgresException>(() => db.PaymentOrders.Where(row => row.Id == order.Id).ExecuteDeleteAsync());
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, foreignKey.SqlState);
+    }
+
+    [PaymentPostgresFact, Trait("Category", "Postgres")]
+    public async Task FirstBinding_RejectsAnotherOrdersProviderCodeBeforeInsert()
+    {
+        await using var fixture = await PaymentTempDatabase.CreateAsync();
+        const long first = 741852991;
+        const long second = 741852992;
+        await SeedCheckoutAsync(fixture, first);
+        await SeedCheckoutAsync(fixture, second);
+        await using var db = fixture.Open();
+        var firstOrder = await db.PaymentOrders.SingleAsync(order => order.OrderCode == first.ToString());
+        var bindings = new CheckoutSigningBindings(new CheckoutBindingRepository(db), new EphemeralDataProtectionProvider());
+        var configuration = new PaymentConfigurationSnapshot(1, "LIVE", string.Empty, null, null, "synthetic-scope-key");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bindings.BindAsync(second, configuration, default,
+            new("CHECKOUT", PaymentOrderId: firstOrder.Id)));
+        Assert.Equal(0, await db.Set<CheckoutSigningBinding>().CountAsync());
+        Assert.True(await bindings.BindAsync(first, configuration, default, new("CHECKOUT", PaymentOrderId: firstOrder.Id)));
+        Assert.Equal(first, (await db.Set<CheckoutSigningBinding>().SingleAsync()).OrderCode);
     }
 
     [PaymentPostgresFact, Trait("Category", "Postgres")]
@@ -127,6 +147,7 @@ public partial class PaymentIntegrationPostgresConcurrencyTests
         await SeedCheckoutAsync(fixture, code);
         await SeedCheckoutAsync(fixture, code + 1);
         await SeedCheckoutAsync(fixture, code + 2);
+        await SeedCheckoutAsync(fixture, code + 3);
         var directory = Directory.CreateTempSubdirectory("smartpark-binding-repair-");
         var keys = directory.CreateSubdirectory("keys");
         var manifest = Path.Combine(directory.FullName, "private-manifest.json");
@@ -141,6 +162,9 @@ public partial class PaymentIntegrationPostgresConcurrencyTests
             using (var provider = KeyProvider(keys))
                 provider.GetRequiredService<IDataProtectionProvider>().CreateProtector("warmup").Protect("warmup");
             await using var db = fixture.Open();
+            var unsupported = await db.PaymentOrders.SingleAsync(order => order.OrderCode == (code + 3).ToString());
+            unsupported.OrderCode = "legacy-inventory-unsupported";
+            await db.SaveChangesAsync();
             var options = Options.Create(new PayOsOptions { Mode = "LIVE", LiveClientId = "synthetic-client",
                 LiveApiKey = "synthetic-api", LiveChecksumKey = "synthetic-current-key" });
             var data = new Dictionary<string, object?> { ["orderCode"] = code, ["amount"] = 25000,
@@ -158,6 +182,17 @@ public partial class PaymentIntegrationPostgresConcurrencyTests
             var inventory = await RepairAsync(fixture.ConnectionString, keys.FullName, "--inventory");
             Assert.Equal(0, inventory.ExitCode);
             Assert.Contains("MISSING_BINDING", inventory.Output);
+            using (var document = JsonDocument.Parse(inventory.Output))
+            {
+                var rows = document.RootElement.GetProperty("rows").EnumerateArray().ToArray();
+                Assert.Equal(4, rows.Length);
+                var bad = Assert.Single(rows, row => row.GetProperty("State").GetString() == "UNSUPPORTED_ORDER_CODE");
+                Assert.Equal(unsupported.Id, bad.GetProperty("PaymentOrderId").GetGuid());
+                Assert.Equal("legacy-inventory-unsupported", bad.GetProperty("OriginalOrderCode").GetString());
+                Assert.Equal(JsonValueKind.Null, bad.GetProperty("OrderCode").ValueKind);
+                Assert.Contains(rows, row => row.GetProperty("OrderCode").ValueKind == JsonValueKind.Number &&
+                    row.GetProperty("OrderCode").GetInt64() == code + 2);
+            }
             var dry = await RepairAsync(fixture.ConnectionString, keys.FullName, "--manifest", manifest);
             Assert.Equal(0, dry.ExitCode);
             Assert.Contains("READY", dry.Output);

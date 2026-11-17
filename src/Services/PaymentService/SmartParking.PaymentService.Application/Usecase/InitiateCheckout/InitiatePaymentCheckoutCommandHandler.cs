@@ -156,11 +156,7 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         }
 
         var transactionId = Guid.NewGuid();
-        long orderCodeNumber;
-        if (!long.TryParse(order.OrderCode, out orderCodeNumber))
-        {
-            orderCodeNumber = Math.Abs(BitConverter.ToInt64(order.Id.ToByteArray(), 0)) % 900000000000L + 100000000000L;
-        }
+        var orderCodeNumber = Integrations.PayOsOrderCodes.Resolve(order.OrderCode, order.Id);
 
         var expiresAt = order.ExpiresAt ?? now.AddMinutes(15);
         var description = $"SP {orderCodeNumber}";

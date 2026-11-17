@@ -14,6 +14,6 @@ public sealed class CheckoutBindingInventoryRepository(PaymentDbContext db) : IC
                 !db.Set<CheckoutSigningBinding>().Any(binding => binding.PaymentOrderId == transaction.PaymentOrderId))
             .OrderBy(transaction => transaction.PaymentOrderId).ThenBy(transaction => transaction.Id)
             .Skip(offset).Take(limit)
-            .Select(transaction => new CheckoutBindingCandidate(transaction.PaymentOrder!.OrderCode, transaction.GatewayTransactionId!))
+            .Select(transaction => new CheckoutBindingCandidate(transaction.PaymentOrderId, transaction.PaymentOrder!.OrderCode, transaction.GatewayTransactionId!))
             .ToListAsync(ct);
 }

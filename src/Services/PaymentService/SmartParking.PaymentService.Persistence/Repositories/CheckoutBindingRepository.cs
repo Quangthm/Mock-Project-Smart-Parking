@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
+using SmartParking.PaymentService.Application.Integrations;
 using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Persistence.Repositories;
@@ -16,17 +17,26 @@ public sealed class CheckoutBindingRepository(PaymentDbContext db) : ICheckoutBi
     {
         provenance ??= new CheckoutBindingProvenance("CHECKOUT");
         var externalCode = orderCode.ToString(CultureInfo.InvariantCulture);
+        var order = provenance.PaymentOrderId is { } id
+            ? await db.PaymentOrders.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
+            : await db.PaymentOrders.AsNoTracking().SingleOrDefaultAsync(row => row.OrderCode == externalCode, cancellationToken);
+        if (order is null || PayOsOrderCodes.Resolve(order.OrderCode, order.Id) != orderCode)
+            throw new InvalidOperationException("The provider order code does not match the payment order.");
+
+        // Compare the observed local code in the INSERT as well: a concurrent code
+        // change cannot slip between validation and creation of the binding.
+        var observedCode = order.OrderCode;
+        var orderId = order.Id;
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO checkout_signing_bindings
                 (order_code, payment_order_id, protected_binding, source, evidence_reference)
             SELECT {orderCode}, id, {protectedBinding}, {provenance.Source}, {provenance.EvidenceReference}
             FROM payment_orders
-            WHERE ({provenance.PaymentOrderId}::uuid IS NOT NULL AND id = {provenance.PaymentOrderId})
-               OR ({provenance.PaymentOrderId}::uuid IS NULL AND order_code = {externalCode})
+            WHERE id = {orderId} AND order_code = {observedCode}
             ON CONFLICT (order_code) DO NOTHING
             """, cancellationToken);
         if (!await db.Set<CheckoutSigningBinding>().AnyAsync(row => row.OrderCode == orderCode &&
-            (provenance.PaymentOrderId == null || row.PaymentOrderId == provenance.PaymentOrderId), cancellationToken))
+            row.PaymentOrderId == orderId && db.PaymentOrders.Any(parent => parent.Id == orderId && parent.OrderCode == observedCode), cancellationToken))
             throw new InvalidOperationException("An existing payment order is required for a checkout binding.");
     }
 
