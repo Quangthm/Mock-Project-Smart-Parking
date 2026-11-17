@@ -35,7 +35,8 @@ function dotnet {
     if ($args[0] -eq '--version') { $global:LASTEXITCODE = 0; return '10.0.302' }
     if ($args[0] -eq 'user-secrets') {
         $project = $args[[Array]::IndexOf($args, '--project') + 1]
-        $service = @('User','Facility','Operation','Payment','Notification') | Where-Object { $project -match "(${_}|SmartParking\.NotificationAudit)Service(\.API)?$" -or $project -match "SmartParking\.(Audit)?Service\.API" }
+        $service = if ($project -match 'SmartParking\.NotificationAuditService\.API$') { 'Notification' }
+            else { @('User','Facility','Operation','Payment') | Where-Object { $project -match "${_}Service(\.API)?$" } }
         if ($service -eq 'Facility') { $service = 'Parking' }
         if ($service -eq 'Operation') { $service = 'Reservation' }
         if (!$global:setupTestSecretMaps.ContainsKey($service)) { $global:setupTestSecretMaps[$service] = @{} }
@@ -109,6 +110,7 @@ $key = $global:setupTestSecretMaps['User']['Services:Key']
 Assert-Setup ($key -eq $global:setupTestSecretMaps['Parking']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Reservation']['Services:Key'] -and $key -eq $global:setupTestSecretMaps['Payment']['Services:Key']) 'Local service keys differ.'
 Assert-Setup ($global:setupTestSecretMaps['Parking']['ConnectionStrings:Parking'] -match 'Database=smartpark_facility;Username=smartpark_facility;') 'Facility database mapping differs from compose.'
 Assert-Setup ($global:setupTestSecretMaps['Reservation']['ConnectionStrings:Reservation'] -match 'Database=smartpark_operations;Username=smartpark_operations;') 'Operations database mapping differs from compose.'
+Assert-Setup ($global:setupTestSecretMaps['Notification']['ConnectionStrings:NotificationAudit'] -eq $global:setupTestSecretMaps['Notification']['ConnectionStrings:Notification']) 'Notification connection alias was not preserved.'
 $global:setupTestSecretMaps = @{}
 $teamFile = Join-Path $testRoot 'team-private.env'
 [IO.File]::WriteAllText($teamFile, "SMARTPARK_DEV_PASSWORD=review-team-password`nSMARTPARK_SERVICE_KEY=review-team-service-key-at-least-32-characters`nSMARTPARK_ADMIN_PASSWORD=Review@123`nVITE_MAPTILER_API_KEY=review-map-key`nSMARTPARK_SERVICE_PARKING_URL=http://parking.example.test:5045/`n")
@@ -203,6 +205,7 @@ Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -
     $runner = Join-Path $assistantFixture 'scripts/run-app-service.ps1'
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/run-app-service.ps1') -Destination $runner
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/discovery-docker.ps1') -Destination (Join-Path $assistantFixture 'scripts/discovery-docker.ps1')
+    Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/reservation-key-mounts.ps1') -Destination (Join-Path $assistantFixture 'scripts/reservation-key-mounts.ps1')
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'compose.app.yml') -Destination $assistantFixture
     $global:setupTestAssistantSteps = @()
     $global:setupTestFrontendUrl = ''

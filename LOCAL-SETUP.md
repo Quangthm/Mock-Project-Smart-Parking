@@ -258,6 +258,8 @@ Yêu cầu `setup.ps1` đã chạy xong (6 DB healthy và network `smartpark-sch
 
 Compose file là compose.app.yml; image backend dùng docker/Dockerfile.backend với build arg SERVICE (UserService/FacilityService/OperationService/PaymentService/NotificationAuditService).
 
+Reservation service JWT dùng PEM inline khi không cấu hình file key. Nếu điền `SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH` hoặc `SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH`, `scripts/run-app-service.ps1` kiểm tra đó là file tồn tại và tự thêm `compose.reservation-private-key.yml` / `compose.reservation-public-key.yml`. Đường dẫn tương đối được tính từ root repo. Chạy Compose trực tiếp với file key phải thêm override tương ứng bằng `-f`; base Compose không mount key khi đường dẫn trống. Chỉ Operations nhận private key; Facility và Payment nhận public key. Sau thay đổi, chạy lại runner cho service liên quan để recreate container, không cần đổi dữ liệu DB.
+
 > **CẢNH BÁO:** không đặt `VITE_MAPTILER_API_KEY` rỗng trong Compose — biến rỗng sẽ ghi đè key trong `FE/.env` đang bind mount. Nếu port `5035/5045/5055/5065/5068` đang bị runner host chiếm, dừng runner host trước khi chạy container.
 
 ### 3.2 Runner trên host (Visual Studio / `dotnet run`)
@@ -302,6 +304,17 @@ npm run dev
 ```
 
 Vite chạy mặc định tại http://localhost:5173. Setup sao chép `FE/.env.example` sang `FE/.env` nếu chưa có và **giữ nguyên file đã cấu hình**. Điền MapTiler key của bạn nếu giao diện cần bản đồ (xem mục 5.2).
+
+### Local captcha configuration
+
+For Docker local testing, `SMARTPARK_TURNSTILE_ENABLED` in the root `.env` configures both UserService verification and the frontend widget. After changing it, apply both containers:
+
+```powershell
+.\scripts\run-app-service.ps1 -Service User -NoBuild -NoLogWindow
+.\scripts\run-app-service.ps1 -Service Frontend -NoBuild -NoLogWindow
+```
+
+Reload the browser afterward. For a frontend running directly on the host, align `VITE_TURNSTILE_ENABLED` in `FE/.env` with UserService and restart Vite. The widget is enabled by default; disabling its display does not bypass backend verification or validate account credentials.
 
 ## 4. Verify Setup
 

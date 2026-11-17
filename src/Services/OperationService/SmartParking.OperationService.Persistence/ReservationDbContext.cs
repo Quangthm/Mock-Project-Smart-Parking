@@ -16,6 +16,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<StructureSiteStateRow> StructureSiteStates => Set<StructureSiteStateRow>();
     public DbSet<StructureReleaseReceiptRow> StructureReleaseReceipts => Set<StructureReleaseReceiptRow>();
     public DbSet<ReservationRequest> ReservationRequests => Set<ReservationRequest>();
+    public DbSet<OperationalPolicyDraftRow> OperationalPolicyDrafts => Set<OperationalPolicyDraftRow>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,6 +32,11 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationTerms>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedPricingSnapshot).HasColumnType("jsonb");
         Map<OperationalPolicyRow>(modelBuilder, "operational_policies");
+        modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.OverrideBounds).HasColumnType("jsonb");
+        modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.ParkingProductEnabled).HasColumnType("jsonb");
+        Map<OperationalPolicyDraftRow>(modelBuilder, "operational_policy_drafts");
+        modelBuilder.Entity<OperationalPolicyDraftRow>().Property(x => x.DraftPayload).HasColumnType("jsonb");
+        modelBuilder.Entity<OperationalPolicyDraftRow>().HasIndex(x => x.SiteId).IsUnique();
         Map<OperationalCapacityConfig>(modelBuilder, "operational_capacity_configs");
         Map<ReservationCancellationEvidence>(modelBuilder, "reservation_cancellation_evidence");
         modelBuilder.Entity<ReservationCancellationEvidence>().Property(x => x.PolicySnapshot).HasColumnType("jsonb");

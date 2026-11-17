@@ -3,11 +3,12 @@ using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.DTOs;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Domain;
+using SmartParking.OperationService.Application.Reservations;
 
 namespace SmartParking.OperationService.Persistence.Repositories;
 
 public sealed partial class ReservationRepository(ReservationDbContext db)
-    : GenericRepository<ReservationRow>(db), Application.Reservations.IReservationBookingRepository
+    : GenericRepository<ReservationRow>(db), IReservationBookingRepository
 {
     public async Task<ReservationRow?> FindForUpdateAsync(
         Guid tenantId, Guid siteId, Guid reservationId, CancellationToken cancellationToken)

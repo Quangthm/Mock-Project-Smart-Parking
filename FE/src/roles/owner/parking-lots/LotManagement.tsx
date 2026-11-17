@@ -39,7 +39,7 @@ export function LotManagement({ siteFilterId = "all" }: { siteFilterId?: string 
   const { user } = useApp()
   useServerRefresh(user?.role === "owner" ? user.id : undefined, () => {
     if (!model.loading && !model.refreshing && !model.editSite && !model.detailSite) model.refresh()
-  }, 45_000)
+  })
   const [settings, setSettings] = useState(defaultSettings)
   const [draft, setDraft] = useState<TableSettings | null>(null)
   const [page, setPage] = useState(1)

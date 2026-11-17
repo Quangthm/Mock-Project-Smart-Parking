@@ -139,8 +139,8 @@ export function LotStatus({
   // details are open. Keep the inspection until that slot actually disappears.
   useEffect(() => {
     if (!inspectedSlot) return
-    if (allSlots.some((slot) => slot.id === inspectedSlot.id)) return
-    setInspectedSlot(null)
+    const current = allSlots.find((slot) => slot.id === inspectedSlot.id) ?? null
+    if (current !== inspectedSlot) setInspectedSlot(current)
   }, [allSlots, inspectedSlot, setInspectedSlot])
 
   if (!site) {

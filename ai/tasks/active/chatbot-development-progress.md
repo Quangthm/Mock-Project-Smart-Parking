@@ -17,6 +17,34 @@ Cập nhật tổ chức tài liệu ngày **17/11/2026**. Đây là file duy nh
 - Chất lượng FAQ, các ca từng role và giới hạn booking/payment tiếp tục theo [hướng dẫn tester](../../../docs/04-testing/assistant-handoff-testing.md).
 - Các lỗi còn mở và phần chức năng chưa nghiệm thu không được coi là hoàn thành chỉ vì setup local đã chạy.
 
+## Checkpoint triển khai tích hợp develop · 17/11/2026
+
+- APPROVED: người dùng đồng ý phương án, yêu cầu xử lý rồi review độc lập trước khi merge. Được phép hoàn tất merge local khi không còn lỗi chặn; không push.
+- Backup: `codex/backup-ai-chatbot-before-develop-20261117` tại `c809d70834b60b1a3f3e64b295799123557ef2c8`. Nhánh làm việc: `codex/integrate-develop-ai-chatbot-20261117`; nguồn develop chốt `8969f0d30cfdbbd5e5e35d12e248a9cd56e180ec`, xác minh lại remote trước triển khai.
+- Đã giải 8 conflict theo phương án: cấu trúc booking mới + range/Vehicle, auth dedup + options/session, template env, setup Payment và seed history/discovery, tài liệu hai phía. Cập nhật hai test doubles theo BookingReadResult. Không áp dụng migration, seed hay khởi động container.
+- Review GPT-6.1 Sol medium độc lập: backend không có blocker; frontend/setup phát hiện mounts key trống của develop trỏ vào cả repo. Đã chuyển mount sang hai Compose override có `create_host_path: false`; runner chọn theo file hợp lệ, giữ PEM inline khi không có path. Kiểm tra lại reviewer trước hoàn tất merge.
+- Validation: full solution build PASS, 0 errors (24 warnings gồm dependency advisories/NuGet audit network); lần --no-restore đầu dùng assets cũ thất bại, restore theo project hiện hành giải quyết, không đổi package. Full backend tests PASS 1672, SKIP 109; sau thêm regression repository range/Vehicle, Operation tests PASS 56 (tăng 1). PostgreSQL/broker live [UNVERIFIED].
+- FE `npm run build` PASS với bundle-size/dynamic-import warnings. Full node suite 317 tests: 307 PASS / 10 FAIL. Agent độc lập chạy exact develop export: 250 tests, 240 PASS / cùng 10 FAIL, do mock imports cũ ở operational-layout-adapter (6), operator-provisioning (1), reservation-happy-path (3). Không coi suite là xanh; không có lỗi mới từ merge trong suite. Sau thêm cancellation regression, targeted auth/assistant API/admin 71/71 PASS.
+- Windows PowerShell 5.1: setup harness PASS; assistant runner PASS; reservation-key-mounts PASS. Compose render chỉ dùng template/synthetic paths: base có 0 key volumes; overrides mount đúng file readonly, không tự tạo host path. Không đọc/in local secrets.
+- Evidence logs (ignored): `.cache/merge-review/`. Existing progress checkpoint được bảo toàn và đưa vào merge.
+- Rollback: khi merge chưa commit dùng abort trên nhánh tích hợp; khi đã hoàn tất, backup giữ đầy đủ code trước merge. Nếu đã chia sẻ merge, ưu tiên revert merge với mainline parent 1 thay vì rewrite lịch sử; Git rollback không đảo DB/provider side effects. Không thực hiện rollback trong lượt này.
+- Review lại Compose: không còn blocker; base 0 mounts, overrides đúng file/recipient/readonly, helper và setup harness PASS. Giới hạn: configured key path không hợp lệ cũng chặn runner service khác; phải sửa path hoặc bỏ cấu hình file không dùng.
+- Đối chiếu cuối phục hồi Notification setup của develop (project lookup, user-secrets/connection alias, service URL/team config, FE defaults), giữ Assistant additions. Test double NotificationAudit trước đây match nhầm mọi service; sửa nhận diện và thêm assertion alias. Không sửa host-runner Notification DB-port mapping cũ ngoài phạm vi; Docker provisioning hiện hữu không bị thay đổi.
+- Git gate: không còn unmerged entries, không stage local .env/key/certificate. `git diff --cached develop --check` PASS trước bổ sung Notification; diff so với AI parent chỉ báo whitespace kế thừa từ tài liệu develop (không sửa ngoài phạm vi).
+- Final gate: setup harness Windows PowerShell 5.1 PASS sau phục hồi Notification; reviewer độc lập xác nhận không còn blocker. Bản tích hợp sẵn sàng merge local hai parent và fast-forward AI-ChatBot theo phê duyệt; không push. Commit merge được nhận diện qua lịch sử nhánh, parent 1 là mốc backup ở trên.
+
+## Checkpoint review tích hợp develop · 17/11/2026
+
+- Phạm vi: review và đề xuất trước khi người dùng duyệt; chưa sửa runtime, merge, commit hoặc push. Hai subagent GPT-6.1 Sol / medium review độc lập chiến lược Git và tương thích code.
+- Provenance: `AI-ChatBot=c809d70834b60b1a3f3e64b295799123557ef2c8`, `develop=8969f0d30cfdbbd5e5e35d12e248a9cd56e180ec`, merge base `c7098b425a7dd2249ddf8bdc89b8366438d40ba9`. Working tree ban đầu sạch. `git ls-remote` xác nhận hai remote head trùng local sau lần đầu lỗi DNS.
+- Kiểm chứng: `git rev-list --left-right --count AI-ChatBot...develop` = 40/25. `git merge-tree --write-tree --name-only AI-ChatBot develop` với object directory tạm (không đổi branch/index/worktree) xác nhận 8 file conflict: `.env.example`, `FE/src/lib/authApi.ts`, `docs/03-design/api/reservation-first-slice-api-design.md`, `scripts/seed-demo-site.ps1`, `setup.ps1`, và ba file OperationService `BookingContracts.cs`, `BookingReviewHandlers.cs`, `ReservationBookingRepository.cs`.
+- PROPOSED: normal merge trên nhánh tích hợp tách biệt sau khi được duyệt; giữ lịch sử chia sẻ và bốn lần merge develop trước đó. Không rebase 40 commit hoặc cherry-pick cả chuỗi tích hợp; không chọn blanket ours/theirs.
+- PROPOSED booking: giữ cấu trúc file/query/repository và các trường payment/allocation/history mới của develop; chuyển `From/To`, validation, lọc overlap trước phân trang và `Vehicle` của chatbot sang cấu trúc mới. Không phục hồi repository cũ hoặc giữ các type trùng. Controller tự merge được vẫn có thể gọi constructor query không tương thích.
+- PROPOSED auth: giữ dedup GET/currentUser và errorCode fallback của develop, giữ session subscriptions và request options của chatbot; bỏ qua dedup cho request có options riêng để cancellation/timeout/401 policy không bị dùng chung sai.
+- PROPOSED setup: giữ `.env.example` dạng template không secret vì develop vẫn tham chiếu nó tại setup.ps1:498; đối chiếu bổ sung cấu hình hai phía. Kết hợp Payment integration của develop và assistant setup; kết hợp seed history mới với discovery seed, không chạy seed/DB trong review.
+- Kiểm tra tiếp: các file auto-merge như App.tsx, Compose, Payment Program.cs và SQL vẫn cần review semantic. Build/test tích hợp NOT RUN, kết quả runtime [UNVERIFIED]. Khi có bản giải quyết: chạy build/test backend, frontend và kiểm tra scripts phù hợp; kiểm thử booking history/date filter/vehicle, auth session/cancellation, chatbot FAQ/search/read. Không dùng test cũ làm bằng chứng mới.
+- Next step: người dùng duyệt hướng xử lý; chuẩn bị bản tích hợp và diff/test reviewable trên nhánh tách biệt trước khi cập nhật AI-ChatBot. Không push nếu chưa được yêu cầu. Thay đổi duy nhất của lượt review là checkpoint này.
+
 ## Mục lục bản ghi
 
 | Mốc | Nội dung | Vị trí |

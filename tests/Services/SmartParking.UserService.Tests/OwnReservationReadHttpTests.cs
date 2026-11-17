@@ -99,16 +99,23 @@ public sealed class OwnReservationReadHttpTests
     private sealed class Store : IReservationBookingRepository
     {
         public List<(Guid, ReservationRow)> Rows = []; public bool Fail;
-        public Task<ReservationRow?> FindOwnBookingAsync(Guid account, Guid id, CancellationToken ct) => Task.FromResult(Rows.Where(r => r.Item1 == account && r.Item2.Id == id).Select(r => r.Item2).SingleOrDefault());
-        public Task<IReadOnlyList<ReservationRow>> ListOwnBookingsAsync(Guid account, int take, DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null)
+        public Task<BookingReadResult?> FindOwnBookingAsync(Guid account, Guid id, CancellationToken ct) => Task.FromResult(Rows.Where(r => r.Item1 == account && r.Item2.Id == id).Select(r => new BookingReadResult(r.Item2, null, null, null)).SingleOrDefault());
+        public Task<IReadOnlyList<BookingReadResult>> ListOwnBookingsAsync(Guid account, int take, DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null)
         {
             if (Fail) throw new ReservationGateException(503, "DEPENDENCY_UNAVAILABLE", "Synthetic outage");
             IReadOnlyList<ReservationRow> rows = Rows.Where(r => r.Item1 == account).Select(r => r.Item2)
                 .Where(r => from is null || r.ExpectedStartTime < to && r.ExpectedEndTime > from)
                 .Where(r => before is null || r.CreatedAt < before || r.CreatedAt == before && r.Id.CompareTo(beforeId!.Value) < 0)
                 .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(take).ToArray();
-            return Task.FromResult(rows);
+            return Task.FromResult<IReadOnlyList<BookingReadResult>>(rows.Select(r => new BookingReadResult(r, null, null, null)).ToArray());
         }
+        public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> DueZeroPriceAcceptanceAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
         public Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task RequireDurableConfirmationAsync(CancellationToken ct) => throw new NotSupportedException();
         public Task RequirePlateAvailableAsync(ReservationRow row, DateTimeOffset now, CancellationToken ct) => throw new NotSupportedException();

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { formatSlotLabel } from "../../../lib/operationalLayout"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { Badge } from "../../../components/ui/Badge"
 import { parkingApi, type Slot, type Unit } from "../../../lib/parkingApi"
@@ -144,7 +145,7 @@ export function RegisteredSlotsPanel({
                     aria-pressed={isSelected}
                     aria-label={`Focus slot ${slot.code} in the 3D view`}
                   >
-                    <span className="block break-words text-xs font-semibold tabular-nums text-[var(--fg)]">{slot.code}</span>
+                    <span className="block break-words text-xs font-semibold tabular-nums text-[var(--fg)]">{formatSlotLabel(slot.code)}</span>
                     <span className="block text-[11px] text-[var(--muted)]">{unitName(slot.unitId)}</span>
                   </button>
 

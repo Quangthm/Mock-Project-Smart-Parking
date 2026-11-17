@@ -9,7 +9,6 @@ using SmartParking.OperationService.Infrastructure.Outbox;
 using SmartParking.OperationService.Persistence;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace SmartParking.OperationService.Infrastructure;
 
@@ -30,6 +29,14 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<IOperatorIdentityClient>(provider =>
             provider.GetRequiredService<OperatorIdentityClient>());
 
+        services.AddHttpClient<OwnerIdentityClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddScoped<IOwnerIdentityClient>(provider =>
+            provider.GetRequiredService<OwnerIdentityClient>());
+
         var serviceKey = configuration["Services:Key"]
             ?? throw new InvalidOperationException("Configure Services:Key.");
         services.AddHttpClient<IReservationVehicleOwner, ReservationVehicleClient>(client =>
@@ -38,7 +45,11 @@ public static class InfrastructureDependencyInjection
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
-        services.TryAddScoped<IReservationCommercialOwner, UnavailableReservationCommercialOwner>();
+        services.AddHttpClient<IReservationCommercialOwner, ReservationCommercialClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
         services.AddHttpClient<ReservationFacilityClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
@@ -64,6 +75,8 @@ public static class InfrastructureDependencyInjection
         });
         services.AddScoped<ICheckoutPaymentClient>(provider =>
             provider.GetRequiredService<CheckoutPaymentClient>());
+
+        services.AddScoped<Application.Policies.Ports.ISiteOwnershipValidator, Policies.SiteOwnershipValidator>();
 
         AddOutboxPublisher(services, configuration);
 

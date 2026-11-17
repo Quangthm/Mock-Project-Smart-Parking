@@ -58,7 +58,7 @@ public sealed class PreviewReservationPriceQueryHandler
         }
 
         var calcRequest = new PricingCalculationRequest(
-            TenantId: req.TenantId ?? policy.TariffId,
+            TenantId: req.TenantId ?? Guid.Empty,
             SiteId: req.SiteId,
             VehicleType: vehicleType,
             EntryTime: req.Start,

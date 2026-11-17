@@ -478,12 +478,18 @@ function Invoke-AiCameraSetup {
 # Read existing secrets without printing their values or invoking `list`.
 $existingByService = @{}
 $projectByService = @{}
-foreach ($service in @('User','Parking','Reservation','Payment')) {
+foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
     # Keep existing connection/configuration keys while resolving the renamed project.
-    $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
-    $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
-    $projectByService[$service] = $projectDir
-    [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${projectService}Service.API.csproj") -Raw
+    if ($service -eq 'Notification') {
+        $projectDir = Join-Path $taskRoot "src/Services/NotificationAuditService/SmartParking.NotificationAuditService.API"
+        $projectByService[$service] = $projectDir
+        [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.NotificationAuditService.API.csproj") -Raw
+    } else {
+        $projectService = switch ($service) { 'Parking' { 'Facility' } 'Reservation' { 'Operation' } default { $service } }
+        $projectDir = Join-Path $taskRoot "src/Services/${projectService}Service/SmartParking.${projectService}Service.API"
+        $projectByService[$service] = $projectDir
+        [xml]$projectXml = Get-Content (Join-Path $projectDir "SmartParking.${projectService}Service.API.csproj") -Raw
+    }
     $secretId = [string](@($projectXml.Project.PropertyGroup.UserSecretsId | Where-Object { $_ })[0])
     $secretFile = Join-Path ([Environment]::GetFolderPath('ApplicationData')) "Microsoft/UserSecrets/$secretId/secrets.json"
     $existing = @{}
@@ -520,7 +526,7 @@ if ($CredentialMode -eq 'Team') {
     foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { throw "Team file must configure $name." }
     }
-    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL','SMARTPARK_CLOUDINARY_CLOUD_NAME','SMARTPARK_CLOUDINARY_API_KEY','SMARTPARK_CLOUDINARY_API_SECRET')) {
+    foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_ADMIN_PASSWORD','SMARTPARK_OWNER_PASSWORD','SMARTPARK_OPERATOR_PASSWORD','SONAR_DB_PASSWORD','VITE_MAPTILER_API_KEY','SMARTPARK_SERVICE_USER_URL','SMARTPARK_SERVICE_PARKING_URL','SMARTPARK_SERVICE_RESERVATION_URL','SMARTPARK_SERVICE_PAYMENT_URL','SMARTPARK_SERVICE_NOTIFICATION_URL','SMARTPARK_CLOUDINARY_CLOUD_NAME','SMARTPARK_CLOUDINARY_API_KEY','SMARTPARK_CLOUDINARY_API_SECRET')) {
         if (!$team[$name] -or $team[$name] -like 'replace-with-*') { continue }
         if ($settings[$name] -and $settings[$name] -notlike 'replace-with-*' -and $settings[$name] -cne $team[$name]) {
             throw "Team/local conflict for $name. Existing configuration was preserved; reconcile it explicitly before retrying."
@@ -549,7 +555,7 @@ foreach ($name in @('SMARTPARK_DEV_PASSWORD','SMARTPARK_SERVICE_KEY','SMARTPARK_
         } else {
             # Reuse an existing local PostgreSQL password when configuring an old volume.
             $passwords = @()
-            foreach ($service in @('User','Parking','Reservation','Payment')) {
+            foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
                 $connection = $existingByService[$service]["ConnectionStrings:$service"]
                 $extracted = Get-SecretConnectionStringPassword $connection
                 if ($extracted) { $passwords += $extracted }
@@ -612,7 +618,7 @@ foreach ($name in @('SMARTPARK_DB_USER_PORT','SMARTPARK_DB_PARKING_PORT','SMARTP
     if (![int]::TryParse($settings[$name], [ref]$port) -or $port -lt 1 -or $port -gt 65535) { throw "Invalid port: $name." }
 }
 if ($settings['VITE_MAPTILER_API_KEY'] -match "[\r\n']") { throw 'Configure MapTiler key directly in FE/.env.' }
-foreach ($service in @('USER','PARKING','RESERVATION','PAYMENT')) {
+foreach ($service in @('USER','PARKING','RESERVATION','PAYMENT','NOTIFICATION')) {
     $name = "SMARTPARK_SERVICE_${service}_URL"
     if ($settings[$name]) {
         $uri = $null
@@ -695,8 +701,8 @@ if (!$SkipDatabase) {
     }
 }
 
-Write-Host '[5/7] Configuring user-secrets for User, Facility, Operation, Payment...' -ForegroundColor Cyan
-if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment')) {
+Write-Host '[5/7] Configuring user-secrets for User, Facility, Operation, Payment, Notification...' -ForegroundColor Cyan
+if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','Payment','Notification')) {
     $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation='smartpark_operations'; Payment='smartpark_payment'; Notification='smartpark_notification'; Iot='smartpark_iot' }[$service]
     $port = $settings["SMARTPARK_DB_$($service.ToUpperInvariant())_PORT"]
     $password = $settings['SMARTPARK_DEV_PASSWORD'].Replace('"','""')
@@ -706,13 +712,15 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         'Services:Parking' = 'http://localhost:5045/'
         'Services:Reservation' = 'http://localhost:5055/'
         'Services:Payment' = 'http://localhost:5065/'
+        'Services:Notification' = 'http://localhost:5068/'
     }
     $desired["ConnectionStrings:$service"] = "Host=127.0.0.1;Port=$port;Database=$database;Username=$database;Password=`"$password`""
+    if ($service -eq 'Notification') { $desired['ConnectionStrings:NotificationAudit'] = $desired['ConnectionStrings:Notification'] }
     foreach ($field in @{'CloudName'='CLOUD_NAME'; 'ApiKey'='API_KEY'; 'ApiSecret'='API_SECRET'}.GetEnumerator()) {
         $value = $settings['SMARTPARK_CLOUDINARY_' + $field.Value]
         if (![string]::IsNullOrWhiteSpace($value)) { $desired['MediaStorage:Cloudinary:' + $field.Key] = $value }
     }
-    foreach ($remoteService in @('User','Parking','Reservation','Payment')) {
+    foreach ($remoteService in @('User','Parking','Reservation','Payment','Notification')) {
         $url = $settings["SMARTPARK_SERVICE_$($remoteService.ToUpperInvariant())_URL"]
         if ($url) { $desired["Services:$remoteService"] = $url }
     }
@@ -769,6 +777,30 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
         if ($settings['SMARTPARK_PAYOS_API_KEY']) { $desired['PayOs:ApiKey'] = $settings['SMARTPARK_PAYOS_API_KEY'] }
         if ($settings['SMARTPARK_PAYOS_CHECKSUM_KEY']) { $desired['PayOs:ChecksumKey'] = $settings['SMARTPARK_PAYOS_CHECKSUM_KEY'] }
         if ($settings['SMARTPARK_PAYOS_BASE_URL']) { $desired['PayOs:BaseUrl'] = $settings['SMARTPARK_PAYOS_BASE_URL'] }
+    }
+    if ($service -in @('User', 'Reservation')) {
+        $desired['ReservationAdmission:Enabled'] = if ($settings['SMARTPARK_RESERVATION_ADMISSION_ENABLED']) { $settings['SMARTPARK_RESERVATION_ADMISSION_ENABLED'] } else { 'false' }
+        $brokerPrefix = if ($service -eq 'User') { 'SMARTPARK_RESERVATION_USER' } else { 'SMARTPARK_RESERVATION_OPERATION' }
+        $desired['ReservationAdmission:BrokerUser'] = if ($settings[$brokerPrefix + '_BROKER_USER']) { $settings[$brokerPrefix + '_BROKER_USER'] } else { '' }
+        $desired['ReservationAdmission:BrokerPassword'] = if ($settings[$brokerPrefix + '_BROKER_PASSWORD']) { $settings[$brokerPrefix + '_BROKER_PASSWORD'] } else { '' }
+        if ($service -eq 'Reservation') {
+            $desired['JwtValidation:AllowInsecureTransport'] = if ($settings['SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS']) { $settings['SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS'] } else { 'false' }
+            $desired['Cors:AllowedOrigins'] = $settings['SMARTPARK_OPERATION_CORS_ORIGINS']
+            $desired['Messaging:AuditEnabled'] = if ($settings['SMARTPARK_OPERATION_AUDIT_ENABLED']) { $settings['SMARTPARK_OPERATION_AUDIT_ENABLED'] } else { 'false' }
+            $desired['Messaging:OutboxDeliveryEnabled'] = if ($settings['Messaging__OutboxDeliveryEnabled']) { $settings['Messaging__OutboxDeliveryEnabled'] } else { 'false' }
+            $desired['SMARTPARK_RABBITMQ_HOST'] = '127.0.0.1'
+            $desired['SMARTPARK_RABBITMQ_PORT'] = $settings['SMARTPARK_RABBITMQ_PORT']
+            $desired['SMARTPARK_RABBITMQ_VHOST'] = $settings['SMARTPARK_RABBITMQ_VHOST']
+        }
+    }
+    if ($service -in @('Parking', 'Payment', 'Reservation')) {
+        $desired['ReservationIntegration:Enabled'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ENABLED']) { $settings['SMARTPARK_RESERVATION_FACILITY_ENABLED'] } else { 'false' }
+        if ($service -eq 'Reservation') {
+            $desired['ReservationIntegration:AllowHttp'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP']) { $settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP'] } else { 'false' }
+            $desired['ReservationIntegration:OperationsPrivateKeyPath'] = if ($settings['SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH']) { $settings['SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH'] } else { '' }
+        } else {
+            $desired['ReservationIntegration:OperationsPublicKeyPath'] = if ($settings['SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH']) { $settings['SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH'] } else { '' }
+        }
     }
     $toSync = @{}
     foreach ($name in $desired.Keys) {
@@ -828,10 +860,12 @@ $frontendDefaults = [ordered]@{
     'VITE_AI_API_BASE_URL'      = 'http://localhost:5001'
     'VITE_AI_LIVE_API_BASE_URL' = 'http://localhost:5002'
     'VITE_PAYMENT_API_BASE_URL' = 'http://localhost:5065'
+    'VITE_NOTIFICATION_API_BASE_URL' = 'http://localhost:5068'
 }
 if ($settings['VITE_AI_API_BASE_URL']) { $frontendDefaults['VITE_AI_API_BASE_URL'] = $settings['VITE_AI_API_BASE_URL'] }
 if ($settings['VITE_AI_LIVE_API_BASE_URL']) { $frontendDefaults['VITE_AI_LIVE_API_BASE_URL'] = $settings['VITE_AI_LIVE_API_BASE_URL'] }
 if ($settings['VITE_PAYMENT_API_BASE_URL']) { $frontendDefaults['VITE_PAYMENT_API_BASE_URL'] = $settings['VITE_PAYMENT_API_BASE_URL'] }
+if ($settings['VITE_NOTIFICATION_API_BASE_URL']) { $frontendDefaults['VITE_NOTIFICATION_API_BASE_URL'] = $settings['VITE_NOTIFICATION_API_BASE_URL'] }
 if (Test-Path -LiteralPath $frontendEnv -PathType Leaf) {
     $frontendSettings = & (Join-Path $taskRoot 'scripts/load-env.ps1') -EnvPath $frontendEnv -NoExport
     $frontendMissing = @{}

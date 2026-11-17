@@ -65,7 +65,7 @@ public sealed class CheckoutController(IMediator mediator, IHostEnvironment envi
     [HttpPost("orders/{orderId:guid}/payos")]
     public async Task<IActionResult> PayOs(Guid orderId, [FromBody] IdempotencyRequest body, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(
-            new InitiateCheckoutCommand(orderId, body.IdempotencyKey), ct) });
+            new InitiateCheckoutCommand(orderId, body.IdempotencyKey, body.ReturnUrl, body.CancelUrl), ct) });
 
     [HttpPost("orders/{orderId:guid}/cash")]
     public async Task<IActionResult> Cash(Guid orderId, [FromBody] IdempotencyRequest body, CancellationToken ct) =>
@@ -88,5 +88,5 @@ public sealed class CheckoutController(IMediator mediator, IHostEnvironment envi
         string VehicleType,
         DateTimeOffset EntryTime,
         DateTimeOffset ExitTime);
-    public sealed record IdempotencyRequest(string IdempotencyKey);
+    public sealed record IdempotencyRequest(string IdempotencyKey, string? ReturnUrl = null, string? CancelUrl = null);
 }

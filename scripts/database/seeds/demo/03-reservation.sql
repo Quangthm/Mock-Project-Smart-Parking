@@ -86,12 +86,7 @@ WHERE NOT EXISTS (
       AND vehicle_type = 'MOTORCYCLE'
 );
 
-UPDATE operational_policies
-SET is_active = TRUE,
-    updated_at = CURRENT_TIMESTAMP
-WHERE tenant_id = :'tenant_id'::uuid
-  AND site_id = :'site_id'::uuid;
-
+-- Preserve existing policy revisions and their activation windows on reruns.
 INSERT INTO operational_policies (
     tenant_id, site_id,
     arrival_late_tolerance_minutes,

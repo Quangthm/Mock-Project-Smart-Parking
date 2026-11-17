@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][ValidateSet('User','Facility','Parking','Operation','Reservation','Payment','Notification','Assistant','Frontend','All')][string]$Service,
     [switch]$NoBuild,
     [switch]$NoLogWindow
@@ -21,6 +21,12 @@ $assistantEnabled = $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
 
 $composeArgs = @('compose','--project-name',$project,'--env-file',$envFile,'-f',$composePath)
 $userTlsEnvironment = @{}
+. (Join-Path $PSScriptRoot 'reservation-key-mounts.ps1')
+$reservationKeyMounts = Get-ReservationKeyMounts $settings $root
+foreach ($override in $reservationKeyMounts.Files) { $composeArgs += @('-f', $override) }
+foreach ($name in $reservationKeyMounts.Environment.Keys) {
+    $userTlsEnvironment[$name] = $reservationKeyMounts.Environment[$name]
+}
 if ($Service -in @('Facility','Operation','Payment','All')) {
     . (Join-Path $PSScriptRoot 'discovery-docker.ps1')
     $discoveryEnvironment = Get-DiscoveryDockerEnvironment $settings $root

@@ -128,9 +128,9 @@ function AppContent() {
       view === "operator" &&
       user?.role === "operator"
     ) {
-      navigate(getUserHomePath(user), { replace: true })
+      navigate({ pathname: getUserHomePath(user), search: location.search, hash: location.hash }, { replace: true })
     }
-  }, [authReady, location.pathname, navigate, user, view])
+  }, [authReady, location.pathname, location.search, location.hash, navigate, user, view])
 
   const isDashboard = !isEmailOtpPath && !isContractPath && (
     (user && ["driver", "owner", "operator", "admin"].includes(view)) ||

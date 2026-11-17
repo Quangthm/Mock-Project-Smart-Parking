@@ -1,0 +1,95 @@
+import { request } from "./authApi"
+
+const server = (import.meta.env.VITE_RESERVATION_API_BASE_URL ?? "http://localhost:5055").replace(/\/$/, "")
+export interface ReservationSelection {
+  vehicleId: string
+  siteId: string
+  requestedSlotId: string
+  start: string
+  end: string
+  paymentMethod: string
+}
+export interface ReservationPreview {
+  bookedAmount: number
+  depositAmount: number | null
+  currency: string
+  pricingVersion: string
+}
+export interface ReservationTerms {
+  termsId: string
+  termsVersion: string
+  validUntil: string
+  commercial: ReservationPreview & { disclosure: string; prepaymentMode: string; coverageVersion: string }
+  operationalPolicy: { values: Record<string, number>; arrivalLateToleranceEnabled: boolean; cancellationTimezone: string }
+}
+export interface ReservationReceipt {
+  requestId: string
+  state: string
+  reservationId: string | null
+  code: string | null
+}
+export interface OwnReservation {
+  reservationId: string
+  state: string
+  siteId: string
+  requestedSlotId: string | null
+  start: string
+  end: string
+  holdExpiresAt: string | null
+  orderId: string | null
+  orderProvisioningState: string
+  orderProvisioningCode: string | null
+  bookedAmount: number | null
+  depositAmount: number | null
+  currency: string | null
+  confirmedAt: string | null
+  createdAt: string
+  // Nullable P0 history fields; older deployments may omit them.
+  siteName?: string | null
+  siteAddress?: string | null
+  licensePlate?: string | null
+  allocatedSlotId?: string | null
+  allocationStatus?: string | null
+  parkingSessionId?: string | null
+  paymentStatus?: string | null
+  // TODO: Driver history BE must expose authorized session evidence; P0 omits these fields.
+  entryImageUrl?: string | null
+  exitImageUrl?: string | null
+}
+export interface ReservationHistoryCursor { before: string; beforeId: string }
+async function call<T>(path: string, method = "GET", body?: unknown, headers?: Record<string, string>): Promise<T> {
+  const response = await request<{ success: boolean; data: T }>(path, method, body, "/api", server, headers)
+  if (!response.success || response.data == null) throw new Error("Reservation Service returned no result.")
+  return response.data
+}
+export const reservationsApi = {
+  preview: (selection: Omit<ReservationSelection, "vehicleId" | "paymentMethod"> & { vehicleId?: string; paymentMethod?: string }) =>
+    call<ReservationPreview>("/reservation-price-previews", "POST", selection),
+  review: (selection: ReservationSelection) => call<ReservationTerms>("/reservation-terms", "POST", selection),
+  submit: (selection: ReservationSelection, terms: ReservationTerms, key: string) =>
+    call<ReservationReceipt>("/reservation-requests", "POST", {
+      ...selection, mode: "SPECIFIC_SLOT", termsId: terms.termsId, termsVersion: terms.termsVersion,
+    }, { "Idempotency-Key": key }),
+  receipt: (id: string) => call<ReservationReceipt>(`/reservation-requests/${encodeURIComponent(id)}`),
+  booking: (id: string) => call<OwnReservation>(`/me/reservations/${encodeURIComponent(id)}`),
+  list: () => call<OwnReservation[]>("/me/reservations?pageSize=100"),
+  async historyPage(pageSize = 9, cursor?: ReservationHistoryCursor): Promise<OwnReservation[]> {
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new Error("Invalid reservation page size.")
+    const query = new URLSearchParams({ pageSize: String(pageSize) })
+    if (cursor) {
+      if (!cursor.before || !Number.isFinite(Date.parse(cursor.before)) ||
+        !/^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(cursor.beforeId)) {
+        throw new Error("Invalid reservation history cursor.")
+      }
+      // Preserve the server's timestamp precision; do not round-trip through Date.toISOString().
+      query.set("before", cursor.before)
+      query.set("beforeId", cursor.beforeId)
+    }
+    const items = await call<OwnReservation[]>(`/me/reservations?${query}`)
+    if (!Array.isArray(items) || items.some(item => !item || typeof item.reservationId !== "string" ||
+      typeof item.siteId !== "string" || typeof item.state !== "string" || !Number.isFinite(Date.parse(item.createdAt)))) {
+      throw new Error("Reservation Service returned an invalid history page.")
+    }
+    return items
+  },
+}

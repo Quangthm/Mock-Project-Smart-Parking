@@ -42,7 +42,15 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         {
             if (existingOrder.ReferenceId != req.ReservationId ||
                 existingOrder.AccountId != req.AccountId ||
-                Math.Abs(existingOrder.Amount - req.Amount) > 0.01m)
+                existingOrder.TenantId != req.TenantId ||
+                existingOrder.SiteId != req.SiteId ||
+                existingOrder.ReferenceType != ReferenceType.RESERVATION ||
+                existingOrder.OrderType != OrderType.RESERVATION_FEE ||
+                existingOrder.ExpiresAt != req.ExpiresAt ||
+                existingOrder.QuoteId != req.QuoteId ||
+                !string.Equals(existingOrder.TermsVersion, req.TermsVersion, StringComparison.Ordinal) ||
+                Math.Abs(existingOrder.Amount - req.Amount) > 0.01m ||
+                Math.Abs(existingOrder.FinalAmount - req.Amount) > 0.01m)
             {
                 _logger.LogWarning("Idempotency conflict for OperationId: {OperationId}", req.OperationId);
                 throw new PaymentDomainException(
@@ -54,11 +62,13 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             if (existingOrder.Status == PaymentOrderStatus.CANCELLED || existingOrder.IsExpired(now))
             {
                 _logger.LogInformation("OperationId: {OperationId} was closed with no order (Tombstone / Expired).", req.OperationId);
-                return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null, req);
+                return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null,
+                    PersistedAcceptedRequest(existingOrder, req));
             }
 
             _logger.LogInformation("Replaying existing order '{OrderId}' for OperationId: {OperationId}", existingOrder.Id, req.OperationId);
-            return new EnsureReservationDepositOrderResponseDto("CREATED", existingOrder.Id, req);
+            return new EnsureReservationDepositOrderResponseDto("CREATED", existingOrder.Id,
+                PersistedAcceptedRequest(existingOrder, req));
         }
 
         // 2. Fence Check: If now >= ExpiresAt (H-Fence Tombstone)
@@ -75,6 +85,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                 OrderType = OrderType.RESERVATION_FEE,
                 ReferenceType = ReferenceType.RESERVATION,
                 ReferenceId = req.ReservationId,
+                QuoteId = req.QuoteId,
+                TermsVersion = req.TermsVersion,
                 Amount = req.Amount,
                 FinalAmount = req.Amount,
                 Status = PaymentOrderStatus.CANCELLED,
@@ -87,7 +99,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             await _orderRepository.AddAsync(tombstone, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null, req);
+            return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null,
+                PersistedAcceptedRequest(tombstone, req));
         }
 
         // 3. Validate Quote
@@ -122,6 +135,30 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             throw new PaymentDomainException("QUOTE_AMOUNT_MISMATCH", $"Requested amount {req.Amount} does not match quote deposit {quote.DepositAmount}.", "amount");
         }
 
+        if (req.TenantId != Guid.Empty && quote.TenantId != Guid.Empty && quote.TenantId != req.TenantId)
+        {
+            _logger.LogWarning("Quote TenantId mismatch: Quote={QuoteTenant}, Req={ReqTenant}", quote.TenantId, req.TenantId);
+            throw new PaymentDomainException("QUOTE_TENANT_MISMATCH", "ReservationQuote does not belong to the requested tenant.", "tenantId");
+        }
+
+        if (quote.SiteId != req.SiteId)
+        {
+            _logger.LogWarning("Quote SiteId mismatch: Quote={QuoteSite}, Req={ReqSite}", quote.SiteId, req.SiteId);
+            throw new PaymentDomainException("QUOTE_SITE_MISMATCH", "ReservationQuote does not belong to the requested site.", "siteId");
+        }
+
+        if (!string.Equals(quote.Currency, req.Currency, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Quote currency mismatch: Quote={QuoteCurrency}, Req={ReqCurrency}", quote.Currency, req.Currency);
+            throw new PaymentDomainException("QUOTE_CURRENCY_MISMATCH", "ReservationQuote currency does not match the requested currency.", "currency");
+        }
+
+        if (!string.Equals(quote.TermsVersion, req.TermsVersion, StringComparison.Ordinal))
+        {
+            _logger.LogWarning("Quote terms version mismatch: Quote={QuoteVersion}, Req={ReqVersion}", quote.TermsVersion, req.TermsVersion);
+            throw new PaymentDomainException("TERMS_STALE", "ReservationQuote terms version does not match the accepted terms.", "termsVersion");
+        }
+
         // 4. Accept Quote & Create Order atomically
         quote.MarkAccepted();
         _quoteRepository.Update(quote);
@@ -137,6 +174,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
             OrderType = OrderType.RESERVATION_FEE,
             ReferenceType = ReferenceType.RESERVATION,
             ReferenceId = req.ReservationId,
+            QuoteId = quote.Id,
+            TermsVersion = quote.TermsVersion,
             Amount = req.Amount,
             FinalAmount = req.Amount,
             Status = PaymentOrderStatus.PENDING,
@@ -152,6 +191,28 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         _logger.LogInformation("Successfully ensured reservation deposit order '{OrderId}' for OperationId '{OperationId}', Quote '{QuoteId}'",
             order.Id, req.OperationId, quote.Id);
 
-        return new EnsureReservationDepositOrderResponseDto("CREATED", order.Id, req);
+        return new EnsureReservationDepositOrderResponseDto("CREATED", order.Id,
+            PersistedAcceptedRequest(order, req));
+    }
+
+    private static EnsureReservationDepositOrderRequestDto PersistedAcceptedRequest(
+        PaymentOrder order,
+        EnsureReservationDepositOrderRequestDto requested)
+    {
+        var operationId = Guid.TryParse(order.IdempotencyKey, out var parsed)
+            ? parsed
+            : requested.OperationId;
+        return new EnsureReservationDepositOrderRequestDto(
+            operationId,
+            order.ReferenceId,
+            order.AccountId ?? Guid.Empty,
+            order.TenantId,
+            order.SiteId,
+            order.QuoteId ?? Guid.Empty,
+            order.TermsVersion ?? string.Empty,
+            order.Amount,
+            requested.Currency,
+            requested.PaymentMethod,
+            order.ExpiresAt ?? requested.ExpiresAt);
     }
 }

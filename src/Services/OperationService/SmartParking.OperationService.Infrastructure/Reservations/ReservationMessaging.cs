@@ -52,6 +52,28 @@ public sealed class AccountAccessDecisionConsumer(IMediator mediator) : IConsume
         mediator.Send(new RecordAccountAccessDecisionCommand(context.Message), context.CancellationToken);
 }
 
+public sealed class ReservationHoldChangedConsumer(IReservationBookingRepository bookings, IMediator mediator)
+    : IConsumer<ReservationHoldChangedV1>
+{
+    public Task Consume(ConsumeContext<ReservationHoldChangedV1> context) =>
+        DispatchAsync(bookings, mediator, context.Message, context.CancellationToken);
+
+    public static async Task DispatchAsync(IReservationBookingRepository bookings, IMediator mediator,
+        ReservationHoldChangedV1 message, CancellationToken ct)
+    {
+        if (message.State != "PENDING_PAYMENT") return;
+        var observed = await bookings.FindOrderProvisioningAsync(message.ReservationId, ct);
+        if (observed is null || observed.RequestId is null || observed.Status != "PENDING_PAYMENT") return;
+        if (observed.DepositAmount > 0m)
+        {
+            await mediator.Send(new ProvisionReservationOrderCommand(message.ReservationId), ct);
+            return;
+        }
+        if (observed.DepositAmount == 0m)
+            await mediator.Send(new AcceptZeroPriceTermsCommand(message.ReservationId), ct);
+    }
+}
+
 public static class ReservationMessaging
 {
     public static IServiceCollection AddReservationMessaging(this IServiceCollection services, IConfiguration configuration)
@@ -85,8 +107,16 @@ public static class ReservationMessaging
             throw new InvalidOperationException("Configure Operations broker credentials for enabled messaging.");
         services.AddMassTransit(registration =>
         {
-            if (admissionEnabled) registration.AddConsumer<AccountAccessDecisionConsumer>();
-            if (gateCheckoutEnabled) registration.AddConsumer<PaymentSucceededConsumer>();
+            if (admissionEnabled)
+            {
+                registration.AddConsumer<AccountAccessDecisionConsumer>();
+                registration.AddConsumer<ReservationHoldChangedConsumer>();
+                registration.AddConsumer<ReservationPaymentSucceededConsumer>();
+            }
+            if (gateCheckoutEnabled)
+            {
+                registration.AddConsumer<PaymentSucceededConsumer>();
+            }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
                 outbox.UsePostgres();
@@ -105,9 +135,9 @@ public static class ReservationMessaging
                         host.Username(brokerUser);
                         host.Password(brokerPassword);
                     });
+                bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                 if (gateCheckoutEnabled)
                 {
-                    bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                     bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
                     {
                         endpoint.UseMessageRetry(retry => retry.Intervals(
@@ -115,9 +145,27 @@ public static class ReservationMessaging
                         endpoint.ConfigureConsumer<PaymentSucceededConsumer>(context);
                     });
                 }
+                if (admissionEnabled)
+                {
+                    bus.ReceiveEndpoint("smartpark-operation-reservation-payment-succeeded-v1", endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<ReservationPaymentSucceededConsumer>(context);
+                    });
+                }
                 bus.Message<OperationsGateAuditV1>(message => message.SetEntityName(OperationsAuditTopology.Exchange));
                 bus.Message<ReservationConfirmedV1>(message => message.SetEntityName("smartpark.operations.reservation-confirmed.v1"));
                 bus.Message<ReservationHoldChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));
+                if (admissionEnabled)
+                {
+                    bus.ReceiveEndpoint("smartpark-operation-reservation-hold-changed-v1", endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<ReservationHoldChangedConsumer>(context);
+                    });
+                }
                 bus.Message<ReservationAvailabilityChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-availability-changed.v1"));
                 bus.Message<FacilityStructureAppliedV1>(message => message.SetEntityName("smartpark.operations.facility-structure-applied.v1"));
                 bus.Publish<FacilityStructureAppliedV1>(publish =>
@@ -152,6 +200,7 @@ public static class ReservationMessaging
         {
             services.AddHostedService<ReservationAuthorizationWorker>();
             services.AddHostedService<ReservationFacilityDependencyWorker>();
+            services.AddHostedService<ReservationOrderProvisioningWorker>();
         }
         return services;
     }
