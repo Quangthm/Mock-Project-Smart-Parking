@@ -9,7 +9,12 @@ using SmartParking.OperationService.Infrastructure.Outbox;
 using SmartParking.OperationService.Persistence;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
+<<<<<<< Updated upstream
 using Microsoft.Extensions.DependencyInjection.Extensions;
+=======
+using SmartParking.OperationService.Application.Passes;
+using SmartParking.OperationService.Infrastructure.Passes;
+>>>>>>> Stashed changes
 
 namespace SmartParking.OperationService.Infrastructure;
 
@@ -46,7 +51,21 @@ public static class InfrastructureDependencyInjection
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
+<<<<<<< Updated upstream
         services.TryAddScoped<IReservationCommercialOwner, UnavailableReservationCommercialOwner>();
+=======
+        services.AddHttpClient<IReservationCommercialOwner, ReservationCommercialClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddHttpClient<IPassFinancialTermsOwner, PassFinancialTermsClient>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddScoped<IPassPlanSnapshotService, UnavailablePassPlanSnapshotService>();
+>>>>>>> Stashed changes
         services.AddHttpClient<ReservationFacilityClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
