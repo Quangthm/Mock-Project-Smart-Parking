@@ -1,0 +1,121 @@
+{
+  "recordedAt": "2026-11-17T07:43:50.336Z",
+  "baseline": "c38d6f8a644e778e99c4d6d7077653aa471c5614",
+  "workingTreeFixesUnderTest": true,
+  "userApprovedSchemaException": true,
+  "build": {
+    "command": "dotnet build SmartParking.slnx --no-restore --nologo -m:1",
+    "exitCode": 0,
+    "errors": 0,
+    "warnings": 29
+  },
+  "frontendScope": {
+    "command": "node --test --test-reporter=dot tests/frontend/admin-platform-policies.test.cjs tests/postman/spark340-collection.test.cjs",
+    "exitCode": 0,
+    "passed": 33
+  },
+  "gates": [
+    {
+      "name": "backend",
+      "command": "dotnet test SmartParking.slnx --no-build --nologo -m:1",
+      "exitCode": 0,
+      "projects": [
+        {
+          "failed": 0,
+          "passed": 12,
+          "skipped": 0,
+          "total": 12
+        },
+        {
+          "failed": 0,
+          "passed": 199,
+          "skipped": 29,
+          "total": 228
+        },
+        {
+          "failed": 0,
+          "passed": 1,
+          "skipped": 0,
+          "total": 1
+        },
+        {
+          "failed": 0,
+          "passed": 220,
+          "skipped": 0,
+          "total": 220
+        },
+        {
+          "failed": 0,
+          "passed": 71,
+          "skipped": 3,
+          "total": 74
+        },
+        {
+          "failed": 0,
+          "passed": 321,
+          "skipped": 11,
+          "total": 332
+        },
+        {
+          "failed": 0,
+          "passed": 352,
+          "skipped": 70,
+          "total": 422
+        }
+      ],
+      "totals": {
+        "failed": 0,
+        "passed": 1176,
+        "skipped": 113,
+        "total": 1289
+      }
+    },
+    {
+      "name": "postgresPayment",
+      "command": "dotnet test tests/Services/SmartParking.PaymentService.Tests --no-build --nologo -m:1 --filter FullyQualifiedName~PaymentIntegrationPostgresConcurrencyTests --logger console;verbosity=normal",
+      "exitCode": 0,
+      "projects": [
+        {
+          "passed": 8,
+          "failed": 0,
+          "skipped": 0,
+          "total": 8
+        }
+      ],
+      "totals": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "total": 8
+      },
+      "postgresCases": [
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.CheckoutBinding_SurvivesFreshContextAndKeyProvider_AndCannotBeReplaced [2 s]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.OfflineRepair_DryRunApplyReplayConflictAndBatchPreflight_ThenWebhookSurvivesRestart [11 s]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.LegacyPolicyBinding_RemainsVerifiable_MigratesWithoutTariffWrites_AndSurvivesLegacyRemoval [531 ms]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.CheckoutBinding_IsCommittedAndReadableByIndependentConnectionBeforeOutbound [350 ms]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.ConcurrentAppends_AllocateUniqueContiguousRevisionNumbers [490 ms]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.ConcurrentAppends_AcrossTwoWaves_ContinueFromPreviousMaximum [437 ms]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.BindingUsesTrustedOrderIdentity_RejectsOrphans_AndPreventsOrderDeletion [374 ms]",
+        "Passed [REDACTED].PaymentService.Tests.PaymentIntegrationPostgresConcurrencyTests.ConcurrentDifferentKeys_OnlyOneImmutableBindingWins_AndPricingHistoryDoesNotGrow [293 ms]"
+      ],
+      "summaryFormat": "normal verbosity Test Run Successful + Total tests/Passed; parser corrected from the saved log, tests not rerun"
+    }
+  ],
+  "runningDatabaseMigrated": false,
+  "runningServicesRestarted": false,
+  "finalIdentityGuardRegression": {
+    "description": "Added rejection of a previously bound provider code with a different trusted PaymentOrderId; final source rebuilt.",
+    "payment": {
+      "passed": 321,
+      "failed": 0,
+      "skipped": 11,
+      "total": 332
+    },
+    "postgres": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "total": 8
+    }
+  }
+}

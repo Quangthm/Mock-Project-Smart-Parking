@@ -2,6 +2,8 @@
 
 Branch kiểm thử: `feat/SPARK-340-admin-platform-policies`, repository `Quangthm/Mock-Project-Smart-Parking`. Đây là branch feature để kiểm thử, P5 vẫn CHANGES REQUESTED. Không merge vào develop hoặc dùng làm bản production đã nghiệm thu. P4 tạm đóng theo chỉ đạo user; các ca hoãn giữ nguyên trạng thái.
 
+> Bản sửa F6–F8 cần additive DDL cho Payment DB cũ trước khi rebuild/restart service. Xem [rollout/repair guide](SPARK-340-F6-F8-rollout-guide.md). Owner duyệt thiết kế/schema exception; implementation agent chưa áp dụng vào DB đang chạy. Collection hiện58 requests, gồm4 negative cases F8. Không dùng số PASS của collection54 requests làm kết quả bản mới.
+
 Initial published snapshot: `9a84aeaf197a5e770bb573108b20157b31354a00` (five feature/test/docs commits). Branch đã push thành công lên origin ngày17/11/2026. Các commit ghi nhận publication sau đó chỉ cập nhật tài liệu; tester vẫn ghi HEAD thực tế đã checkout vào report.
 
 ## Lấy bản và chuẩn bị môi trường

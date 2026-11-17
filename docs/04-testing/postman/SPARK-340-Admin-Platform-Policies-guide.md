@@ -1,5 +1,7 @@
 # SPARK-340 / SPARK-370 — P4 Manual & Automated Verification Guide
 
+> F6–F8 update17/11: current collection has58 requests, adding4 negative create/update cases for explicit platform arrivalLateToleranceEnabled true/false. Historical Newman54-request results remain historical, not a run of this revision. Before upgrading an existing Payment stack, follow [approved DDL/repair guide](../reports/SPARK-340-F6-F8-rollout-guide.md); the dedicated binding table must exist before the new service binary runs. DDL/import have not been applied to the user's running DB by the implementation agent.
+
 **Epic:** SPARK-340 — US-A02 "Admin: Configure platform policy bounds and authorized integration settings"
 **Phase 4 task:** SPARK-370 — QA / Test Automation & Latent Defect Verification
 **Artifacts covered by this guide**

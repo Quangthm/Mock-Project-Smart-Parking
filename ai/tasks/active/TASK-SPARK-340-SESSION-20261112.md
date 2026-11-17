@@ -2,6 +2,7 @@
 
 ## 1. Session Information
 - **Latest review decision (17 November 2026):** P4 conditional handoff, P5 CHANGES REQUESTED, P6 verified. User subsequently authorized tester-branch publication: five task-scoped commits pushed successfully to origin/feat/SPARK-340-admin-platform-policies, initial tip9a84aeaf. See Sections28–30 and tester handoff. No remote PR/merge/deploy.
+- **Latest implementation follow-up (17 November 2026):** User requested F6–F8 and explicitly approved dedicated Payment binding table/offline repair with an additive Schema Freeze exception. Implementation and automated verification completed; independent re-review and actual target-DB rollout/import remain pending. See Section31 and F6–F8 report/runbook. No shared DB/service changed.
 - **Session ID:** TASK-SPARK-340-SESSION-20261112
 - **Date:** 17 November 2026 (Asia/Saigon; earlier sections retain historical dates)
 - **Agent:** Lead Software Architect & Multi-Agent Task Orchestrator
@@ -825,3 +826,28 @@ Commit helper stopped safely on rename-path comparison and whitespace checks bef
 Only local unstaged change after initial push is the excluded SPARK-238 collection. No secrets, .env, key files, cache scripts or raw Newman exports were staged. No force push/merge/PR creation, no runtime/database operation. P5 findings and blocked/deferred cases remain open; branch publication enables tester work, not production acceptance.
 
 This section, refreshed handoff and publication evidence are being committed as a documentation-only delivery receipt after the initial successful push. The final branch tip can therefore be a descendant of9a84aeaf; testers record actual checkout HEAD. The exact remote acknowledgement is recorded by the agent tool results, and final remote-tip equality is checked after publication.
+
+## 31. F6–F8 repair — implementation and verification, 17 November 2026
+
+Baseline c38d6f8a644e778e99c4d6d7077653aa471c5614. User requested implementation of F6→F8. Read coding/router/service contracts; prepared concrete storage/repair proposal. User explicitly replied "Duyệt bảng riêng và công cụ offline" to the additive Schema Freeze exception and offline dry-run/apply design. Approval does not authorize running DDL/import on the current user DB.
+
+Implemented F8: Create/Update validators reject both explicit true/false for site-owned arrival enablement. Null/omitted remains valid platform input. MediatR/DI tests prove rejection before write and unchanged row/version. Updated the earlier upper-bound test fixture from site bool true to platform null. Added four Postman negative cases and field-specific anti-false-positive script tests. Current collection58 requests; old54-request evidence stays historical.
+
+Implemented F7: checkout_signing_bindings Domain record/mapping, dedicated immutable insert/read repository, FK RESTRICT/unique order identity, no new binding writes to policy_revisions. Trusted PaymentOrderId accompanies normal gateway request to support provider-code fallback. Exact existing protected policy rows remain readable and can migrate explicitly; conflicting legacy identity cannot be replaced through a new row. No cleanup/TTL/deletion or unrelated schema change. Payment init SQL and reviewed additive upgrade script supplied under approved exception.
+
+Implemented F6: Application-owned import/inventory and offline .NET CLI (no new package references). Private absolute manifest/key paths outside repo; explicit DB env, no default production connection. Key generation disabled; existing Payment app discriminator/key ring/purpose used. Dry-run default, all-entry preflight before apply, immutable/idempotent replay, source/evidence references, exact PAYOS/PAYMENT/order/tenant/provider-link checks. Malformed JSON/storage errors produce generic output, no raw secret. Unknown historical key/link remains owner reconciliation; no timestamp/current-key fallback, provider call or new Admin HTTP permission.
+
+Actual verification:
+- F8 + existing PlatformPolicies tests24passed.
+- Import + outbound-ordering unit tests14passed.
+- Final solution build --no-restore:0errors/29warnings. Existing advisories plus tool NU1900 advisory-feed warning; restore retried outside sandbox, no package added/upgraded.
+- Full BE1176passed/0failed/113skipped/1289total. Operation71/3skip, Payment321/11skip.
+- Real PG Payment8/8passed on generated temp DBs, including actual CLI subprocess dry-run/apply/replay/conflict/preflight/malformed input, preserved pricing count, legacy migration/decryption, callback after fresh key provider/context, tamper rejection, concurrent immutable binding, orphan rejection/FK restriction and idempotent additive DDL. Temporary directory cleanup validates absolute temp-root/prefix before recursive delete.
+- Reader/writer backend PID inequality now asserted with writer connection pinned at outbound boundary; prior partial-proof limitation resolved.
+- Final repository review added rejection of the same bound provider code under a different trusted PaymentOrderId. Rebuilt solution and reran affected Payment321passed/11skipped/0failed plus PG8/8passed afterward.
+- Scoped Admin FE + collection33/33passed (30FE+3Postman). FE implementation unchanged.
+- Gate runner initially expected compact PG summary; normal-verbosity output had Test Run Successful/Total8/Passed8. Parsed saved successful log and corrected evidence, no failing test relabeled and no extra test run.
+
+Artifacts: docs/03-design/api/SPARK-340-F6-F7-binding-repair-proposal.md (APPROVED); docs/04-testing/reports/SPARK-340-F6-F8-implementation-20261117.md; SPARK-340-F6-F8-rollout-guide.md; SPARK-340-F6-F8-reviewer-prompt.md; evidence/SPARK-340-F6-F8-verification-20261117.json. Updated canonical Admin contract, P5 addendum, tester guide/handoff and local PR draft.
+
+Current implementation verified, pending independent reviewer and target-DB rollout/inventory. DDL is not auto-applied; current Docker/user DB/key volumes untouched. New binary requires table before use, old in-flight checkouts need owner-verified mappings/disposition. Live Newman58-request revision NOT RUN, no live HTTP400 claim. U19/SPARK-273, deferred UAT and low findings unchanged. Preserve unrelated SPARK-238 collection. Commit/push preparation follows earlier tester-branch authorization; actual Git delivery will be reported with the final tip.

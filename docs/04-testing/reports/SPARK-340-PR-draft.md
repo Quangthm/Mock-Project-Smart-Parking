@@ -22,7 +22,8 @@ SPARK-273 supplies the reservation commercial integration needed for the linked 
 - [x] Add authenticated Admin Payment settings with mode-isolated credentials, masked responses, URL allowlist, persisted history and protected checksum bindings.
 - [x] Add read-only registered Notification fixture status and Admin FE views using existing auth clients.
 - [x] Add BE/FE regression coverage, reusable Postman collection, sanitized evidence and delivery documentation.
-- [ ] Resolve rollout of checkout bindings for orders issued before this feature, and assign remaining P5 findings.
+- [x] Implement approved dedicated signing-binding storage and offline legacy repair (F6/F7), and reject ignored platform site-enablement input (F8).
+- [ ] Obtain independent re-review, prepare the target DB with reviewed additive DDL and validate actual legacy checkout mappings before rollout; assign remaining P5 findings.
 
 ## Implementation Details
 
@@ -30,18 +31,18 @@ HTTP controllers dispatch through IMediator and application-owned ports. Operati
 
 Policy updates use an explicit conditional write with expectedUpdatedAt/If-Match. Activation and Owner publication share transaction-scoped serialization and reject incompatible intervals/composed settings. Accepted reservation JSON is guarded against mutation in the existing Operations UnitOfWork; full booking-chain HTTP proof remains blocked by SPARK-273.
 
-Payment DataProtection keys use a persistent volume. Durable signing bindings are written before outbound creation and remain bound to the issuing configuration. Binding storage currently uses policy_revisions; retention/storage ownership remains a P5 finding. Missing bindings fail closed, which requires a rollout strategy for in-flight pre-feature orders before deployment.
+Payment DataProtection keys use a persistent volume. Durable signing bindings are written before outbound creation and remain bound to the issuing configuration. Approved F6/F7 repair moves new writes to checkout_signing_bindings with financial-history retention and FK RESTRICT, retains exact protected legacy-row reads, and provides an offline dry-run/apply repair tool. Missing bindings fail closed; target DB upgrade and owner-verified legacy mappings must be completed before rollout. See the F6–F8 rollout guide.
 
 ## Testing
 
-- [x] Build succeeds — BE0 errors/56 dependency warnings; FE build succeeds with existing bundling warnings.
-- [x] Unit tests pass — fresh whole-solution run1161 passed/0failed/109skipped. Skips are not counted as executed passes.
-- [x] Scoped FE/Postman regression —261 FE +2 SPARK-340 collection tests passed in the fresh P6 command.
-- [x] Integration tests where enabled — independent round2 recorded real PG Operation3/3 and Payment4/4. These are earlier evidence, not a new P6 database run.
+- [x] Build succeeds — F6–F8 BE build0 errors/29 warnings, including advisory-feed NU1900; prior P6 FE build succeeded and no FE implementation changed in this repair.
+- [x] Unit tests pass — latest whole-solution run1176 passed/0failed/113skipped. Skips are not counted as executed passes.
+- [x] Scoped FE/Postman regression —latest33 passed (30 Admin FE +3 collection tests); earlier P6 full FE261 passed.
+- [x] Integration tests where enabled — latest real PG Payment8/8, including offline CLI and distinct backend-PID proof. Earlier independent PG Operation3/3 remains historical evidence.
 - [ ] Manual testing completed — user reports most localhost checks stable, tester-group sign-off pending. U06 boundary values, U11 composed invariant and U20 responsive UAT remain deferred.
-- [ ] Full linked booking snapshot — U19 BLOCKED by unavailable commercial integration. Newman remains76 pass/1fail/1skip,54 defined/48executed/6NOT RUN. No all-green UAT claim.
+- [ ] Full linked booking snapshot — U19 BLOCKED by unavailable commercial integration. Historical Newman76pass/1fail/1skip belongs to54-request revision. Current58-request collection adds4 F8 negatives; live run NOT RUN on this revision. No all-green UAT claim.
 
-**Test results:** [P6 verification and handoff](SPARK-340-P6-delivery-20261117.md). An expanded generic Payment Postman probe also exposed an unrelated baseline environment-example failure; the P6 report records it separately from scoped SPARK-340 regression.
+**Test results:** [F6–F8 verification](SPARK-340-F6-F8-implementation-20261117.md) and earlier [P6 handoff](SPARK-340-P6-delivery-20261117.md). An expanded generic Payment Postman probe exposed an unrelated baseline environment-example failure; the P6 report records it separately from scoped SPARK-340 regression.
 
 ## Screenshots / Evidence
 
@@ -54,11 +55,11 @@ Payment DataProtection keys use a persistent volume. Durable signing bindings ar
 ## Breaking Changes
 
 - [ ] No breaking changes — cannot claim this while legacy checkout callback compatibility remains unresolved.
-- [x] Rollout/configuration requirements documented — preserve Payment DataProtection volume/key material; provide valid JWT/JWKS configuration and per-environment secrets; no schema migration is included.
+- [x] Rollout/configuration requirements documented — preserve Payment DataProtection volume/key material and JWT/JWKS configuration. User approved one additive Schema Freeze exception: checkout_signing_bindings. Review/apply the provided upgrade script manually before the new binary; fresh init declaration is also updated. No shared-DB migration was executed by the implementation agent.
 - [ ] Legacy checkout migration/drain/reconciliation plan approved and verified.
 
 ## Reviewer Notes
 
-P4 was temporarily closed by user instruction to continue P5/P6. That instruction is a phase handoff, not a retroactive passing test or waiver of in-scope defects. P5 currently requests changes: F6 is an in-branch High rollout issue; F7/F8 and low findings retain their recorded disposition. Baseline/default-auth and reservation order/confirmation findings are delegated to Payment/SPARK-273 under the scoped review.
+P4 was temporarily closed by user instruction to continue P5/P6. That instruction is a phase handoff, not a retroactive passing test or waiver. F6–F8 implementation is now verified, pending independent re-review and owner rollout/inventory validation. Low findings retain their recorded disposition. Baseline/default-auth and reservation order/confirmation findings are delegated to Payment/SPARK-273 under the scoped review.
 
 The initial tester snapshot is9a84aeaf, containing five task-scoped commits on top of baseline055da459. The unrelated SPARK-238 collection change remains outside those commits. Current remote develop freshness has not been checked; compare/reconcile it safely before a future merge. Do not auto-close Jira from this draft. Session remains active until actual delivery/acceptance is complete.
