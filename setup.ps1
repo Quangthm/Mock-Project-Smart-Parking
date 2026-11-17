@@ -770,7 +770,7 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
             $desired['SMARTPARK_RABBITMQ_VHOST'] = $settings['SMARTPARK_RABBITMQ_VHOST']
         }
     }
-    if ($service -in @('Parking', 'Reservation')) {
+    if ($service -in @('Parking', 'Payment', 'Reservation')) {
         $desired['ReservationIntegration:Enabled'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ENABLED']) { $settings['SMARTPARK_RESERVATION_FACILITY_ENABLED'] } else { 'false' }
         if ($service -eq 'Reservation') {
             $desired['ReservationIntegration:AllowHttp'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP']) { $settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP'] } else { 'false' }
