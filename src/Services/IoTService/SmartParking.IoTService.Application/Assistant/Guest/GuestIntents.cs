@@ -24,6 +24,10 @@ public static class GuestIntents
 
     public static string Classify(string message, IReadOnlyList<PublicArticle>? articles = null)
     {
+        message = AnswerLanguage.Question(message);
+        if (PublicQuestionPatterns.Match(message) is { } matched)
+            return matched == "vehicle-navigation" || articles?.Any(a => a.Id == ArticleId(matched)) == true
+                ? matched : "unknown";
         var question = PublicFaqRetrieval.Normalize(message);
         if (PublicFaqIntents.MatchPublicPolicy(message, question, articles) is { } policy) return policy.Id;
         if (RestrictedIntent(message, question) is { } restricted) return restricted;
@@ -43,7 +47,7 @@ public static class GuestIntents
     internal static string? RestrictedIntent(string message, string? normalized = null)
     {
         var text = $" {normalized ?? PublicFaqRetrieval.Normalize(message)} ";
-        if (Has(text, "my bookings", "my reservations", "my vehicles", "my booking", "my reservation", "my vehicle", "my car", "my account", "cua toi", "cua minh", "xe toi", "xe minh", "lich dat", "book for me", "dat giup", "tao booking")) return "private";
+        if (Has(text, "my bookings", "my reservations", "my vehicles", "my booking", "my reservation", "my vehicle", "my car", "my account", "cua toi", "cua minh", "cua nguoi khac", "someone else", "another account", "xe toi", "xe minh", "lich dat", "book for me", "dat giup", "tao booking")) return "private";
         if (Has(text, "nearby", "near me", "gan day", "gan toi", "con cho", "cho trong", "available spaces", "availability", "how much", "bao nhieu", "price now", "gia hien tai", "list parking", "danh sach bai")) return "dynamic";
         if (Has(text, "con nhan xe", "accepting vehicles", "accepting cars") &&
             Has(text, "luc nay", "bay gio", "hien tai", "ngay bay gio", "right now", "now")) return "dynamic";

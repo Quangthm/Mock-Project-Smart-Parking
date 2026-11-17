@@ -238,7 +238,7 @@ public sealed class GuestFaqTests
         fixture.EnableProvider("gemini");
         var knowledge = fixture.Corpus.Value!;
         var vehicle = knowledge.Articles.Single(article => article.Id == "vehicle-guide");
-        fixture.Corpus.Value = knowledge with { Articles = [vehicle with { SearchTerms = ["vehicle types"] }] };
+        fixture.Corpus.Value = knowledge with { Articles = [vehicle with { SearchTerms = ["vehicle types"], SourceLocale = "vi" }] };
         var reply = await fixture.Handler.Handle(new GuestMessage(Guid.NewGuid(), "vehcile types", "auto"), default);
         Assert.Equal("en", reply.ReplyLocale);
         Assert.Equal("vehicle-guide", Assert.Single(reply.Sources).ArticleId);

@@ -76,5 +76,12 @@ $params.ApprovalReference = 'fixture://synthetic-review/1'
 Reject { & $helper @params } 'Expired corpus must be rejected.'
 [IO.File]::WriteAllText($sourcePath, $source.Replace('### Nội dung', '### Broken'), $utf8)
 Reject { & $helper @params } 'Malformed corpus must be rejected.'
+foreach ($tight in @(
+    ($source + "`n### English: Booking`n### Đối chiếu — không gửi đến AI`nprivate note"),
+    ($source.Substring(0, $source.IndexOf('### Nội dung')) + "### Nội dung`n### English: Booking`nEnglish only.")
+)) {
+    [IO.File]::WriteAllText($sourcePath, $tight, $utf8)
+    Reject { & $helper @params } 'Empty language block immediately followed by a heading must be rejected.'
+}
 Assert (!(Test-Path -LiteralPath $params.OutputDirectory)) 'Rejected publication must not create output.'
 Write-Host "PASS: publication integrity, source preservation, no overwrite, approval input and invalid-corpus checks. Synthetic fixtures retained at $fixture"

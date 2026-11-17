@@ -102,7 +102,26 @@ for ($i = 0; $i -lt $headings.Count; $i++) {
     if ($aliases.Count -ne 1 -or $aliases[0].Length -gt 2000) { throw 'Invalid section search aliases.' }
     $terms = @($aliases[0].Substring('Từ khóa:'.Length) -split ';' | Where-Object { $_.Trim() })
     if ($terms.Count -lt 1 -or $terms.Count -gt 100) { throw 'Invalid section search alias count.' }
-    $content = $section.Substring($contentStart + $contentMarker.Length)
+    $content = $section.Substring($contentStart + $contentMarker.Length - 1)
+    $englishMarker = "`n### English: "
+    $englishStart = $content.IndexOf($englishMarker, [StringComparison]::Ordinal)
+    if ($englishStart -ge 0) {
+        if ($content.IndexOf("`n### ", [StringComparison]::Ordinal) -ne $englishStart -or
+            $content.LastIndexOf($englishMarker, [StringComparison]::Ordinal) -ne $englishStart) { throw 'Invalid English block position or duplicate.' }
+        $titleEnd = $content.IndexOf("`n", $englishStart + $englishMarker.Length)
+        if ($titleEnd -lt 0) { throw 'Missing English content.' }
+        $englishTitle = $content.Substring($englishStart + $englishMarker.Length, $titleEnd - $englishStart - $englishMarker.Length).Trim()
+        $english = $content.Substring($titleEnd)
+        $englishNotes = $english.IndexOf("`n### ", [StringComparison]::Ordinal)
+        if ($englishNotes -ge 0) {
+            if (!$english.Substring($englishNotes).StartsWith("`n### Đối chiếu — không gửi đến AI`n", [StringComparison]::Ordinal)) { throw 'Unknown English note heading.' }
+            $english = $english.Substring(0, $englishNotes)
+        }
+        $english = $english.Trim()
+        if (!$englishTitle -or $englishTitle.Length -gt 200 -or $englishTitle -match '[\x00-\x1f\x7f-\x9f]' -or
+            !$english -or $english.Length -gt 6000 -or $english -match '[\x00-\x09\x0b-\x1f\x7f-\x9f]') { throw 'Invalid English title or content.' }
+        $content = $content.Substring(0, $englishStart)
+    }
     $notes = $content.IndexOf("`n### ", [StringComparison]::Ordinal)
     if ($notes -ge 0) {
         if (!$content.Substring($notes).StartsWith("`n### Đối chiếu — không gửi đến AI`n", [StringComparison]::Ordinal)) { throw 'Unknown section note heading.' }

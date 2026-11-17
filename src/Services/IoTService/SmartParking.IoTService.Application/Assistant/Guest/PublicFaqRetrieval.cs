@@ -42,7 +42,9 @@ internal static class PublicFaqRetrieval
         {
             var aliases = (article.SearchTerms ?? []).Select(term => Normalize(term, keepAccents)).Distinct(StringComparer.Ordinal).ToArray();
             var aliasTerms = aliases.Select(Terms).ToArray();
-            var titleWords = Terms(Normalize(article.TitleVi + " " + article.TitleEn, keepAccents)).ToHashSet(StringComparer.Ordinal);
+            // Use the editorial language and its bilingual aliases for ranking. Localized replies
+            // must not make unrelated multi-topic questions eligible for this article.
+            var titleWords = Terms(Normalize(article.TitleVi, keepAccents)).ToHashSet(StringComparer.Ordinal);
             var aliasWords = aliasTerms.SelectMany(terms => terms).ToHashSet(StringComparer.Ordinal);
             var anchors = words.Count(word => titleWords.Contains(word) || aliasWords.Contains(word));
             var phrase = aliases.Where(alias => paddedQuestion.Contains($" {alias} ", StringComparison.Ordinal))
@@ -53,7 +55,7 @@ internal static class PublicFaqRetrieval
             if (anchors < 2 && phrase < 2 && !shortTopic)
                 return (Article: article, Score: 0);
 
-            var content = Terms(Normalize(article.Vi + " " + article.En, keepAccents)).ToHashSet(StringComparer.Ordinal);
+            var content = Terms(Normalize(article.Vi, keepAccents)).ToHashSet(StringComparer.Ordinal);
             var covered = words.Count(word => titleWords.Contains(word) || aliasWords.Contains(word) || content.Contains(word));
             // The provider receives a topic title, so reject queries whose remaining words point outside the source.
             if (covered * 3 <= words.Length * 2) return (Article: article, Score: 0);

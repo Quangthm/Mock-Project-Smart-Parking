@@ -9,31 +9,6 @@ using SmartParking.IoTService.Application.Assistant.Knowledge;
 
 namespace SmartParking.IoTService.Application.Assistant.Chat;
 
-public interface IChatExecution
-{
-    IDisposable Admit(Guid account);
-    Task<RequestResult> Run(Func<CancellationToken, Task<RequestResult>> work);
-}
-
-public sealed class ChatReadiness(ChatOptions options, IChatStore store, IAssistantManagementStore settings,
-    IPublicKnowledge knowledge, AssistantStageMetrics? metrics = null)
-{
-    public async Task<ChatSnapshot> Require(CancellationToken ct)
-    {
-        using var measurement = metrics?.Start("chat_readiness");
-        if (!options.ReleaseEnabled) throw new ChatFailure(503, "ASSISTANT_DISABLED");
-        try
-        {
-            var state = await settings.ReadAsync(ct).WaitAsync(ct);
-            if (!state.Enabled) throw new ChatFailure(503, "ASSISTANT_DISABLED");
-            if (!await store.Ready(ct)) throw new ChatFailure(503, "STORAGE_UNAVAILABLE");
-            var corpus = await knowledge.ReadAsync(ct).WaitAsync(ct) ?? throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
-            return new(state.Revision, corpus.Fingerprint, corpus.Version);
-        }
-        catch (ManagementUnavailableException) { throw new ChatFailure(503, "DEPENDENCY_UNAVAILABLE"); }
-    }
-}
-
 public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatCursors cursors,
     ChatReadiness readiness, IChatExecution execution, ChatOptions options, TimeProvider clock,
     IPublicKnowledge knowledge, IAssistantManagementStore settings, IGuestAnswerFactory answers, ManagedDemoGenerator generator,
@@ -130,7 +105,12 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
     private async Task<GuestReply> Answer(ChatScope scope, Conversation conversation, SendChat input, ChatSnapshot snapshot, CancellationToken ct)
     {
         var locale = AnswerLanguage.Detect(input.Message!, conversation.Locale);
-        var read = scope.Role == "driver" ? await reads.TryAnswer(scope.AccountId, conversation with { Locale = locale }, input.ClientMessageId, input.Message!, async token =>
+        var questionText = AnswerLanguage.Question(input.Message!);
+        if (ConversationSummary.Matches(questionText))
+            return ConversationSummary.Reply(await store.Context(scope, conversation.Id, ct), locale);
+        if (PublicQuestionPatterns.Match(questionText) == "vehicle-navigation")
+            return new(Guid.Empty, "system", "answered", PublicQuestionPatterns.VehicleNavigationReply(locale == "en"), [], [], []);
+        var read = scope.Role == "driver" ? await reads.TryAnswer(scope.AccountId, conversation with { Locale = locale }, input.ClientMessageId, questionText, async token =>
         {
             if (!await store.DispatchAllowed(scope, conversation.Id, input.ClientMessageId, token)) throw new OperationCanceledException(token);
             if (await readiness.Require(token) != snapshot) throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
@@ -146,7 +126,7 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
         string intent;
         using (metrics?.Start("faq_retrieval"))
             intent = GuestIntents.Classify(input.Message!, corpus.Articles);
-        if (input.Message!.Trim().ToLowerInvariant() is "tell me more" or "explain more" or "nói rõ hơn" or "giải thích thêm")
+        if (questionText.Trim().ToLowerInvariant() is "tell me more" or "explain more" or "nói rõ hơn" or "giải thích thêm")
         {
             var turns = await store.Context(scope, conversation.Id, ct);
             var remaining = 12000;
@@ -167,7 +147,7 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
             return new(Guid.Empty, "system", "clarification", en
                 ? "I can explain published SmartPark guidance. Try asking how to use SmartPark or which vehicle types it supports. Please omit personal details and secrets."
                 : "Mình có thể giải thích hướng dẫn SmartPark đã công bố. Bạn có thể hỏi về cách sử dụng SmartPark hoặc các loại xe được hỗ trợ. Vui lòng tránh gửi thông tin riêng tư hoặc bí mật.", [], [], []);
-        var adapter = new DispatchGuard(answers.Create(corpus, article, locale), async token =>
+        var adapter = new ChatDispatchGuard(answers.Create(corpus, article, locale), async token =>
         {
             if (!await store.DispatchAllowed(scope, conversation.Id, input.ClientMessageId, token)) throw new OperationCanceledException(token);
             var fresh = await readiness.Require(token);
@@ -178,7 +158,7 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
         var title = en ? article.TitleEn : article.TitleVi;
         var question = GuestIntents.CanonicalQuestion(intent) ?? title;
         var state = await settings.ReadAsync(ct).WaitAsync(ct);
-        var answer = ManagementRules.Candidates(state).Count == 0
+        var answer = (article.Id == "vehicle-guide" && (article.SourceLocale is null || article.SourceLocale == locale)) || ManagementRules.Candidates(state).Count == 0
             ? await adapter.KnowledgeAsync(question, ct).WaitAsync(ct)
             : await generator.GenerateAsync(question, adapter, ct).WaitAsync(ct);
         if (string.IsNullOrWhiteSpace(answer.Reply) || answer.Reply.Length > 8000 || answer.Sources.Count > 1 ||
@@ -235,13 +215,6 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
         try { return await knowledge.ReadAsync(deadline.Token).WaitAsync(deadline.Token); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
         catch (Exception) when (!ct.IsCancellationRequested) { return null; }
-    }
-    private sealed class DispatchGuard(IManagedAnswerProvider inner, Func<CancellationToken, Task> guard) : IManagedAnswerProvider
-    {
-        public async Task<GroundedReply> GenerateAsync(string provider, string model, string secret, string message, CancellationToken ct)
-        { await guard(ct); return await inner.GenerateAsync(provider, model, secret, message, ct); }
-        public async Task<GroundedReply> KnowledgeAsync(string message, CancellationToken ct)
-        { await guard(ct); return await inner.KnowledgeAsync(message, ct); }
     }
     private static ChatMessage Annotate(ChatMessage message, PublicKnowledge? corpus) => message with
     { Sources = message.Sources.Select(s => s with { Status = corpus is null || !corpus.Articles.Any(a => a.Id == s.ArticleId) ? "withdrawn" : corpus.Version != s.Version ? "outdated" : "active" }).ToArray() };

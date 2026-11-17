@@ -94,8 +94,8 @@ public sealed class PublicKnowledgeFile(string directory, TimeProvider clock, IM
             !audience[1..^1].Split(',', StringSplitOptions.TrimEntries).Contains("public", StringComparer.Ordinal) ||
             parsed.Length is 0 or > 30) return null;
         if (parsed.Any(a => !Text(a.Title, 200) || !Text(a.Content, 6000))) return null;
-        var articles = parsed.Select(a => new PublicArticle(a.Id, a.Title, a.Title, a.Content, a.Content,
-            ["docs/03-design/ai/p1/knowledge/smartpark-knowledge.md"], "vi", Array.AsReadOnly(a.SearchTerms))).ToArray();
+        var articles = parsed.Select(a => new PublicArticle(a.Id, a.Title, a.EnglishTitle ?? a.Title, a.Content, a.EnglishContent ?? a.Content,
+            ["docs/03-design/ai/p1/knowledge/smartpark-knowledge.md"], a.EnglishContent is null ? "vi" : null, Array.AsReadOnly(a.SearchTerms))).ToArray();
         return new(new(version, hash, Array.AsReadOnly(articles)), effectiveFrom, effectiveTo, publishedAt);
     }
     private async Task<byte[]> ReadBounded(string name, CancellationToken ct, int maximum = 128 * 1024)
@@ -113,30 +113,4 @@ public sealed class PublicKnowledgeFile(string directory, TimeProvider clock, IM
         return buffer.ToArray();
     }
     private static bool Text(string? text, int maximum) => !string.IsNullOrWhiteSpace(text) && text.Length <= maximum && !text.Any(c => char.IsControl(c) && c != '\n');
-}
-
-public sealed class GuestAnswerFactory(IHttpClientFactory? clients = null, IMeterFactory? meters = null) : IGuestAnswerFactory
-{
-    private readonly Histogram<double>? duration = ProviderTransport.CreateDuration(meters);
-    public IManagedAnswerProvider Create(PublicKnowledge knowledge, PublicArticle article, string locale) =>
-        new Answer(knowledge, article, locale, clients, duration);
-    private sealed class Answer(PublicKnowledge knowledge, PublicArticle article, string locale,
-        IHttpClientFactory? clients, Histogram<double>? duration) : IManagedAnswerProvider
-    {
-        private GroundedSource Source => new(article.Id, knowledge.Version, locale == "en" ? article.TitleEn : article.TitleVi, locale == "en" ? article.En : article.Vi);
-        public async Task<GroundedReply> GenerateAsync(string provider, string model, string secret, string message, CancellationToken ct)
-        {
-            return await ProviderTransport.Generate(new("", provider, model, secret, [Source], locale, article.SourceLocale),
-                clients, duration, message, ct);
-        }
-        public Task<GroundedReply> KnowledgeAsync(string message, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            var source = Source;
-            var reply = locale == "en" && article.SourceLocale == "vi"
-                ? $"The answer is currently available in Vietnamese only.\n\n{source.Excerpt}"
-                : source.Excerpt;
-            return Task.FromResult(new GroundedReply(reply, [source], null, null, "knowledge"));
-        }
-    }
 }

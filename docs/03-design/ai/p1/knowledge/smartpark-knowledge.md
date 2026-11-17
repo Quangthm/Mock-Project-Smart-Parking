@@ -1,5 +1,5 @@
 ---
-version: 0.4.0
+version: 0.4.1
 locale: vi
 audience: [public, driver]
 scope: global
@@ -13,11 +13,11 @@ published_by: null
 
 # Kiến thức SmartPark — bản mở rộng
 
-Đây là nguồn biên tập tiếng Việt 0.4.0 cho FAQ công khai và người lái, kế thừa [bản lưu 0.3.1](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/7d8b3e3e41a42c26212ad941805f91acab6cce57/docs/03-design/ai/luu-tru/knowledge/smartpark-knowledge-old.md). Nội dung dựa trên các quy tắc sản phẩm đã ghi nhận và mô tả tính năng theo khả năng được triển khai. Chính sách hiệu lực, trạng thái bãi và giao dịch cụ thể cần dữ liệu backend có thẩm quyền.
+Đây là nguồn biên tập tiếng Việt 0.4.1 cho FAQ công khai và người lái, kế thừa [bản lưu 0.3.1](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/7d8b3e3e41a42c26212ad941805f91acab6cce57/docs/03-design/ai/luu-tru/knowledge/smartpark-knowledge-old.md). Nội dung dựa trên các quy tắc sản phẩm đã ghi nhận và mô tả tính năng theo khả năng được triển khai. Chính sách hiệu lực, trạng thái bãi và giao dịch cụ thể cần dữ liệu backend có thẩm quyền.
 
 ### Hướng dẫn biên tập và kiểm tra
 
-- Dùng mã mục ổn định trong dấu ngoặc vuông và các từ khóa Việt/Anh phân cách bằng dấu chấm phẩy. Chỉ phần “Nội dung” của mục được đưa vào ngữ cảnh trả lời. Giữ căn cứ và ghi chú biên tập ở “Đối chiếu — không gửi đến AI”.
+- Dùng mã mục ổn định trong dấu ngoặc vuông và các từ khóa Việt/Anh phân cách bằng dấu chấm phẩy. Phần “Nội dung” là nguồn tiếng Việt; mục tùy chọn “English: <title>” chứa bản tiếng Anh tương đương được duyệt cùng phiên bản/hash. Không trộn hai ngôn ngữ trong excerpt. Giữ căn cứ và ghi chú biên tập ở “Đối chiếu — không gửi đến AI”.
 - Giữ đơn vị, điều kiện biên, cấu hình mặc định và ngoại lệ trong cùng đoạn quy tắc. Thêm các cách gọi đặc trưng để tìm đúng mục. Duy trì một nguồn nội dung tiếng Việt để diễn đạt sang tiếng Anh.
 - Bản trong repo ở trạng thái nháp. Khi phát hành, tạo bản triển khai đã duyệt mang tên smartpark-knowledge.md cùng manifest khớp theo [Knowledge và xuất bản](../../chatbot-design.md#knowledge-and-faq).
 
@@ -30,6 +30,12 @@ Từ khóa: loại xe; hỗ trợ xe nào; ô tô; xe máy; vehicle; vehicles; v
 Thiết kế SmartPark phân biệt ô tô và xe máy. Mỗi bãi cần cấu hình loại xe tương thích; sức chứa ô tô và xe máy không thay thế nhau. Loại xe khác với loại bãi ngoài trời, tầng hầm hoặc nhiều tầng. Không suy ra hỗ trợ xe tải, xe buýt hoặc sạc xe điện khi chưa có nguồn xác nhận. Việc bãi cụ thể có nhận xe và còn chỗ cần dữ liệu hiện hành của backend; hướng dẫn này không xác nhận chỗ trống.
 
 Trong câu hỏi tiếng Anh, “bike” có thể chỉ xe máy hoặc xe đạp. Tài liệu này xác nhận xe máy thuộc loại xe được thiết kế hỗ trợ, tùy cấu hình từng bãi. Tài liệu chưa xác nhận việc hỗ trợ xe đạp.
+
+### English: Vehicle types supported by SmartPark
+
+SmartPark distinguishes cars and motorcycles. Each parking facility must configure the vehicle types it accepts; car and motorcycle capacities are not interchangeable. Vehicle type is distinct from facility type, such as outdoor, underground or multi-storey parking. Do not infer support for trucks, buses or electric vehicle charging without a confirmed source. Whether a particular facility accepts your vehicle and has space available requires current backend data; this guidance does not confirm availability.
+
+In English, “bike” can mean a motorcycle or a bicycle. This document confirms that motorcycles are a supported vehicle type by design, subject to each facility's configuration. Bicycle support has not been confirmed.
 
 ### Đối chiếu — không gửi đến AI
 
@@ -96,6 +102,32 @@ Nếu trợ lý chuẩn bị được thông tin đặt chỗ, bạn vẫn xem v
 Một xe không được có các đặt chỗ chồng lấn không tương thích. Một bãi có thể bật giới hạn số đơn đang chờ thanh toán, đã xác nhận hoặc đã phân chỗ của mỗi tài khoản. Hạn chế tạo đơn mới do quy tắc chống lạm dụng hủy không tự tước quyền đăng nhập hay quyền đã có.
 
 Đến sớm còn phụ thuộc chỗ thực tế phù hợp và phí thời gian thêm đã công bố. Nếu không có chỗ phù hợp, cần chờ hoặc dùng phương án thay thế được phép; không yêu cầu di dời xe đang đỗ chỉ vì mình có booking.
+
+### English: Booking steps, timing and confirmation
+
+To prepare a booking:
+
+1. Sign in.
+2. Select the vehicle type you need to park.
+3. Find and select a suitable facility and the start/end times.
+4. Select your registered vehicle of the type used in the search.
+5. Select a booking mode supported by the facility.
+6. Review the price and conditions.
+7. Confirm on the form.
+
+A facility can serve one or more vehicle types according to its configuration. Car and motorcycle capacities are separate and not interchangeable. If you change to a different vehicle type after selecting a facility, check facility/zone compatibility, availability, prices and terms again before confirming. Vehicle type is distinct from facility type, such as outdoor, underground or multi-storey parking.
+
+Before confirming, review the vehicle, facility/zone, time interval, supported booking mode and displayed terms. A facility may offer preferred-slot, zone or compatible-capacity booking. Preferred-slot booking records the desired slot subject to availability. Zone booking uses the selected zone. Capacity booking reserves compatible capacity within the facility without selecting a particular slot. Available modes depend on what the facility offers. The actual allocated space may differ from the preferred location under the applicable allocation arrangement.
+
+Published defaults include a minimum duration of 15 minutes, a maximum of 24 hours, booking up to 7 days in advance and allocation beginning 1 hour before the booked start. These are configurable policy defaults, not fixed limits for every facility. Use the effective terms displayed for your transaction. The example of 30 minutes before the start is not the new default allocation lead time.
+
+A booking with a positive price requires advance payment within its hold period, which defaults to 5 minutes. Advance payment may be the full amount, a percentage or a fixed amount. Valid pass benefits apply before the published minimum. A booking whose price is genuinely zero after applying the conditions may be confirmed without a payment provider after the backend checks capacity and booking limits. An expired payment hold and a no-show are different states. Do not infer confirmation merely because you submitted a request or money was deducted.
+
+If the assistant can prepare booking information, you still review and confirm it on the form. Saying “agree” in chat does not submit the booking. Changes to prices, terms or availability since your review must be reviewed again before confirmation. Terms already accepted for a booking are not changed merely because a new policy exists.
+
+A vehicle cannot have incompatible overlapping bookings. A facility may limit each account's bookings that are awaiting payment, confirmed or allocated. Restrictions on new bookings under cancellation-abuse rules do not automatically revoke login access or existing rights.
+
+Early arrival depends on suitable space actually being available and the published additional-time charges. If no suitable space is available, wait or use an allowed alternative; having a booking does not entitle you to demand that a parked vehicle be moved.
 
 ### Đối chiếu — không gửi đến AI
 

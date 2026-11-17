@@ -22,7 +22,7 @@ internal sealed partial class PublicFaqQuestion(IManagedAnswerProvider inner, st
         // Preserve the original words for Gemini only after checking every token.
         if (text.Length > 320 || !QuestionText().IsMatch(text) || PersonalContext().IsMatch(text)) return null;
         var allowed = PublicFaqRetrieval.Normalize(string.Join(' ', article.SearchTerms ?? []) +
-            " " + article.TitleVi + " " + article.TitleEn + " " + article.Vi + " " + article.En)
+            " " + article.TitleVi + " " + article.Vi)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
         var words = PublicFaqRetrieval.Normalize(text).Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return words.Length > 0 && words.All(word => allowed.Contains(word) || QuestionWords.Contains(word)) ? text : null;

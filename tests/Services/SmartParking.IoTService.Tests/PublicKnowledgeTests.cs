@@ -24,6 +24,8 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
     [InlineData("owner", false)]
     [InlineData("duplicate-metadata", false)]
     [InlineData("missing-content", false)]
+    [InlineData("empty-english", false)]
+    [InlineData("empty-vietnamese", false)]
     [InlineData("edited", false)]
     [InlineData("expired", false)]
     [InlineData("future", false)]
@@ -43,6 +45,8 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
         try
         {
             var section = "## [booking-guide] Hướng dẫn\n\nTừ khóa: booking; đặt chỗ\n\n### Nội dung\n\nHướng dẫn gốc.\n\n### Đối chiếu — không gửi đến AI\nEDITORIAL_PRIVATE_ONLY\n";
+            if (variant == "empty-english") section = section.Replace("### Đối chiếu", "### English: Booking\n### Đối chiếu");
+            if (variant == "empty-vietnamese") section = section.Replace("\n\nHướng dẫn gốc.", "\n### English: Booking\nValid English.");
             if (variant == "missing-content") section = section.Replace("### Nội dung", "### Sai cấu trúc");
             if (variant == "duplicate-article") section += section;
             if (variant == "oversized") section = section.Replace("Hướng dẫn gốc.", new string('a',6001));
@@ -167,7 +171,7 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
     [InlineData("gemini")]
     public async Task ProviderReceivesOnlySuppliedPublicSnapshot(string provider)
     {
-        var handler = new Http(); using var client = new HttpClient(handler);
+        var handler = new PublicKnowledgeHttp(); using var client = new HttpClient(handler);
         var sources = new[] { new GroundedSource("public-topic", "v1", "Public title", "Approved synthetic FAQ.") };
         using var generator = new DemoGroundedGenerator(new("missing-draft-directory", provider, "synthetic-model", "synthetic-key", sources, "en", "vi"), client);
         handler.Provider = provider;
@@ -192,7 +196,7 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
         services.AddMetrics();
         services.AddAssistantProviderTransport();
         var handlerCount = 0;
-        var handler = new Http { Provider = "gemini" };
+        var handler = new PublicKnowledgeHttp { Provider = "gemini" };
         services.AddHttpClient(ProviderTransport.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
         {
             handlerCount++;
@@ -256,7 +260,8 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
             foreach (var id in new[] { "smartpark-overview", "vehicle-guide", "discovery-guide", "booking-guide", "payment-guide", "support-guide", "assistant-limits" })
                 Assert.Single(knowledge.Articles, a => a.Id == id);
             Assert.All(knowledge.Articles, a => {
-                Assert.Equal("vi", a.SourceLocale);
+                Assert.Equal(a.Id is "vehicle-guide" or "booking-guide" ? null : "vi", a.SourceLocale);
+                Assert.DoesNotContain("Đối chiếu", a.En);
                 Assert.DoesNotContain("Đối chiếu", a.Vi);
                 Assert.DoesNotContain("Baseline:", a.Vi);
                 Assert.DoesNotContain("Từ khóa:", a.Vi);
@@ -264,7 +269,7 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
             await MeasureKnowledgeReads(dir);
             foreach (var (question, expected) in new (string, string)[] {
                 ("SmartPark có loại xe nào?", "vehicle-guide"),
-                ("SmartPark hỗ trợ loại xe nào?", "vehicle-guide"),
+                ("SmartPark hỗ trợ loại xe nào?", "vehicle-support"),
                 ("smartpark hỗ trợ vehicle gì", "vehicle-guide"),
                 ("smartpark support car", "vehicle-guide"),
                 ("smartpark support bike", "vehicle-guide"),
@@ -290,7 +295,7 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
 
             var evaluation = new (string Question, string Expected)[]
             {
-                ("SmartPark phuc vu loai xe nao?", "vehicle-guide"),
+                ("SmartPark phuc vu loai xe nao?", "vehicle-support"),
                 ("Tôi muốn tìm hiểu về gói tháng cho người lái", "monthly-yearly-guide"),
                 ("vehcile types", "vehicle-guide"),
                 ("lost tickte", "parking-rules-guide"),
@@ -409,12 +414,12 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
             foreach (var (question, locale, articleId, outcome, expectedText) in new[] {
                 ("What is SmartPark?", "en", "smartpark-overview", "answered", "available in Vietnamese only"),
                 ("Các loại xe?", "vi", "vehicle-guide", "answered", "xe máy"),
-                ("SmartPark support bike", "en", "vehicle-guide", "answered", "xe đạp"),
-                ("Can I park a motorcycle?", "en", "vehicle-guide", "answered", "xe máy"),
-                ("vehcile types", "en", "vehicle-guide", "answered", "available in Vietnamese only"),
+                ("SmartPark support bike", "en", "vehicle-guide", "answered", "bicycle"),
+                ("Can I park a motorcycle?", "en", "vehicle-guide", "answered", "motorcycles"),
+                ("vehcile types", "en", "vehicle-guide", "answered", "motorcycles"),
                 ("lost tickte", "en", "parking-rules-guide", "answered", "available in Vietnamese only"),
                 ("goi thnag", "vi", "monthly-yearly-guide", "answered", "gói tháng"),
-                ("reserve a spot", "en", "booking-guide", "answered", "available in Vietnamese only"),
+                ("reserve a spot", "en", "booking-guide", "answered", "1. Sign in."),
                 ("Gửi xe muộn thì sao?", "vi", "", "clarification", "đỗ xe quá giờ kết thúc"),
                 ("Is parking available near me?", "en", "", "clarification", ""),
                 ("Show my vehicles", "en", "", "handoff", "Sign in"),
@@ -438,8 +443,9 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
                     var source = Assert.Single(reply.Sources);
                     Assert.Equal(articleId, source.ArticleId);
                     Assert.Equal(knowledge.Version, source.Version);
-                    Assert.Equal("vi", source.Locale);
-                    Assert.Equal(knowledge.Articles.Single(article => article.Id == articleId).Vi, source.Excerpt);
+                    var cited = knowledge.Articles.Single(article => article.Id == articleId);
+                    Assert.Equal(cited.SourceLocale ?? locale, source.Locale);
+                    Assert.Equal(source.Locale == "en" ? cited.En : cited.Vi, source.Excerpt);
                     Assert.Contains(source.Excerpt, reply.Content);
                 }
                 else
@@ -478,20 +484,6 @@ public sealed class PublicKnowledgeTests(ITestOutputHelper output)
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             Assert.NotNull(result);
             return elapsed;
-        }
-    }
-    private sealed class Http : HttpMessageHandler
-    {
-        public string Body = ""; public string Provider = ""; public string? Key;
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        {
-            Body = await request.Content!.ReadAsStringAsync(ct);
-            Key = request.Headers.TryGetValues("x-goog-api-key", out var keys) ? keys.Single() : null;
-            var answer = JsonSerializer.Serialize(new { reply = "Synthetic answer.", sourceIds = new[] { "public-topic" } });
-            object envelope = Provider == "openai"
-                ? new { status = "completed", output = new[] { new { type = "message", role = "assistant", content = new[] { new { type = "output_text", text = answer } } } } }
-                : new { candidates = new[] { new { finishReason = "STOP", content = new { role = "model", parts = new[] { new { text = answer } } } } } };
-            return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json") };
         }
     }
 }

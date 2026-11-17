@@ -4,50 +4,50 @@ namespace SmartParking.IoTService.Application.Assistant.Guest;
 
 internal static partial class PublicFaqIntents
 {
-    internal sealed record Route(string Id, string ArticleId, string Question);
-
-    private static readonly Route Advance = new("booking-advance", "booking-guide",
+    private static readonly PublicFaqRoute Advance = new("booking-advance", "booking-guide",
         "Có thể đặt chỗ trước tối đa bao lâu theo mặc định và cần kiểm tra điều khoản hiệu lực ở đâu?");
-    private static readonly Route MinimumDuration = new("booking-minimum-duration", "booking-guide",
+    private static readonly PublicFaqRoute MinimumDuration = new("booking-minimum-duration", "booking-guide",
         "Thời lượng đặt chỗ tối thiểu mặc định là bao nhiêu và người lái nên kiểm tra chính sách hiệu lực ở đâu?");
-    private static readonly Route MaximumDuration = new("booking-maximum-duration", "booking-guide",
+    private static readonly PublicFaqRoute MaximumDuration = new("booking-maximum-duration", "booking-guide",
         "Thời lượng đặt chỗ tối đa mặc định là bao nhiêu và người lái nên kiểm tra chính sách hiệu lực ở đâu?");
-    private static readonly Route Refund = new("booking-refund", "cancellation-refund-guide",
+    private static readonly PublicFaqRoute Refund = new("booking-refund", "cancellation-refund-guide",
         "Khi tự nguyện hủy đặt chỗ, hãy nêu các mốc và mức hoàn mặc định, điều kiện tiền đủ điều kiện đã thực thu và cách xác định mức thực tế.");
-    private static readonly Route Overstay = new(GuestIntents.ParkingOverstay, "payment-guide",
+    private static readonly PublicFaqRoute Overstay = new(GuestIntents.ParkingOverstay, "payment-guide",
         GuestIntents.ParkingOverstayQuestion);
-    private static readonly Route WalkIn = new("parking-walk-in", "walk-in-and-entry-guide",
+    private static readonly PublicFaqRoute WalkIn = new("parking-walk-in", "walk-in-and-entry-guide",
         "Có thể tới gửi xe trực tiếp mà không đặt trước không? Nêu điều kiện bãi hỗ trợ, tiếp nhận và việc đến trực tiếp không giữ chỗ.");
-    private static readonly Route Arrival = new("parking-arrive-late", "arrival-and-no-show-guide",
+    private static readonly PublicFaqRoute Arrival = new("parking-arrive-late", "arrival-and-no-show-guide",
         "Nếu đến sau giờ bắt đầu đặt chỗ thì kiểm tra hạn đến ở đâu, dung sai hoạt động thế nào và khi nào bị tính vắng mặt?");
-    private static readonly Route PassRefund = new("pass-refund", "pass-cancellation-guide",
+    private static readonly PublicFaqRoute PassRefund = new("pass-refund", "pass-cancellation-guide",
         "Nếu tự nguyện hủy gói đỗ xe, cần xử lý các đặt chỗ phụ thuộc thế nào? Nêu quy tắc hoàn trước, trong và sau kỳ, chỉ tính phần đủ điều kiện hoàn và phân biệt gói tháng với gói năm.");
-    private static readonly Route PassClosure = new("pass-closure", "pass-cancellation-guide",
+    private static readonly PublicFaqRoute PassClosure = new("pass-closure", "pass-cancellation-guide",
         "Gói đỗ xe và khoản hoàn được xử lý thế nào khi bãi đóng cửa tạm thời hoặc vĩnh viễn? Nêu điều kiện phần thời gian không phục vụ hoặc giá trị chưa sử dụng đủ điều kiện.");
-    private static readonly Route StartBooking = new("booking-start", "booking-guide",
-        "Người lái cần làm những bước nào để chuẩn bị và xác nhận đặt chỗ?");
-    private static readonly Route Exit = new("parking-exit-blocked", "checkout-and-departure-guide",
+    private static readonly PublicFaqRoute StartBooking = new("booking-start", "booking-guide",
+        "Hãy hướng dẫn từng bước có đánh số để người lái chuẩn bị và xác nhận đặt chỗ trên form SmartPark, chỉ dùng các bước trong nguồn. Nêu điều kiện cần kiểm tra và không khẳng định chatbot đã tạo đặt chỗ hoặc thanh toán.");
+    private static readonly PublicFaqRoute VehicleSupport = new("vehicle-support", "vehicle-guide",
+        "SmartPark hỗ trợ những loại xe nào? Giải thích ô tô, xe máy và điều kiện theo cấu hình từng bãi; không xác nhận chỗ trống hiện tại.");
+    private static readonly PublicFaqRoute Exit = new("parking-exit-blocked", "checkout-and-departure-guide",
         "Khi cổng ra chưa mở, người lái cần làm gì? Nếu đã thanh toán, cần xác minh gì trước khi trả thêm?");
-    private static readonly Route Notice = new("parking-notice-missing", "notification-guide",
+    private static readonly PublicFaqRoute Notice = new("parking-notice-missing", "notification-guide",
         "Nếu không nhận được thông báo, làm sao kiểm tra hệ thống đã ghi nhận đặt chỗ hoặc giao dịch?");
 
-    private static readonly Route[] Routes =
-        [Advance, MinimumDuration, MaximumDuration, Refund, Overstay, WalkIn, Arrival, PassRefund, PassClosure, StartBooking, Exit, Notice];
+    private static readonly PublicFaqRoute[] PublicFaqRoutes =
+        [Advance, MinimumDuration, MaximumDuration, Refund, Overstay, WalkIn, Arrival, PassRefund, PassClosure, StartBooking, VehicleSupport, Exit, Notice];
 
-    internal static Route? Find(string intent) => Routes.FirstOrDefault(route => route.Id == intent);
+    internal static PublicFaqRoute? Find(string intent) => PublicFaqRoutes.FirstOrDefault(route => route.Id == intent);
 
     // Recognize only complete public questions before the broad number and personal-context checks.
     // The model receives the fixed question above. No substring of the caller's message is forwarded.
-    internal static Route? MatchPublicPolicy(string message, string question, IReadOnlyList<PublicArticle>? articles)
+    internal static PublicFaqRoute? MatchPublicPolicy(string message, string question, IReadOnlyList<PublicArticle>? articles)
     {
         if (articles is null || message.Length > 160 || !PublicQuestionCharacters().IsMatch(message.Trim()))
             return null;
         var duration = DurationQuestion().Match(question);
-        var durationRoute = duration.Success ? (duration.Groups["minimum"].Success ? MinimumDuration : MaximumDuration) : null;
+        var durationPublicFaqRoute = duration.Success ? (duration.Groups["minimum"].Success ? MinimumDuration : MaximumDuration) : null;
         var route = AdvanceQuestion().IsMatch(question) ? Advance
             : RefundTimingQuestion().IsMatch(question) ? Refund
             : GenericOverstayQuestion().IsMatch(question) ? Overstay
-            : durationRoute;
+            : durationPublicFaqRoute;
         return route is not null && articles.Any(article => article.Id == route.ArticleId) ? route : null;
     }
 
@@ -72,7 +72,7 @@ internal static partial class PublicFaqIntents
         return match.Id;
     }
 
-    private static IEnumerable<Route> Paraphrases(string text)
+    private static IEnumerable<PublicFaqRoute> Paraphrases(string text)
     {
         if (Has(text, "gui xe truc tiep", "gui xe vang lai", "parking without booking", "park without a reservation",
                 "khong dat truoc co gui xe", "khong co tai khoan thi co gui xe") ||

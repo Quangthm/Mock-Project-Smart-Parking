@@ -618,6 +618,27 @@ Các câu sau bổ sung ca quyền ở mục 5. Với FAQ, so ý nghĩa/nguồn;
 
 ### 4.6. Bộ 80 câu hỏi theo yêu cầu — copy từng câu để test
 
+#### Retest phần A sau sửa QA ngày 17/11/2026
+
+Đây là tiêu chí retest, **chưa phải kết quả Gemini/browser trên môi trường QA**. Báo cáo QA tại `bdf06781` kiểm source `7d8b3e3e`; ghi rõ commit mới khi retest. Không sửa số liệu lịch sử 22 case hoặc tự đóng SPARK-396/SPARK-397 chỉ từ automated tests.
+
+| Prompt / tình huống | Mong đợi |
+| --- | --- |
+| `Which vehicle types does SmartPark support?`; `Does SmartPark support cars and motorcycles?`; `What kinds of vehicles does SmartPark support?` | Guest/Driver/Admin/Owner chọn `vehicle-guide`, nội dung xe ô tô/xe máy theo cấu hình bãi; model trả tiếng Anh |
+| `Hãy trả lời bằng tiếng Anh: SmartPark hỗ trợ những loại xe nào?` | Không mất intent vì tiền tố; request provider `answerLanguage=en`, nội dung tiếng Anh, với corpus song ngữ 0.4.1 thì citation của bài này có `locale=en` |
+| `Does SmartPark support motorcycles? Answer in Vietnamese, please.` | Trả tiếng Việt từ `vehicle-guide`; chỉ thị ngôn ngữ không làm FAQ rơi về clarification |
+| `Hướng dẫn tôi các bước đặt chỗ trên SmartPark.`; `Cách đặt chỗ?`; `How do I book on SmartPark step by step?` | Chọn `booking-guide`, liệt kê các bước từ nguồn; không nói đã tạo đơn/giữ chỗ/thanh toán |
+| Tắt mọi model nhưng giữ Assistant/publication bật; hỏi câu hướng dẫn đặt chỗ ở trên | `mode=knowledge`, các bước được đánh số từ đoạn chuẩn bị của corpus 0.4.0; giữ điều kiện nguồn, không gọi provider |
+| Timeout hoặc ngắt kết nối provider trên instance kiểm thử song ngữ 0.4.1, hỏi về xe và các bước booking bằng tiếng Anh | `mode=knowledge`, `outcome=answered`, citation đúng mã bài, version và `locale=en`. Kiểm tra câu trả lời có cars/motorcycles hoặc bảy bước booking và xác nhận trên form. Lặp lại với Driver/Admin đã đăng nhập. |
+| Hỏi tiếng Anh khi không có model và nguồn chỉ có tiếng Việt | Thông báo rõ chỉ có hướng dẫn tiếng Việt rồi hiển thị nguồn; không coi là model đã dịch thành công |
+| `Tôi có thể xem những xe đã đăng ký của mình ở đâu?`; `Where do I see my vehicles?` | Hướng dẫn menu tài khoản → My Vehicles; `mode=system`, `outcome=answered`, `sources=[]`, `cards=[]`; không gọi owner API hoặc provider |
+| Driver: `Hãy trả lời bằng tiếng Anh: Xe của tôi` | Đọc xe đúng Account qua owner API, thông báo tiếng Anh; không gửi xe hoặc tài khoản vào provider |
+| Câu trên kèm token/OTP, dữ liệu người khác, hoặc đổi sang bảo hiểm xe/đặt vé máy bay | Không lấy FAQ đúng chủ đề một phần rồi giả là đã trả lời đủ; không gửi dữ liệu riêng tư/secret ra provider |
+
+Lưu prompt nguyên văn, role, conversation, SHA, corpus version/hash, HTTP, `mode`, `outcome`, `sources`, cards và traceId (che thông tin nhạy cảm). FAQ loại xe dùng nội dung đã duyệt khi có bản đúng ngôn ngữ, kỳ vọng mode=knowledge kể cả provider đang bật.
+
+Retest summary với tài khoản đã đăng nhập: hỏi loại xe, hỏi các bước đặt chỗ, rồi gửi `Please summarize what I asked you in this conversation and answer in English.`. Kỳ vọng mode=system, outcome=answered, hai chủ đề bằng tiếng Anh, không citation/card. Lặp lại bằng tiếng Việt, kiểm sau F5. Hội thoại mới phải không chứa chủ đề của hội thoại cũ, tài khoản khác không được đọc hội thoại này. Phạm vi summary là tối đa sáu lượt hoàn tất gần đây trong ngân sách context 12.000 ký tự. Guest nhận giải thích giới hạn lịch sử. Nearby search và giao dịch booking/payment vẫn cần phạm vi kiểm thử riêng.
+
 Bộ này giữ nguyên các câu bạn muốn tester thử. **Bảng là tiêu chí kiểm, chưa phải kết quả đã chạy 80 câu với AI thật.** Chạy nhóm chung ở cả Guest, Driver, Admin, Owner và Operator; nhóm riêng chạy đúng role. Business = Business Owner/chủ bãi, được chuẩn hóa thành `owner` trong chatbot.
 
 Đọc cột “Loại” trước khi chấm:

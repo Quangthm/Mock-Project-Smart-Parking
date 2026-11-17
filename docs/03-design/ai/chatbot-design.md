@@ -43,15 +43,21 @@ Provider FAQ nhận một article public đã duyệt và câu hỏi giới hạ
 
 ## 3. Knowledge và xử lý FAQ
 
-Nguồn biên tập duy nhất là [smartpark-knowledge.md](p1/knowledge/smartpark-knowledge.md), tiếng Việt version 0.4.0. Runtime đọc cặp `smartpark-knowledge.md` và `publication.json` riêng trong thư mục do `.env` cấu hình. Markdown trong Git đang là bản nháp. Admin duyệt đúng phiên bản, deployment operator xuất bản theo bản ghi duyệt bằng `scripts/publish-assistant-knowledge.ps1`.
+Nguồn biên tập duy nhất là [smartpark-knowledge.md](p1/knowledge/smartpark-knowledge.md), phiên bản biên tập 0.4.1. Hai mục `vehicle-guide` và `booking-guide` có thêm bản tiếng Anh trong cùng tệp. Hash xuất bản bao phủ cả hai ngôn ngữ. Runtime đọc cặp `smartpark-knowledge.md` và `publication.json` riêng trong thư mục do `.env` cấu hình. Markdown trong Git đang là bản nháp. Admin duyệt đúng phiên bản, deployment operator xuất bản theo bản ghi duyệt bằng `scripts/publish-assistant-knowledge.ps1`.
 
 Loader kiểm SHA-256 của bytes thực tế, version, `publication_state=published`, `review_status=approved`, audience có `public`, người duyệt, `role=admin`, thời gian công bố/hiệu lực và giới hạn cấu trúc. Manifest phải khớp version/hash/thời gian Markdown, không có timestamp tương lai hoặc hết hạn. `role` chỉ ghi metadata, quyền ghi thư mục triển khai cần được kiểm soát. Bộ file thiếu, draft, sai hash hoặc malformed làm nguồn unavailable. Việc sửa draft không tự cập nhật publication runtime.
 
-Chỉ nội dung dưới `### Nội dung` được dùng cho generation/citation. Aliases, metadata và mục đối chiếu nội bộ phục vụ retrieval/review. Giới hạn loader gồm 256 KiB, 1–30 article có ID duy nhất, title tối đa 200 và nội dung tối đa 6.000 ký tự. Cache theo hash vẫn kiểm bytes, manifest và hiệu lực mỗi lượt đọc.
+Generation và citation lấy nội dung tiếng Việt dưới `### Nội dung` hoặc bản tiếng Anh dưới `### English: <title>` của cùng bài, tùy ngôn ngữ yêu cầu và bản đã xuất bản. Aliases, metadata và mục đối chiếu nội bộ phục vụ retrieval/review. Giới hạn loader gồm 256 KiB, 1–30 article có ID duy nhất, title tối đa 200 và nội dung tối đa 6.000 ký tự. Cache theo hash vẫn kiểm bytes, manifest và hiệu lực mỗi lượt đọc.
 
 Luồng FAQ gồm kiểm quyền/readiness/intent → đọc snapshot hợp lệ → normalize/rank title, aliases và nội dung → chọn một article → generation hoặc fallback → kiểm output và kiểm lại Settings/publication trước giao kết quả. Retrieval hiện dùng lexical/rules, có phục hồi typo giới hạn cho alias ngắn duy nhất. Chưa dùng embeddings, vector database hoặc fine-tuning. Thiếu nguồn hay câu mơ hồ trả làm rõ/handoff.
 
-`mode=ai` chứng minh model đã diễn đạt theo nguồn. `mode=knowledge` trả hướng dẫn gốc có nhãn khi không có candidate hoặc sau lỗi recoverable phù hợp. Cấu trúc/citation hợp lệ vẫn cần QA ngữ nghĩa. Fallback có thể giữ nội dung tiếng Việt khi người dùng hỏi tiếng Anh. Các câu wrong-source/unknown đã biết nằm trong handoff mục 4.7.
+`mode=ai` chứng minh model đã diễn đạt theo nguồn. `mode=knowledge` trả hướng dẫn gốc có nhãn khi không có candidate hoặc sau lỗi recoverable phù hợp. Cấu trúc/citation hợp lệ vẫn cần QA ngữ nghĩa. Nếu bài có bản tiếng Anh trong publication, cả nội dung fallback và citation dùng bản đó khi người dùng yêu cầu tiếng Anh. Bài chỉ có tiếng Việt vẫn ghi rõ giới hạn ngôn ngữ. Các câu wrong-source/unknown đã biết nằm trong handoff mục 4.7.
+
+**Phần A QA — 17/11/2026:** Chỉ thị trả lời Việt/Anh độc lập ở đầu/cuối tin nhắn được nhận trước retrieval, hỗ trợ Unicode NFC và cách nói lịch sự. Chỉ thị rõ ưu tiên hơn locale; nếu không có chỉ thị, Guest giữ contract locale `vi`/`en`/`auto`, chat đăng nhập nhận diện ngôn ngữ câu hỏi rồi dùng locale hội thoại khi không xác định. Không tự đổi locale bền vững. `replyLocale` của Guest vẫn chỉ có với `locale=auto` theo contract.
+
+Các câu hỏi công khai về loại xe và cách đặt chỗ được nhận bằng grammar toàn câu Việt–Anh, chọn nguồn `vehicle-guide`/`booking-guide` và câu hỏi canonical do backend tạo. Yêu cầu đặt chỗ theo bước, kể cả `Cách đặt chỗ?`, yêu cầu model đánh số các bước có trong nguồn. Fallback knowledge định dạng lại đoạn chuẩn bị đặt chỗ tiếng Việt của corpus 0.4.0 thành các bước, giữ nguyên các đoạn điều kiện còn lại và excerpt trích dẫn. Không thêm quy tắc hoặc bản dịch hardcode. Nếu nội dung đã công bố thay đổi cấu trúc đoạn chuẩn bị, cần retest định dạng; formatter trả nguyên nguồn khi không nhận cấu trúc, không tự suy ra bước mới. Provider không khả dụng và chưa có nguồn tiếng Anh thì tiếp tục ghi rõ giới hạn tiếng Việt.
+
+Câu hỏi vị trí màn hình xe, như `Tôi có thể xem những xe đã đăng ký của mình ở đâu?`, trả hướng dẫn menu tài khoản → **My Vehicles** (`mode=system`, `outcome=answered`, không sources/cards). Đây là hướng dẫn UI đã có, không phải kết quả đọc dữ liệu hay câu trả lời model. Câu `Xe của tôi` vẫn đi tool đọc xe theo quyền Driver. Các câu chứa yêu cầu cá nhân, thông tin nhạy cảm hoặc nội dung không thuộc grammar tiếp tục qua guard hiện hữu; không mở quyền đọc và không gửi transcript ra provider. Tóm tắt hội thoại được xử lý trong mục 4. Tìm bãi gần đây phụ thuộc kết nối tra cứu backend.
 
 ### Provider và quản trị
 
@@ -66,6 +72,10 @@ Adapter trong checkout dùng OpenAI Responses với `store=false`, `stream=false
 ## 4. Hội thoại, idempotency và recovery
 
 Mỗi Account và role Driver/Admin/Owner có một chat hiện tại, giữ đến khi người dùng xác nhận reset. Reset ẩn chat ngay, hủy yêu cầu đang chạy và đặt hạn xóa sau bảy ngày, có ngoại lệ hold đã duyệt. Message đầu tiếp theo tạo chat thay thế. Legacy chat giữ expiry/hold ban đầu theo [migration current-chat](../../../scripts/database/migrations/20261110_iot_assistant_current_chat.sql).
+
+FAQ loại xe trả nội dung đã xuất bản khi có bản đúng ngôn ngữ yêu cầu, giữ nguyên mức độ xác nhận hỗ trợ và citation. Bản legacy chỉ có tiếng Việt vẫn có thể dùng model dịch khi hỏi tiếng Anh.
+
+Yêu cầu tóm tắt hội thoại đã đăng nhập được xử lý cục bộ theo Account, role và conversation hiện hành, liệt kê chủ đề từ tối đa sáu lượt hoàn tất trong ngân sách 12.000 ký tự. Trả tiếng Việt/Anh theo chỉ thị. Bản tóm tắt không gửi transcript ra provider, lược bỏ chi tiết nhạy cảm và ghi rõ phạm vi các lượt gần đây. Hội thoại mới chưa có lượt hoàn tất trả thông báo trống. Guest nhận giải thích cần bắt đầu hội thoại đăng nhập.
 
 Context continuation FAQ giới hạn sáu lượt hoàn tất và 12.000 ký tự UTF-16, cùng version nguồn. Đây là context cục bộ chọn nguồn, chưa là booking draft nhiều lượt. Chat input tối đa 4.000, output tối đa 8.000 ký tự. Driver overall budget 25 giây, generation tối đa 20 giây. Recovery kiểm mỗi giây, generation kiểm cancel và Settings mỗi 100 ms.
 

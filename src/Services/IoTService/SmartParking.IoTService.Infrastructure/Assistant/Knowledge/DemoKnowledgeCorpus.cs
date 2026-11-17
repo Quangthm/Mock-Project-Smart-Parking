@@ -5,11 +5,6 @@ using SmartParking.IoTService.Application.Assistant.Knowledge;
 
 namespace SmartParking.IoTService.Infrastructure.Assistant.Knowledge;
 
-// One Vietnamese editing source; search terms are aliases, not translated policies.
-internal sealed record DemoArticle(string Id, string Version, string Title, string Content, string[] SearchTerms)
-{
-    public GroundedSource Source => new(Id, Version, Title, Content[..Math.Min(Content.Length, 1000)]);
-}
 internal static class DemoKnowledgeCorpus
 {
     internal const string FileName = "smartpark-knowledge.md";
@@ -65,7 +60,34 @@ internal static class DemoKnowledgeCorpus
             var aliases = section[..contentStart].Split('\n').Where(line => line.StartsWith("Từ khóa:", StringComparison.Ordinal)).ToArray();
             if (aliases.Length != 1 || aliases[0].Length > 2000) throw new DemoGroundedUnavailableException();
             var terms = aliases[0]["Từ khóa:".Length..].Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            var content = section[(contentStart + contentHeading.Length)..];
+            var content = section[(contentStart + contentHeading.Length - 1)..];
+            string? englishTitle = null;
+            string? englishContent = null;
+            const string englishHeading = "\n### English: ";
+            var englishStart = content.IndexOf(englishHeading, StringComparison.Ordinal);
+            if (englishStart >= 0)
+            {
+                // Only an English block immediately after Vietnamese content is accepted.
+                if (content.IndexOf("\n### ", StringComparison.Ordinal) != englishStart ||
+                    content.LastIndexOf(englishHeading, StringComparison.Ordinal) != englishStart)
+                    throw new DemoGroundedUnavailableException();
+                var titleEnd = content.IndexOf('\n', englishStart + englishHeading.Length);
+                if (titleEnd < 0) throw new DemoGroundedUnavailableException();
+                englishTitle = content[(englishStart + englishHeading.Length)..titleEnd].Trim();
+                var translated = content[titleEnd..];
+                var translatedNotes = translated.IndexOf("\n### ", StringComparison.Ordinal);
+                if (translatedNotes >= 0)
+                {
+                    if (!translated[translatedNotes..].StartsWith("\n### Đối chiếu — không gửi đến AI\n", StringComparison.Ordinal))
+                        throw new DemoGroundedUnavailableException();
+                    translated = translated[..translatedNotes];
+                }
+                englishContent = translated.Trim();
+                if (englishTitle.Length is 0 or > 200 || englishContent.Length is 0 or > 6000 ||
+                    englishTitle.Any(char.IsControl) || englishContent.Any(c => char.IsControl(c) && c != '\n'))
+                    throw new DemoGroundedUnavailableException();
+                content = content[..englishStart];
+            }
             // References/editorial notes stay in this file, outside model context and citations.
             var notes = content.IndexOf("\n### ", StringComparison.Ordinal);
             if (notes >= 0)
@@ -77,7 +99,7 @@ internal static class DemoKnowledgeCorpus
             content = content.Trim();
             if (!Identifier(id) || title.Length is 0 or > 255 || content.Length is 0 or > 16000 || terms.Length is 0 or > 100)
                 throw new DemoGroundedUnavailableException();
-            return new DemoArticle(id, version, title, content, terms);
+            return new DemoArticle(id, version, title, content, terms) { EnglishTitle = englishTitle, EnglishContent = englishContent };
         }).ToArray();
         if (articles.Select(a => a.Id).Distinct(StringComparer.Ordinal).Count() != articles.Length)
             throw new DemoGroundedUnavailableException();

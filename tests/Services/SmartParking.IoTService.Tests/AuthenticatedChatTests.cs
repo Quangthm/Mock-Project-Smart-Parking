@@ -894,7 +894,7 @@ public sealed partial class AuthenticatedChatTests
         public Meter Meter => app.Services.GetRequiredService<IMeterFactory>().Create("SmartPark.Assistant");
         private Fixture(){Store=new(Clock);}
         public static async Task<Fixture> Create(int generation=20000, int overall=25000, ReadOwner? owner=null,
-            bool search=false, bool measure=false, IChatStore? chatStore=null)
+            bool search=false, bool measure=false, IChatStore? chatStore=null, IHttpClientFactory? providerTransport=null)
         {
             var f=new Fixture();var fallback=new GuestFaqTests.Answers();
             var generator=new ManagedDemoGenerator(f.Settings,new GuestFaqTests.Protector(),fallback,f.Clock,NullLogger<ManagedDemoGenerator>.Instance);
@@ -905,7 +905,8 @@ public sealed partial class AuthenticatedChatTests
                 {
                     b.Logging.ClearProviders();
                     b.Services.AddSingleton(new GuestOptions(true));
-                    b.Services.AddSingleton<IGuestAnswerFactory, GuestAnswerFactory>();
+                    if (providerTransport is null) b.Services.AddSingleton<IGuestAnswerFactory, GuestAnswerFactory>();
+                    else b.Services.AddSingleton<IGuestAnswerFactory>(new GuestAnswerFactory(providerTransport));
                 }
                 if (owner is not null)
                 {
