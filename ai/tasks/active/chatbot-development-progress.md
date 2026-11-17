@@ -347,3 +347,9 @@ Theo yêu cầu người dùng, bỏ SESSION/ngày khỏi tên file chatbot; dù
 - Rechecked current dirty candidate without staging/committing. Initializer (fresh and existing FILE/PEM/Base64) and discovery fixture rerun PASS; full Node frontend 298/298 PASS; diff whitespace and guide links/fences/JSON PASS. Changed/untracked text scan found no private-key payload/provider-token patterns; local `.env`, `.env.bak` and `.cache` are not tracked. Pattern scan is not a comprehensive secret audit.
 - Prior current-code solution build/test and Docker/PG evidence remains as recorded; no backend edits since those runs, no unnecessary broad rerun. This review does not replace target-machine UI/provider acceptance.
 - Verdict: GO for QA candidate with known gaps, NOT full 80-question functional acceptance or production release. FAQ unknown/wrong-source issues remain in guide 4.7; tester must receive approved corpus, provider access and QA account setup. All new compose/helper/initializer/test scripts must be included in the eventual user commit; tracked-file-only commit would omit required dependencies. No Git write action performed.
+
+### Handoff sau phản hồi tester PR #93 — 17/11/2026
+
+- Bổ sung quy trình Windows mới, kiểm nguồn JWT trước full setup, khôi phục khóa cũ và kiểm kết nối Gemini khi chưa có corpus. Ba reviewer đối chiếu signing, publication và toàn bộ luồng setup. Sửa thứ tự để người copy lệnh có thể dừng kiểm fingerprint trước initializer.
+- Chạy fixture inspector, exporter, initializer và publication thành công. Kiểm JWKS dùng dữ liệu mô phỏng. Bộ đọc PublicKnowledgeFile thực tế chấp nhận cặp publication do script tạo từ dữ liệu thử. Không dùng khóa hay publication của môi trường tester.
+- Chờ tester xác minh Test connection bằng Gemini key QA. Sau khi có corpus được duyệt, kiểm riêng FAQ và từng role theo mục 4.

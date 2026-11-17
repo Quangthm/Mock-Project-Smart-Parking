@@ -6,6 +6,8 @@ Bộ **80 câu hỏi nguyên văn theo role** nằm ở **4.6**; kết quả rà
 
 Các khối `.env` bên dưới đã điền giá trị cho Docker local. Mật khẩu và khóa riêng được script tạo hoặc giữ lại; bạn không phải tự nghĩ ra và chép vào source.
 
+**Nếu đang vướng như báo cáo PR #93:** đọc **2.3 bước 1** trước khi chạy lại setup. Một dòng `SMARTPARK_JWT_PRIVATE_KEY_PEM=` trống chưa chứng minh máy thiếu khóa: khóa có thể nằm trong file, Base64 hoặc user-secrets. Thiếu `publication.json` chặn chat, nhưng vẫn có thể kiểm kết nối Gemini theo **2.7**. Build/unit test PASS chưa chứng minh setup runtime đã xong.
+
 ## 1. Phạm vi bàn giao
 
 **Có thể test FAQ, quản trị provider, hội thoại và tra cứu có điều kiện. Chưa nghiệm thu toàn bộ chatbot đặt chỗ/thanh toán.** Bản nháp Driver hiện là parser phía trình duyệt, chưa chuyển sang form xác nhận hoặc tạo giao dịch. `prepareReservation=false` vẫn đúng.
@@ -24,18 +26,40 @@ Các khối `.env` bên dưới đã điền giá trị cho Docker local. Mật 
 
 - Cài **Git**, **Docker Desktop**, **.NET SDK 10** và **PowerShell 7**. Mở Docker Desktop, chọn Linux containers và đợi engine chạy.
 - Mở PowerShell tại **thư mục gốc dự án**, nơi có `setup.ps1` và `.env.example`. Các lệnh bên dưới đều chạy tại đây.
-- Nhận từ người bàn giao **hai file knowledge đã duyệt**: `smartpark-knowledge.md` và `publication.json`. Thiếu hai file này thì chưa test chat được.
+- Nhận từ người bàn giao **hai file knowledge đã duyệt**: `smartpark-knowledge.md` và `publication.json`. Thiếu hai file này thì chưa test chat được; vẫn có thể setup và test kết nối Gemini theo **2.7 mốc A**.
 - Chuẩn bị API key Gemini hoặc OpenAI nếu cần test AI trả lời thật. Key này sẽ nhập trong giao diện Admin ở mục 2.5.
 
-Kiểm công cụ:
+Trên máy Windows mới có WinGet, mở PowerShell và cài các công cụ còn thiếu:
+
+```powershell
+winget install --id Git.Git -e
+winget install --id Microsoft.PowerShell -e
+winget install --id Microsoft.DotNet.SDK.10 -e
+winget install --id Docker.DockerDesktop -e
+```
+
+Nếu Docker Desktop yêu cầu cài WSL, mở PowerShell với quyền Administrator, chạy `wsl --install`, khởi động lại máy khi được yêu cầu rồi mở Docker Desktop. Xem [hướng dẫn Docker Desktop trên Windows](https://docs.docker.com/desktop/setup/install/windows-install/) và [cài .NET SDK cho Windows](https://learn.microsoft.com/en-us/dotnet/core/install/windows).
+
+Nếu chưa có repo, sau khi nhánh của PR #93 đã nhận bản handoff mới, mở terminal mới và chạy:
+
+```powershell
+git clone --branch AI-ChatBot https://github.com/Quangthm/Mock-Project-Smart-Parking.git
+cd Mock-Project-Smart-Parking
+pwsh
+```
+
+Nếu đã có repo, dùng checkout chứa bản bàn giao và mở PowerShell 7 ở root. Kiểm công cụ và phiên bản repo:
 
 ```powershell
 pwsh --version
 dotnet --version
 docker info
+docker compose version
+git rev-parse --short HEAD
+Test-Path scripts/inspect-assistant-signing.ps1
 ```
 
-Nếu `docker info` báo lỗi, mở lại Docker Desktop trước khi làm tiếp. Chạy FE bằng Docker thì không cần cài Node trên máy.
+Lệnh cuối cần trả `True`. Nếu checkout còn ở `3406d221`, lấy bản cập nhật của nhánh trước khi chạy các helper mới. Nếu `docker info` báo lỗi, mở lại Docker Desktop trước khi làm tiếp. Chạy FE bằng Docker thì không cần cài Node trên máy.
 
 ### 2.2. Máy mới dùng Docker
 
@@ -60,7 +84,7 @@ Mở thư mục sau và chép hai file được bàn giao vào đó:
 └── publication.json
 ```
 
-Dùng nguyên cặp file được bàn giao. File Markdown trong repo còn là bản soạn thảo; chỉ copy bản đó vào đây sẽ chưa bật chat được. Nếu nhóm chưa có hai file triển khai, người phụ trách nội dung làm theo [hướng dẫn xuất bản knowledge](../03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). `publication.json` cần UTF-8 không BOM.
+Dùng nguyên cặp file được bàn giao. File Markdown trong repo còn là bản soạn thảo; chỉ copy bản đó vào đây sẽ chưa bật chat được. Nếu nhóm chưa có hai file triển khai, làm theo **2.7** để kiểm kết nối Gemini trước hoặc tạo bộ triển khai sau khi được Admin duyệt. Quy trình duyệt thuộc [hướng dẫn xuất bản knowledge](../03-design/ai/knowledge-and-faq.md#publication-manual-admin-controlled-deployment). `publication.json` cần UTF-8 không BOM.
 
 **Bước 3 — Copy cấu hình chatbot vào `.env` ở root**
 
@@ -165,13 +189,79 @@ Giữ `.env` đang dùng. Không copy đè `.env.example` và **không dán kh�
 
 **Bước 1 — Thêm Assistant bằng khóa đăng nhập hiện có**
 
-Nếu khóa UserService đã được cấu hình trong root `.env` bằng file PEM, PEM inline hoặc Base64, chạy:
+**Kiểm tra khóa trước khi chạy setup.** Khi root `.env` đang trống, bước đồng bộ của full `setup.ps1` có thể xóa signing key trong user-secrets. Từ root, chạy:
+
+```powershell
+pwsh -NoProfile -File scripts/inspect-assistant-signing.ps1
+```
+
+Công cụ kiểm ba dạng khóa trong root `.env`, biến của process hiện tại và user-secrets UserService của tài khoản Windows hiện tại. Kết quả chỉ gồm tên nguồn, trạng thái và dấu vân tay **public key**, không in private key. Công cụ không thấy biến của một container/process khác hoặc secrets của tài khoản Windows khác.
+
+| Kết quả | Làm tiếp thế nào? |
+| --- | --- |
+| `.env:...FILE`, `...PEM` hoặc `...BASE64` là `CONFIGURED`; `MultipleDifferentKeys=false`, không có `INVALID`/`UNREADABLE` | Giữ giá trị đó; nếu User đang chạy, so với JWKS bên dưới trước khi chạy initializer với `-UseExistingSigningKey`. PEM inline trống là bình thường nếu FILE/Base64 có giá trị. |
+| Có `INVALID` / `UNREADABLE` | Sửa file không tồn tại, quyền đọc hoặc định dạng tại nguồn được báo; không thay bằng khóa mới để bỏ qua lỗi. |
+| `MultipleDifferentKeys=true` | Có nhiều khóa khác nhau; xác định khóa UserService đang chạy bằng JWKS như bên dưới. Không chọn tùy ý khóa đầu tiên. |
+| Chỉ `UserService user-secrets:...` / `process:...` là `CONFIGURED` | Cần đưa **chính khóa này** về file local riêng và trỏ root `.env` tới file đó; làm theo phần khôi phục ở dưới. |
+| Tất cả `MISSING` | Kiểm tài khoản Windows/host/container thực sự chạy UserService. DB không lưu JWT private key. Chưa đủ căn cứ kết luận được phép tạo khóa mới. |
+
+Nếu UserService hiện đang chạy, dùng đúng cổng UserService của máy (Docker mặc định 5035), kiểm public JWKS:
+
+```powershell
+pwsh -NoProfile -File scripts/inspect-assistant-signing.ps1 -UserJwksUri http://localhost:5035/.well-known/jwks.json
+```
+
+Chỉ nguồn có `MatchesLiveJwks=true` mới có bằng chứng khớp khóa public đang phục vụ; `UNAVAILABLE_OR_INVALID` là chưa xác minh được, không phải khóa sai. Xem cổng thực tế bằng `docker ps` nếu đã đổi cấu hình. JWKS chỉ chứa public key, không thể dùng nó tạo lại private key.
+
+**Khôi phục từ user-secrets hoặc biến process, không chép secret qua màn hình**
+
+Khi inspector tìm được nguồn đúng, copy **tên nguồn** ở trường `Source` (không phải giá trị khóa). Ví dụ tên có thể là `UserService user-secrets:Jwt:PrivateKeyPem`. Chạy:
+
+```powershell
+$signingSource = Read-Host 'Dán chính xác Source có CONFIGURED và khớp UserService'
+pwsh -NoProfile -File scripts/export-assistant-signing.ps1 -Source $signingSource -UserJwksUri http://localhost:5035/.well-known/jwks.json
+```
+
+Script chỉ xuất khi public fingerprint khớp JWKS, giữ nguyên khóa cũ, ghi vào `.cache/assistant-signing/user-private.pem`, không in private key và không ghi đè file. **Không đặt file khôi phục vào `.cache/assistant-docker` trước initializer**, vì initializer từ chối thư mục vật liệu đã tồn tại.
+
+Nếu UserService đang tắt nên không kiểm JWKS được, chỉ người đã xác nhận độc lập nguồn này thuộc môi trường hiện tại mới dùng lệnh thay thế sau. Tham số này là xác nhận của người chạy, không phải công cụ tự chứng minh nguồn đúng:
+
+```powershell
+pwsh -NoProfile -File scripts/export-assistant-signing.ps1 -Source $signingSource -ConfirmExistingSource
+```
+
+Sau khi export thành công, sửa **đúng ba dòng** trong root `.env`, giữ nguyên KeyId/Issuer/Audience và mọi cấu hình DB:
+
+```dotenv
+SMARTPARK_JWT_PRIVATE_KEY_FILE=.cache/assistant-signing/user-private.pem
+SMARTPARK_JWT_PRIVATE_KEY_PEM=
+SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64=
+```
+
+Nếu nguồn nằm ở process, initializer sẽ từ chối biến signing còn kế thừa. Sau khi đã export và sửa `.env`, xóa **chỉ các alias signing của cửa sổ PowerShell hiện tại** bằng helper dưới đây; không xóa biến Windows hoặc secrets gốc:
+
+```powershell
+. ./scripts/jwt-environment.ps1
+Clear-JwtSigningEnvironment
+```
+
+**Kiểm tra lại trước khi khởi tạo Assistant.** Áp dụng cho cả khóa có sẵn trong root `.env` và khóa vừa khôi phục:
+
+```powershell
+pwsh -NoProfile -File scripts/inspect-assistant-signing.ps1
+```
+
+Chỉ tiếp tục khi thấy nguồn khóa trong root `.env` là `CONFIGURED`, không có nguồn lỗi hoặc xung đột, và đã đối chiếu đúng khóa của UserService. Nếu dùng file/PEM, xóa giá trị mẫu `replace-with-*` ở dòng Base64. Chạy:
 
 ```powershell
 pwsh -NoProfile -File scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey
 ```
 
-Script giữ nguyên khóa UserService và tự điền các đường dẫn/mật khẩu mới cho Assistant. Nếu báo không tìm thấy khóa, nhờ người setup trỏ `SMARTPARK_JWT_PRIVATE_KEY_FILE` tới **file private key đang dùng**. Không tạo một khóa khác. Nếu dùng file/PEM thì bỏ giá trị mẫu `replace-with-*` ở dòng Base64.
+Initializer tạo vật liệu riêng cho Assistant và giữ khóa ký đã chọn. Nếu nguồn chỉ tồn tại trong container hay máy của người triển khai khác, người đó cần cấu hình file khóa trên máy test qua kênh secret của nhóm. Giữ private key, nội dung `.env` và output `docker inspect` ngoài ticket/chat.
+
+**Nếu thật sự không còn khóa ổn định:** UserService Development có thể từng dùng khóa tạm trong RAM khi cả private key và KeyId đều trống. Log sẽ có `UserService uses an ephemeral Development JWT key; access tokens become invalid after restart.` Không thể khôi phục private key từ DB hoặc JWKS. Người quản lý môi trường phải quyết định cấp khóa ổn định mới và cho mọi người đăng nhập lại; không reset DB. Với môi trường dùng chung, tester không tự xoay khóa. Nếu KeyId có giá trị mà private key trống, UserService báo lỗi khởi động, không tự dùng khóa tạm.
+
+Nếu dùng file/PEM thì bỏ giá trị mẫu `replace-with-*` ở dòng Base64. Giữ nguyên Issuer, Audience và KeyId của môi trường đang dùng.
 
 Nếu máy đã có bộ TLS hoặc keyring Assistant, script sẽ yêu cầu giữ bộ đó. Dùng cấu hình hiện có theo trường hợp B bên dưới hoặc [hướng dẫn chi tiết](../../LOCAL-SETUP.md#ai-chatbot-bằng-docker).
 
@@ -239,9 +329,10 @@ Khởi động lại Vite. FE chạy Docker thì bỏ qua bước này vì runne
 1. Admin dashboard → **Settings** → **AI Chatbot** → **Reload settings**. Phải tải revision, các nhóm Gemini/OpenAI. `Management service is not connected` thường là FE thiếu URL; `Credential store unavailable` cần kiểm PFX/keyring.
 2. Trong provider được phép dùng, bấm **Add configuration**; điền **Configuration name** (`QA Gemini 01`) và **New API key** qua kênh riêng.
 3. Bấm **Load models**, chọn model từ catalogue → **Save disabled configuration**. Không ghi model cố định từ một tài liệu cũ nếu catalogue đã thay đổi.
-4. Bấm **Test connection**. Sau passed, **Enable** cấu hình, bật provider và **System chatbot**; chờ **Settings saved.**
-5. **Reload settings**, kiểm trạng thái còn giữ. Guest gửi `SmartPark là gì?`. Trong Network → `/guest/messages`, `data.mode=ai` mới chứng minh generation; `mode=knowledge` là fallback tài liệu.
-6. Không Revoke/Replace key của cấu hình đang phục vụ người khác. Ca phá lỗi/rotate dùng cấu hình QA riêng. Không chụp key/Authorization vào bằng chứng.
+4. Bấm **Test connection** và ghi kết quả. Nếu đang làm **2.7 mốc A** vì chưa có knowledge, dừng tại đây.
+5. Khi Test connection passed **và** đã có knowledge hợp lệ, **Enable** cấu hình, bật provider và **System chatbot**; chờ **Settings saved.**
+6. **Reload settings**, kiểm trạng thái còn giữ. Guest gửi `SmartPark là gì?`. Trong Network → `/guest/messages`, `data.mode=ai` mới chứng minh generation; `mode=knowledge` là fallback tài liệu.
+7. Không Revoke/Replace key của cấu hình đang phục vụ người khác. Ca phá lỗi/rotate dùng cấu hình QA riêng. Không chụp key/Authorization vào bằng chứng.
 
 ### 2.6. Test API chatbot trực tiếp bằng Postman
 
@@ -324,6 +415,48 @@ Với token Admin, gọi `GET {{assistantUrl}}/api/assistant/admin/settings` →
 | 200 nhưng không có câu trả lời | Kiểm `state`, `requestError`, `outcome`, không chỉ status HTTP |
 
 Các bản nháp ở Q-D11–13 phải test trên **widget FE**; gửi cùng câu qua Postman không chứng minh parser FE hoạt động. Nếu dùng PowerShell thay Postman, gửi JSON tiếng Việt bằng bytes UTF-8 và `application/json; charset=utf-8`, đặc biệt với Windows PowerShell 5.1.
+
+### 2.7. Chưa có publication.json: test Gemini trước, hoàn tất knowledge sau
+
+**Mốc A — Chỉ kiểm kết nối provider:** hoàn tất JWT, PFX/keyring, DB và đăng nhập Admin ở 2.2 hoặc 2.3. Để thư mục knowledge **trống hoàn toàn**, rồi dùng hai dòng này thay cho các cờ release trong khối `.env` phía trên:
+
+```dotenv
+Assistant__Guest__ReleaseEnabled=false
+Assistant__Chat__ReleaseEnabled=false
+```
+
+Nếu đã copy riêng Markdown mà thiếu manifest, chuyển file đó sang thư mục nháp ngoài knowledge, không để một nửa bộ triển khai trong đó. Preflight yêu cầu đủ cặp khi bất kỳ file nào đã có. Không xóa bộ knowledge cũ đang phục vụ người khác.
+
+Chạy `setup.ps1 -AssistantCheck`, rồi runner tương ứng ở 2.2/2.3. Đăng nhập Admin và làm **2.5 bước 1–4 tới Test connection**; chưa bật System chatbot và chưa chạy FAQ. Test connection không đọc corpus. **Passed chỉ xác nhận provider kết nối được**, chưa xác nhận chatbot hoạt động. Lỗi 401/403 ở Settings cần xử lý JWT/role; lỗi credential store cần xử lý PFX/keyring trước khi kết luận Gemini lỗi.
+
+**Mốc B — Có bộ knowledge được duyệt để test chat:** chọn một trong hai cách:
+
+1. Nhận **nguyên cặp** `smartpark-knowledge.md` + `publication.json` từ người phụ trách môi trường và chép vào `.cache/assistant-docker/knowledge/`. Không sửa một file riêng vì hash sẽ lệch.
+2. Nếu chưa có cặp triển khai: người phụ trách nội dung gửi bản nguồn `docs/03-design/ai/p1/knowledge/smartpark-knowledge.md` để Admin duyệt đúng phiên bản. Sau khi có quyết định duyệt thực tế, người triển khai chạy khối sau từ root. Hai câu hỏi yêu cầu danh tính người duyệt và link/mã biên bản đã có; không điền tên mẫu để vượt kiểm tra:
+
+```powershell
+$knowledgeApprover = Read-Host 'Tên hoặc ID Admin đã duyệt bản nội dung này'
+$knowledgeApproval = Read-Host 'Link hoặc mã biên bản duyệt của Admin'
+pwsh -NoProfile -File scripts/publish-assistant-knowledge.ps1 -ApprovedBy $knowledgeApprover -ApprovalReference $knowledgeApproval
+```
+
+Script tạo **bản triển khai riêng** và manifest với SHA-256, version, thời gian UTC đồng nhất, UTF-8 không BOM. Script không sửa bản nháp trong repo, không sửa `.env`, không thay thế quyết định phê duyệt. Nếu chưa có Admin duyệt thì dừng ở mốc A; trạng thái bàn giao là **chưa đủ điều kiện test chat**. Đây là đầu vào người bàn giao phải cung cấp, không phải lỗi thao tác của tester.
+
+Nếu thư mục đích đã có một trong hai file, script từ chối ghi đè. Giữ bộ cũ; bản được duyệt mới có thể xuất bằng `-OutputDirectory .cache/assistant-knowledge-v2`, rồi trỏ `Assistant__Guest__KnowledgeDirectory` trong root `.env` sang đúng thư mục đó.
+
+Khi đã đủ cặp file, đổi cờ và chạy lại:
+
+```dotenv
+Assistant__Guest__ReleaseEnabled=true
+Assistant__Chat__ReleaseEnabled=true
+```
+
+```powershell
+.\setup.ps1 -AssistantCheck
+.\scripts\run-app-service.ps1 -Service Assistant -NoBuild -NoLogWindow
+```
+
+Tiếp tục **2.5** để bật provider/System chatbot, rồi **2.4** để kiểm status và gửi FAQ. Có HTTP 200 hoặc health/live 204 chưa đủ; cần câu trả lời có nội dung/nguồn đúng. `mode=knowledge` là fallback, `mode=ai` mới chứng minh model đã tạo trả lời. Ghi riêng kết quả **provider PASS**, **FAQ PASS/FAIL**, **tra cứu Driver PASS/FAIL**.
 
 ## 3. Dữ liệu test và cách ghi kết quả
 

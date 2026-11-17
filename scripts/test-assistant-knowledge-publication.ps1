@@ -1,0 +1,63 @@
+#requires -Version 7.0
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$fixture = Join-Path $root ('.cache/publication-test-' + [guid]::NewGuid().ToString('N'))
+$null = [IO.Directory]::CreateDirectory($fixture)
+$sourcePath = Join-Path $fixture 'source.md'
+$output = Join-Path $fixture 'published'
+$helper = Join-Path $PSScriptRoot 'publish-assistant-knowledge.ps1'
+$source = @'
+---
+version: fixture-1
+locale: vi
+audience: [public, driver]
+publication_state: draft
+review_status: pending
+effective_from: null
+effective_to: null
+published_at: null
+published_by: null
+---
+## [fixture] Dữ liệu kiểm thử
+Từ khóa: kiểm thử; fixture
+### Nội dung
+Đây là dữ liệu tổng hợp dùng kiểm tra script, không phải tài liệu nghiệp vụ.
+'@
+$utf8 = [Text.UTF8Encoding]::new($false)
+[IO.File]::WriteAllText($sourcePath, $source, $utf8)
+$params = @{ SourcePath = $sourcePath; OutputDirectory = $output; ApprovedBy = 'Fixture Admin (synthetic test only)'; ApprovalReference = 'fixture://synthetic-review/1' }
+function Assert($condition, [string]$message) { if (!$condition) { throw $message } }
+function Reject([scriptblock]$action, [string]$message) {
+    $failed = $false
+    try { & $action } catch { $failed = $true }
+    Assert $failed $message
+}
+& $helper @params
+$bytes = [IO.File]::ReadAllBytes((Join-Path $output 'smartpark-knowledge.md'))
+$manifestText = [IO.File]::ReadAllText((Join-Path $output 'publication.json'))
+$manifest = $manifestText | ConvertFrom-Json
+$publishedAt = [Text.Json.JsonDocument]::Parse($manifestText).RootElement.GetProperty('publishedAt').GetString()
+$text = $utf8.GetString($bytes)
+Assert ($manifest.sha256 -ceq [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))) 'SHA does not match exact deployed bytes.'
+Assert ($bytes[0] -eq 45) 'Published Markdown must not have a UTF-8 BOM.'
+Assert ($manifest.version -ceq 'fixture-1' -and $manifest.role -ceq 'admin' -and $manifest.approvalReference -ceq $params.ApprovalReference) 'Manifest metadata mismatch.'
+Assert ($text.Contains('publication_state: published') -and $text.Contains('review_status: approved') -and $text.Contains('published_at: ' + $publishedAt)) 'Published frontmatter mismatch.'
+Assert ([DateTimeOffset]::Parse($publishedAt) -le [DateTimeOffset]::UtcNow) 'Publication timestamp is future.'
+Assert ([IO.File]::ReadAllText($sourcePath) -ceq $source) 'Editing source was changed.'
+Reject { & $helper @params } 'Existing publication must be preserved.'
+Assert ([IO.File]::ReadAllText((Join-Path $output 'publication.json')) -ceq $manifestText) 'Existing manifest was overwritten.'
+$params.OutputDirectory = Join-Path $fixture 'rejected'
+foreach ($placeholder in @('', 'admin', '<actual-admin>', 'REPLACE_WITH_ADMIN', 'your-admin')) {
+    $params.ApprovedBy = $placeholder
+    Reject { & $helper @params } 'Placeholder approver must be rejected.'
+}
+$params.ApprovedBy = 'Fixture Admin (synthetic test only)'
+$params.ApprovalReference = 'TODO'
+Reject { & $helper @params } 'Placeholder approval reference must be rejected.'
+$params.ApprovalReference = 'fixture://synthetic-review/1'
+[IO.File]::WriteAllText($sourcePath, $source.Replace('effective_to: null', 'effective_to: 2000-01-01T00:00:00Z'), $utf8)
+Reject { & $helper @params } 'Expired corpus must be rejected.'
+[IO.File]::WriteAllText($sourcePath, $source.Replace('### Nội dung', '### Broken'), $utf8)
+Reject { & $helper @params } 'Malformed corpus must be rejected.'
+Assert (!(Test-Path -LiteralPath $params.OutputDirectory)) 'Rejected publication must not create output.'
+Write-Host "PASS: publication integrity, source preservation, no overwrite, approval input and invalid-corpus checks. Synthetic fixtures retained at $fixture"
