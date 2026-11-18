@@ -1,15 +1,16 @@
 # Session Review — 2026-11-12
 
 ## 1. Session Information
+- **Current phase decision (18 November 2026):** P5 CLOSED at scoped implementation-review level after independent acceptance of F-A/F-B/F-C. User requests full tester verification on the published branch before any PR. Low findings tracked; rollout/UAT/parent acceptance pending. See Section34 and P5 closure record.
 - **Latest review decision (17 November 2026):** P4 conditional handoff, P5 CHANGES REQUESTED, P6 verified. User subsequently authorized tester-branch publication: five task-scoped commits pushed successfully to origin/feat/SPARK-340-admin-platform-policies, initial tip9a84aeaf. See Sections28–30 and tester handoff. No remote PR/merge/deploy.
 - **Latest implementation follow-up (17 November 2026):** User requested F6–F8 and explicitly approved dedicated Payment binding table/offline repair with an additive Schema Freeze exception. Implementation and automated verification completed; independent re-review and actual target-DB rollout/import remain pending. See Section31 and F6–F8 report/runbook. No shared DB/service changed.
 - **Latest hardening follow-up (17 November 2026):** Independent F6–F8 report accepted implementation with F-A/F-B/F-C caveats. User requested continuation; those three P3 findings are now addressed and verified (1190BE passed/114skipped, PG9/9). See Section33. Other low findings/UAT/rollout remain open.
 - **Session ID:** TASK-SPARK-340-SESSION-20261112
-- **Date:** 17 November 2026 (Asia/Saigon; earlier sections retain historical dates)
+- **Date:** 18 November 2026 (Asia/Saigon; earlier sections retain historical dates)
 - **Agent:** Lead Software Architect & Multi-Agent Task Orchestrator
 - **Branch:** feat/SPARK-340-admin-platform-policies
 - **Related Tasks:** SPARK-340 (Parent Story), SPARK-368 (Backend), SPARK-369 (Frontend), SPARK-370 (QA & UAT)
-- **Status:** P1 contracts approved; P2/P3 implemented; P4 TEMPORARILY CLOSED by user direction with U06/U11/U20/tester sign-off deferred and U19 blocked by SPARK-273; P5 REVIEW EXECUTED / CHANGES REQUESTED; P6 VERIFIED / TESTER BRANCH PUBLISHED / NOT MERGE-READY. Parent task remains active. Task changes committed; unrelated SPARK-238 work preserved locally. No Jira status changed.
+- **Status:** P1 contracts approved; P2/P3 implemented; P4 TEMPORARILY CLOSED by user direction with deferred UAT/U19; P5 CLOSED — IMPLEMENTATION REVIEW ACCEPTED; P6 TESTER BRANCH PUBLISHED / FULL PRE-PR TEST PENDING / NOT MERGE-READY. Parent remains active, no remote PR/merge/deploy or Jira status change. Unrelated SPARK-238 work preserved.
 
 ## 2. Objectives
 - [x] Phase 0: Repository, architecture, and task discovery.
@@ -22,7 +23,7 @@
 - [x] Phase 3: Multi-agent implementation coordination (Frontend SPARK-369) — FE API clients, client-side validation, four admin UI components, tabbed SystemConfig, and 26 frontend tests.
 - [x] QA test implementation coordination (SPARK-370), evidence and independent round2 report delivered.
 - [x] Phase 4 execution handed off under temporary closure by user; pending cases remain explicitly deferred/blocked, not passed.
-- [x] Phase 5 review performed, scoped findings/dispositions documented; zero-High gate NOT satisfied.
+- [x] Phase 5 scoped implementation review closed18/11 after independent round2 acceptance; low follow-ups documented, rollout acceptance separate.
 - [x] Phase 6 verification, session update and local PR draft prepared; commit/push/submission and merge readiness remain pending.
 
 ## 3. Work Completed
@@ -894,3 +895,29 @@ Actual gates: focused adapter/authority/inventory22passed after harness correcti
 Initial DI test failed: named service handler setup overrode the defaults-level fake HTTP handler, so that attempt did not reliably isolate outbound and may have attempted the configured origin with synthetic credentials. No real credential or user DB was involved. Corrected harness via PostConfigureAll<HttpClientFactoryOptions> and reran: positive case observes intercepted HTTP; missing-authority case observes zero calls. All final gates pass; the original failure is disclosed, not relabeled.
 
 Updated rollout guide, tester handoff and reviewer prompt; new implementation report SPARK-340-FA-FC-implementation-20261117.md. No extra Schema Freeze exception needed, no DDL/import on current DB or Docker restart, no key changes or SPARK-273 work. Other low findings and deferred UAT/U19 remain open; P4 stays temporarily closed by the user's phase-handoff decision, not fully accepted. Independent re-review/live rollout still required. Task-scoped commit/push proceeds under the existing tester-branch authorization; no merge/remote PR/deployment.
+
+## 33. F-A/F-B/F-C repair — independent review, 18 November 2026
+
+Reviewed round 2 independently. Actual HEAD fb4d2ce41683ff727efd8b48bd6ebaff8ee9d098 (round baseline 8ca61a60; whole-story baseline c38d6f8a). Round delta 18 files +1067/-43, commits 3306bb14 (F-A), 596ac375 (F-B+F-C), fb4d2ce4 (docs). Working tree exactly1 entry: the unrelated SPARK-238 collection, preserved. No source/test/config edits, no docker, no git writes, no DDL or import against user data; all SQL evidence from generated temp DBs.
+
+My own gates: node admin-platform-policies + spark340-collection33/33passed; build0errors/60warnings (report's29 was --no-restore; restored build adds the tool NU1900 advisory); whole BE1190passed/0failed/114skipped/1304total (Payment335/12skip with the new authority+inventory tests; Operation71/3skip); real PG PaymentIntegrationPostgresConcurrencyTests9/9passed (1m26s) with SMARTPARK_PAYMENT_TEST_CONNECTION built in-shell from .env, quote-stripped, never printed.
+
+Verdicts: F-A CLOSED — webhook trusted key comes only from the per-order binding (options ChecksumKey is not a fallback with or without a settings store); real checkout requires settings authority AND binding before any HTTP and returns CHECKOUT_BINDING_UNAVAILABLE with zero calls; exact pre-rotation bound key verifies true while the current options key verifies false; production Infrastructure DI resolves a working binding authority and fails closed when ICheckoutSigningBindings is removed (harness post-configures every named client's PrimaryHandler and asserts Calls1 vs0); FIXTURE and credential-less SANDBOX emulation still precede the check with zero HTTP. F-B CLOSED for supported writers — new Application PayOsOrderCodes.Resolve is the single issuance mapping (preserves numeric and little-endian Guid fallback, Int64.MinValue safe, non-positive rejected as INVALID_PAYMENT_ORDER_CODE mapped to400), the repository loads the authoritative order and rejects a provider-code mismatch before any row exists, and the conditional INSERT pins payment_orders.id plus the observed local order_code; the new PG test proves zero rows after a wrong-parent attempt. F-C CLOSED — inventory rows carry PaymentOrderId/OriginalOrderCode/nullable OrderCode/ProviderLinkId/State; nonnumeric, nonpositive and noncanonical codes return UNSUPPORTED_ORDER_CODE with OrderCode=null and scanning continues; proven in unit test and in the real CLI JSON (4 rows, exactly one unsupported with preserved local identity, later numeric row still reported); exit0 documented as report completion, not readiness.
+
+New P4 observations: G-A Resolve accepts NumberStyles.Integer while inventory requires None plus round-trip, so " 123"/"+123" would issue but be labelled unsupported; G-B the implementer's first DI regression attempt was not HTTP-isolated and may have contacted the configured origin with synthetic credentials (disclosed, no real credentials or user data, corrected and re-proven); G-C GetTrustedWebhookChecksumKey still exists with no production caller. F-D/F-E/F-F/F-G/F-H/F-I remain open as before; F-E is now documented in the rollout guide.
+
+No schema change in this follow-up (no scripts/database entry in the delta); the approved additive checkout_signing_bindings script remains the only schema artefact and is still not applied to user data. NOT RUN: live Newman58 and its4 F8 HTTP negatives, live owner publish/SITE_OVERRIDE, target-DB DDL/inventory/import, payment restart/recreate, U19/U06/U11/U20, tester-group UAT. U19 stays BLOCKED under SPARK-273; no per-case UAT PASS inferred. Implementation acceptable; live rollout NOT ready; P4 still not closeable on evidence even though the user's phase-handoff keeps it temporarily closed.
+
+Artifacts: docs/04-testing/reports/SPARK-340-FA-FC-independent-review-20261117.md; docs/04-testing/reports/evidence/SPARK-340-FA-FC-independent-review-20261117.json. Round-1 review/evidence and all earlier reports preserved; no commit/push; no app DB or volume deleted; no keypair changed.
+
+## 34. P5 closed; full tester verification before PR — 18 November 2026
+
+User requests P5 closure and branch push, **no PR yet**, followed by full tester verification. Independent round2 reviewed source fb4d2ce41683ff727efd8b48bd6ebaff8ee9d098 and closed F-A/F-B/F-C (F-B for supported writers), accepted implementation with low observations and no new P1/P2 in scope. Reviewer actual gates1190BEpassed/114skipped/0failed, real PG9/9 and scoped Node33/33; restored build0errors/60warnings versus prior --no-restore29warnings. These are reviewer evidence, not new commands run by this docs-only handoff.
+
+Decision: P5 CLOSED — scoped implementation review accepted. G-A/G-C and F-D…F-I remain low follow-ups; G-B is the disclosed test-isolation incident, corrected and re-proven, not an open product defect. Baseline/out-of-scope security/deposit findings remain with their owners. No statement that the entire repo has zero security risk. New in-scope blocking findings during tester work reopen review as needed.
+
+P4 stays temporarily closed by user phase-handoff direction; skipped/blocked evidence unchanged. U19 remains SPARK-273 dependency and snapshot AC remains tracked. U06/U11/U20 and group-tester per-case sign-off still required. Parent not Done, rollout not ready, session stays active. No Jira write or chat archival.
+
+Created docs/04-testing/reports/SPARK-340-P5-closure-20261118.md and SPARK-340-pre-PR-full-test-prompt-20261118.md. Updated overview/P5/P6/PR draft/tester handoff to direct the next full run: fresh BE/FE baselines, PG suites, prepared-stack Newman58 with F8 negatives, Owner/SITE, temporal values, composed invariants, durability and browser UAT. Require separate test environment or explicit owner target/window for shared DB DDL/import/restart. Existing schema approval does not imply authority to migrate the user DB; no such operation performed here.
+
+Initial working tree contained reviewer session edits/two review artifacts and the unrelated SPARK-238 collection. Preserve all history, include relevant independent review artifacts in the docs delivery, leave SPARK-238 out of staging. No source/test/config change or repeated broad test run for this documentation-only update. Check diff/JSON/secret hygiene and publish to the same feature branch under explicit user authorization. Do not create PR, merge or deploy. Final remote tip is verified and reported after push.

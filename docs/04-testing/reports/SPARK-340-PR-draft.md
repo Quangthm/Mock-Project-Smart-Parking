@@ -1,6 +1,6 @@
 # feat(admin): configure platform policies and integration settings [SPARK-340]
 
-Target: `develop`. Preparation only — not submitted. Keep this PR **DRAFT** until the P5 findings and recorded acceptance gaps have a disposition. The feature branch is now committed and published for tester verification; no remote PR has been created.
+Target: `develop`. Local preparation only — **do not submit a PR yet**. P5 implementation review closed18/11/2026 after independent acceptance of F-A/F-B/F-C. User requires full tester verification/sign-off before opening a PR. The feature branch is published; no remote PR has been created. See [closure record](SPARK-340-P5-closure-20261118.md) and [test prompt](SPARK-340-pre-PR-full-test-prompt-20261118.md).
 
 > Publication follow-up: user authorized committing/pushing the feature branch for tester verification. This draft is not an instruction to merge or submit a PR. Consult [tester handoff](SPARK-340-tester-handoff.md) and the latest session section for actual Git delivery status; earlier baseline descriptions below are historical preparation context.
 
@@ -35,10 +35,10 @@ Payment DataProtection keys use a persistent volume. Durable signing bindings ar
 
 ## Testing
 
-- [x] Build succeeds — F6–F8 BE build0 errors/29 warnings, including advisory-feed NU1900; prior P6 FE build succeeded and no FE implementation changed in this repair.
-- [x] Unit tests pass — latest whole-solution run1176 passed/0failed/113skipped. Skips are not counted as executed passes.
-- [x] Scoped FE/Postman regression —latest33 passed (30 Admin FE +3 collection tests); earlier P6 full FE261 passed.
-- [x] Integration tests where enabled — latest real PG Payment8/8, including offline CLI and distinct backend-PID proof. Earlier independent PG Operation3/3 remains historical evidence.
+- [x] Build succeeds — latest independent restored BE build0errors/60warnings; the earlier29-warning figure used --no-restore. Prior P6 FE build succeeded; a fresh full FE build is requested in the next tester run.
+- [x] Unit tests pass — latest independent whole-solution run1190passed/0failed/114skipped. Skips are not executed passes.
+- [x] Scoped FE/Postman regression —independent33passed (30 Admin FE +3 collection tests); earlier P6 full FE261 remains historical pending fresh full tester run.
+- [x] Integration tests where enabled — latest independent PG Payment9/9, including offline CLI, mixed inventory, provider-code identity and distinct backend-PID proof. Earlier independent PG Operation3/3 remains historical pending rerun.
 - [ ] Manual testing completed — user reports most localhost checks stable, tester-group sign-off pending. U06 boundary values, U11 composed invariant and U20 responsive UAT remain deferred.
 - [ ] Full linked booking snapshot — U19 BLOCKED by unavailable commercial integration. Historical Newman76pass/1fail/1skip belongs to54-request revision. Current58-request collection adds4 F8 negatives; live run NOT RUN on this revision. No all-green UAT claim.
 
@@ -60,6 +60,6 @@ Payment DataProtection keys use a persistent volume. Durable signing bindings ar
 
 ## Reviewer Notes
 
-P4 was temporarily closed by user instruction to continue P5/P6. That instruction is a phase handoff, not a retroactive passing test or waiver. F6–F8 implementation is now verified, pending independent re-review and owner rollout/inventory validation. Low findings retain their recorded disposition. Baseline/default-auth and reservation order/confirmation findings are delegated to Payment/SPARK-273 under the scoped review.
+P4 was temporarily closed by user instruction; no failed/blocked test was promoted to PASS. P5 implementation review is now closed after independent round2 acceptance; low findings retain the closure record's follow-up disposition. Full tester verification and owner rollout/inventory validation remain pending. Baseline/default-auth and reservation order/confirmation findings remain delegated to Payment/SPARK-273. Do not submit this draft before the user-requested testing gate.
 
 The initial tester snapshot is9a84aeaf, containing five task-scoped commits on top of baseline055da459. The unrelated SPARK-238 collection change remains outside those commits. Current remote develop freshness has not been checked; compare/reconcile it safely before a future merge. Do not auto-close Jira from this draft. Session remains active until actual delivery/acceptance is complete.

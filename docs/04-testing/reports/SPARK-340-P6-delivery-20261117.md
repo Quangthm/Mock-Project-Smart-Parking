@@ -1,5 +1,7 @@
 # SPARK-340 — P6 verification và chuẩn bị delivery
 
+> Current18/11/2026: P5 code review closed per [closure record](SPARK-340-P5-closure-20261118.md). User requests branch publication and full tester verification before any PR. Earlier phase/gate values below are historical; use [pre-PR test prompt](SPARK-340-pre-PR-full-test-prompt-20261118.md) for the next run. No PR created and no shared DB rollout authorized by this update.
+
 Ngày 17/11/2026. HEAD `055da4591ee9a1822eb9870dc261c9685ca3258b`, branch `feat/SPARK-340-admin-platform-policies`.
 
 > Delivery follow-up: user subsequently authorized publishing the feature branch for tester access while P5 continues. Five task-scoped commits were pushed successfully, initial published tip9a84aeaf. [Tester handoff](SPARK-340-tester-handoff.md) defines the scope and known issues. Verification below predates that Git delivery; [publication evidence](evidence/SPARK-340-tester-publication-20261117.json) records the actual commits.

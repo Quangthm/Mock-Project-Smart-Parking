@@ -1,6 +1,6 @@
 # SPARK-340 — Bản giao tester và công việc P5 song song
 
-Branch kiểm thử: `feat/SPARK-340-admin-platform-policies`, repository `Quangthm/Mock-Project-Smart-Parking`. Đây là branch feature để kiểm thử, P5 vẫn CHANGES REQUESTED. Không merge vào develop hoặc dùng làm bản production đã nghiệm thu. P4 tạm đóng theo chỉ đạo user; các ca hoãn giữ nguyên trạng thái.
+Branch kiểm thử: `feat/SPARK-340-admin-platform-policies`, repository `Quangthm/Mock-Project-Smart-Parking`. **P5 đã đóng code review ngày18/11/2026**, chuyển tester kiểm thử lại đầy đủ trước khi mở PR theo [prompt hiện tại](SPARK-340-pre-PR-full-test-prompt-20261118.md). Không tự mở PR/merge hoặc dùng làm bản production đã nghiệm thu. P4 tạm đóng theo chỉ đạo user; các ca hoãn giữ nguyên trạng thái.
 
 > Bản sửa F6–F8 cần additive DDL cho Payment DB cũ trước khi rebuild/restart service. Xem [rollout/repair guide](SPARK-340-F6-F8-rollout-guide.md). Owner duyệt thiết kế/schema exception; implementation agent chưa áp dụng vào DB đang chạy. Collection hiện58 requests, gồm4 negative cases F8. Không dùng số PASS của collection54 requests làm kết quả bản mới.
 

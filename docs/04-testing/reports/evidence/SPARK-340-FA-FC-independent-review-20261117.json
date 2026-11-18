@@ -1,0 +1,274 @@
+{
+  "ticket": "SPARK-340",
+  "scope": "Independent review of the F-A/F-B/F-C follow-up (signing authority, provider-code validation, mixed inventory)",
+  "reviewerRole": "independent reviewer",
+  "reviewRound": 2,
+  "executedAtUtc": "2026-11-18T01:59:17Z",
+  "executedAtLocal": "2026-11-18T08:59:17+07:00",
+  "branch": "feat/SPARK-340-admin-platform-policies",
+  "head": "fb4d2ce41683ff727efd8b48bd6ebaff8ee9d098",
+  "roundBaseline": "8ca61a609f07fb1acec8a9654d9944fbd50309db",
+  "wholeStoryBaseline": "c38d6f8a644e778e99c4d6d7077653aa471c5614",
+  "roundDelta": {
+    "files": 18,
+    "insertions": 1067,
+    "deletions": 43,
+    "commits": [
+      "3306bb14 fix(payment): require signing authority for checkout callbacks [SPARK-340]",
+      "596ac375 fix(payment): validate provider order bindings and inventory rows [SPARK-340]",
+      "fb4d2ce4 docs(policy): record independent review and binding hardening [SPARK-340]"
+    ],
+    "schemaFilesChanged": 0
+  },
+  "workingTree": {
+    "porcelainEntriesBefore": 1,
+    "porcelainEntriesAfter": 1,
+    "untrackedFiles": 0,
+    "entry": "M docs/04-testing/postman/SmartParking-FacilityStructure-SPARK-238.postman_collection.json",
+    "note": "Unrelated SPARK-238 collection preserved untouched."
+  },
+  "secretsHandling": {
+    "tokensRedacted": true,
+    "authorizationHeadersIncluded": false,
+    "connectionStringsIncluded": false,
+    "credentialsIncluded": false,
+    "keyXmlIncluded": false
+  },
+  "commands": [
+    {
+      "order": 1,
+      "command": "node --test tests/frontend/admin-platform-policies.test.cjs tests/postman/spark340-collection.test.cjs",
+      "exitCode": 0,
+      "result": { "tests": 33, "pass": 33, "fail": 0, "cancelled": 0, "skipped": 0, "todo": 0, "durationMs": 3412.5 }
+    },
+    {
+      "order": 2,
+      "command": "dotnet build SmartParking.slnx --nologo -m:1",
+      "exitCode": 0,
+      "result": { "errors": 0, "warnings": 60, "elapsed": "00:01:37.12" },
+      "note": "Implementation report's 29 warnings is a --no-restore measurement; restored build adds NU1900 for the offline tool. Advisory only."
+    },
+    {
+      "order": 3,
+      "command": "dotnet test SmartParking.slnx --no-build --nologo -m:1",
+      "exitCode": 0,
+      "result": { "passed": 1190, "failed": 0, "skipped": 114, "total": 1304 },
+      "perProject": [
+        { "project": "SmartParking.Architecture.Tests", "failed": 0, "passed": 12, "skipped": 0, "total": 12 },
+        { "project": "SmartParking.FacilityService.Tests", "failed": 0, "passed": 199, "skipped": 29, "total": 228 },
+        { "project": "SmartParking.IoTService.Tests", "failed": 0, "passed": 1, "skipped": 0, "total": 1 },
+        { "project": "SmartParking.NotificationAuditService.Tests", "failed": 0, "passed": 220, "skipped": 0, "total": 220 },
+        { "project": "SmartParking.OperationService.Tests", "failed": 0, "passed": 71, "skipped": 3, "total": 74 },
+        { "project": "SmartParking.PaymentService.Tests", "failed": 0, "passed": 335, "skipped": 12, "total": 347 },
+        { "project": "SmartParking.UserService.Tests", "failed": 0, "passed": 352, "skipped": 70, "total": 422 }
+      ],
+      "skipReasons": [
+        { "count": 29, "fact": "StructurePostgresFact", "requires": "SMARTPARK_STRUCTURE_TEST_CONNECTION" },
+        { "count": 3, "fact": "OperationPolicyPostgresFact", "requires": "SMARTPARK_OPERATION_POLICY_TEST_CONNECTION" },
+        { "count": 4, "fact": "PaymentPostgresFact", "requires": "SMARTPARK_PAYMENT_TEST_CONNECTION (executed in command 4)" },
+        { "count": 3, "fact": "RabbitMqLiveFact", "requires": "SMARTPARK_RABBIT_TEST_PORT" },
+        { "count": 68, "fact": "PostgresFact (UserService)", "requires": "SMARTPARK_AUTH_TEST_CONNECTION" },
+        { "count": 1, "fact": "ProfileBrokerFact", "requires": "isolated PostgreSQL + SMARTPARK_PROFILE_RABBITMQ_PORT" },
+        { "count": 1, "fact": "RabbitPostgresFact", "requires": "isolated PostgreSQL and RabbitMQ fixtures" }
+      ]
+    },
+    {
+      "order": 4,
+      "command": "dotnet test tests/Services/SmartParking.PaymentService.Tests --no-build --filter FullyQualifiedName~PaymentIntegrationPostgresConcurrencyTests",
+      "exitCode": 0,
+      "result": { "passed": 9, "failed": 0, "skipped": 0, "total": 9, "durationSeconds": 86 },
+      "environment": "SMARTPARK_PAYMENT_TEST_CONNECTION supplied in process env; local PostgreSQL service account with CREATE DATABASE",
+      "databaseScope": "generated temporary databases only (smartpark_payment_test_<32 hex>), dropped WITH (FORCE)"
+    }
+  ],
+  "criteria": {
+    "F-A": {
+      "verdict": "CLOSED",
+      "proven": [
+        "webhook trusted key comes only from the per-order binding; options ChecksumKey is not a verification fallback with or without a settings store",
+        "real checkout requires settings authority AND binding persistence before any outbound HTTP (CHECKOUT_BINDING_UNAVAILABLE, zero calls)",
+        "exact previously issued bound key verifies true while the current options key verifies false",
+        "production Infrastructure DI resolves a working binding authority; removing ICheckoutSigningBindings yields zero outbound",
+        "FIXTURE and credential-less SANDBOX emulation still return before the authority check with zero HTTP"
+      ],
+      "residual": [
+        "GetTrustedWebhookChecksumKey still exists with no production caller",
+        "PayOsOptions.ChecksumKey still used for outbound checkout signature and cancel/status configuration (not claimed removed)"
+      ]
+    },
+    "F-B": {
+      "verdict": "CLOSED_FOR_SUPPORTED_WRITERS",
+      "proven": [
+        "PayOsOrderCodes.Resolve is the single issuance mapping used by checkout and binding persistence",
+        "existing mapping preserved for numeric, non-numeric and Int64.MaxValue-shaped inputs; Int64.MinValue handled without overflow",
+        "non-positive numeric codes rejected with PaymentDomainException INVALID_PAYMENT_ORDER_CODE (mapped to 400)",
+        "repository loads the authoritative order and rejects a provider code mismatch before inserting",
+        "conditional INSERT pins payment_orders.id and the observed local order_code; read-back verifies parent identity and code",
+        "same bound code with a different trusted PaymentOrderId leaves zero binding rows"
+      ],
+      "limitation": "application-level guarantee for supported writers only; no DB trigger/constraint added, so privileged out-of-band DML is not prevented"
+    },
+    "F-C": {
+      "verdict": "CLOSED",
+      "proven": [
+        "inventory rows now carry PaymentOrderId, OriginalOrderCode, nullable OrderCode, ProviderLinkId, State",
+        "non-numeric, non-positive and non-canonical codes become UNSUPPORTED_ORDER_CODE with OrderCode=null and scanning continues",
+        "unit test proves a valid row after unsupported rows is still classified",
+        "real CLI JSON proves one unsupported row with preserved local identity plus a later numeric row",
+        "exit 0 documented as report completion, not readiness"
+      ]
+    },
+    "F6": {
+      "verdict": "PASS",
+      "proven": [
+        "import resolves the order and requires an exact PAYOS/PAYMENT transaction matching payment_order_id, tenant, provider link and non-blank checkout url",
+        "CASH / foreign / unknown / invalid input and conflicting key cannot create or replace a binding",
+        "trusted operator mapping is not treated as provenance proof; signed callback verification remains authoritative",
+        "callback invalid before import, valid after apply, tampered rejected, valid after fresh key provider and context",
+        "CLI dry-run default, whole-manifest preflight with zero writes, immutable idempotent replay, safe partial retry, bounded pagination and manifest size, private paths outside repo, no automatic key generation, generic error output, malformed input with synthetic secret not echoed",
+        "no amount/status mutation and no provider call in the import path"
+      ]
+    },
+    "F7": {
+      "verdict": "PASS",
+      "proven": [
+        "dedicated checkout_signing_bindings with FK RESTRICT, unique payment_order_id, PK order_code, source CHECK and retention comment",
+        "no new checkout binding writes into policy_revisions",
+        "exact legacy reserved-namespace read bridge and idempotent LEGACY_POLICY migration with unchanged policy row count",
+        "different existing legacy key cannot be overwritten through the new table",
+        "trusted PaymentOrderId flow with orphan rejection and pre-insert provider-code validation",
+        "old policy rows and key material retained; no automatic cleanup",
+        "two distinct backend PIDs proven at the outbound boundary with the visibility flag set after verification"
+      ]
+    },
+    "F8": {
+      "verdict": "PASS_SOURCE_LEVEL_UNCHANGED",
+      "proven": [
+        "create and update reject ArrivalLateToleranceEnabled true and false before persistence with the exact field error",
+        "row values and UpdatedAt unchanged after rejection; null/omitted valid",
+        "MediatR production-like DI with ValidationBehavior exercised",
+        "exception handler maps to 400 VALIDATION_FAILED with property-level errors",
+        "owner/site enablement flow unchanged"
+      ],
+      "notRun": "the 4 live HTTP negatives remain NOT RUN"
+    }
+  },
+  "collection": {
+    "path": "docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json",
+    "totalRequests": 58,
+    "f8Negatives": 4,
+    "liveRunStatus": "NOT RUN",
+    "liveRunReason": "policy-mutating collection; no agreed test window on a prepared stack while the user runs localhost UAT",
+    "historicalNote": "54-request results remain historical only"
+  },
+  "approvedSchemaChange": {
+    "approval": "dedicated table and offline tool approved 17 November 2026",
+    "scope": "additive Schema Freeze exception for checkout_signing_bindings + unique index + table comment",
+    "script": "scripts/database/upgrades/20261117-payment-checkout-signing-bindings.sql",
+    "changedInThisFollowUp": false,
+    "appliedToUserDatabase": false,
+    "appliedByThisReview": false,
+    "automaticStartupMigration": false,
+    "evidenceSource": "generated temporary databases only"
+  },
+  "findings": [
+    {
+      "id": "G-A",
+      "severity": "P4",
+      "title": "issuance and inventory disagree on whitespace/signed numeric local codes",
+      "files": ["src/Services/PaymentService/SmartParking.PaymentService.Application/Integrations/PayOsOrderCodes.cs", "src/Services/PaymentService/SmartParking.PaymentService.Application/Integrations/ImportCheckoutBinding.cs"],
+      "trigger": "stored local order code such as \" 123\" or \"+123\"",
+      "expected": "one canonical rule shared by issuance and inventory",
+      "actual": "Resolve parses with NumberStyles.Integer; inventory requires NumberStyles.None plus exact round-trip and labels the same string UNSUPPORTED_ORDER_CODE",
+      "impact": "operator sees a row classified unsupported although issuance would accept it; fail-closed both ways",
+      "acceptanceCriterion": "F-B single mapping contract / F-C inventory accuracy"
+    },
+    {
+      "id": "G-B",
+      "severity": "P4",
+      "title": "first DI regression attempt was not HTTP-isolated (process finding)",
+      "files": ["tests/Services/SmartParking.PaymentService.Tests/PayOsAuthorityHardeningTests.cs"],
+      "trigger": "named-client configuration overriding the defaults-level fake handler",
+      "expected": "zero-outbound tests must intercept every client",
+      "actual": "the failed attempt may have attempted the configured origin with synthetic credentials; corrected with PostConfigureAll<HttpClientFactoryOptions> over all clients, then proved by Calls==1 positive and Calls==0 negative",
+      "impact": "no real credentials or user data; residual risk that a similar mis-wiring could emit unnoticed traffic",
+      "acceptanceCriterion": "verification hygiene for zero-outbound claims"
+    },
+    {
+      "id": "G-C",
+      "severity": "P4",
+      "title": "dead timestamp/current-mode key fallback remains in the settings store",
+      "files": ["src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/Services/PaymentIntegrationSettingsStore.cs:263", "src/Services/PaymentService/SmartParking.PaymentService.Application/Common/Interfaces/Ports/IPaymentIntegrationSettings.cs:65"],
+      "trigger": "future re-wire of GetTrustedWebhookChecksumKey",
+      "expected": "removed or unreachable",
+      "actual": "still implemented and interface-exposed, no production caller",
+      "impact": "latent reintroduction of a fallback path",
+      "acceptanceCriterion": "F7 no current-key/timestamp fallback"
+    }
+  ],
+  "openEarlierFindings": ["F-D no immutability trigger", "F-E CLI usage errors exit 1 not 2 (now documented)", "F-F RequireOutsideRepository passes without a .git ancestor", "F-G PG helper .env fallback strips double quotes only", "F-H pre-existing non-numeric stored order_code unresolvable at webhook time", "F-I platform handlers hardcode null enablement"],
+  "notRun": [
+    { "item": "live Newman 58-request collection", "reason": "policy-mutating; no agreed test window" },
+    { "item": "4 F8 HTTP negatives", "reason": "require live draft id and admin token from the same window" },
+    { "item": "live owner publish / SITE_OVERRIDE", "reason": "would mutate the UAT site policy" },
+    { "item": "DDL / inventory / import against the target Payment database", "reason": "outside the approval; temporary databases only" },
+    { "item": "payment restart / force-recreate durability re-check", "reason": "would interrupt user UAT" },
+    { "item": "U19 booking snapshot, U06, U11, U20, tester-group sign-off", "reason": "unchanged blocked/unrun status" }
+  ],
+  "claimReconciliation": [
+    { "claim": "1190 passed / 114 skipped", "status": "CONFIRMED" },
+    { "claim": "PG 9/9", "status": "CONFIRMED" },
+    { "claim": "scoped Node 33/33 historical (no FE/collection change)", "status": "CORRECT_REASONING_AND_RERUN_PASSED" },
+    { "claim": "build 0 errors / 29 warnings", "status": "ACCURATE_FOR_NO_RESTORE", "note": "restored build yields 60 advisory warnings" },
+    { "claim": "options ChecksumKey is never a verification fallback", "status": "CONFIRMED" },
+    { "claim": "real checkout requires settings authority and binding", "status": "CONFIRMED" },
+    { "claim": "provider code validated from persisted order before conditional INSERT", "status": "CONFIRMED" },
+    { "claim": "mixed inventory continues to valid rows", "status": "CONFIRMED" },
+    { "claim": "no additional schema change or shared DB execution", "status": "CONFIRMED" },
+    { "claim": "first DI regression attempt may have contacted the configured origin with synthetic credentials", "status": "DISCLOSED_AND_CORRECTED", "seeFinding": "G-B" }
+  ],
+  "uatStatus": {
+    "u19": { "status": "BLOCKED", "owner": "SPARK-273", "reason": "commercial producer absent plus guarded-transaction acceptance, in-transaction EnsureOrder, non-terminal creation receipt and unimplemented collection-event confirmation" },
+    "u06": { "status": "NOT_PROVEN" },
+    "u11": { "status": "NOT_EXERCISED" },
+    "u20": { "status": "NOT_EXERCISED" },
+    "testerGroupSignoff": "OUTSTANDING",
+    "note": "User's general positive statement is context only; no per-case UAT PASS inferred."
+  },
+  "verdict": {
+    "faFbFcClosed": true,
+    "implementationAcceptable": true,
+    "implementationCaveats": ["G-A", "G-B", "G-C", "F-D", "F-E", "F-F", "F-G", "F-H", "F-I"],
+    "liveRolloutReady": false,
+    "liveRolloutBlockers": [
+      "approved upgrade script not applied to the target database",
+      "inventory not run against real data; historical checkout disposition unresolved",
+      "live 58-request Newman run and 4 F8 HTTP negatives NOT RUN",
+      "new binary requires checkout_signing_bindings before serving real checkouts"
+    ],
+    "p4Closeable": false,
+    "p4Blockers": ["U19 blocked under SPARK-273", "U06/U11/U20 unproven", "tester-group sign-off outstanding"],
+    "proposalStatus": {
+      "dedicatedTableAndOfflineTool": "APPROVED",
+      "remainingOrchestrationProposal": "PROPOSED_NOT_DELIVERED"
+    }
+  },
+  "hygiene": {
+    "sourceEdited": false,
+    "commits": false,
+    "pushes": false,
+    "resetOrClean": false,
+    "dockerRestart": false,
+    "ddlAgainstUserDatabase": false,
+    "importAgainstUserDatabase": false,
+    "appDatabaseOrVolumeDeleted": false,
+    "keypairChanged": false,
+    "spark238CollectionPreserved": true,
+    "historicalReportsPreserved": true
+  },
+  "artefacts": {
+    "report": "docs/04-testing/reports/SPARK-340-FA-FC-independent-review-20261117.md",
+    "evidence": "docs/04-testing/reports/evidence/SPARK-340-FA-FC-independent-review-20261117.json",
+    "session": "ai/tasks/active/TASK-SPARK-340-SESSION-20261112.md"
+  }
+}
