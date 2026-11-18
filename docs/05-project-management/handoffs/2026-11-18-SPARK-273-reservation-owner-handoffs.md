@@ -82,6 +82,8 @@ Source today: `ReservationCheckout.tsx` stores accepted terms and request replay
 
 ### Slice 2 — remove Operations-owned terms
 
+**Slice 2 implementation checkpoint, 18 November.** Operations now has a separate plate review and Facility resolves a slot by GUID. Paid provisioning sends only Payment quote references and exact order values. Payment issuance and post-review proof still gate the booking cutover. The current frontend, pending requests and financial recovery continue on the legacy path. See the [Payment owner implementation contract](2026-11-18-SPARK-273-payment-quote-handoff.md) and [implementation and retirement record](../../../ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md#18-november-2026--slice-2-implementation).
+
 Target the removal of the `ReservationTerms` entity and repository/interface, the `reservation_terms` mapping/table, legacy terms issue/accept logic and the duplicate accepted commercial JSON snapshot. Keep the review capability with Payment quote references. New bookings bind directly to immutable Payment QuoteId/version with only the Operations consent/decision evidence needed for admission, replay and verification. Retain effective Operations policy evidence, claims and booking restrictions. The target needs no replacement Operations quote table, receipt entity or pricing state machine.
 
 | Existing touchpoints | Slice 2 transition and retirement checks |

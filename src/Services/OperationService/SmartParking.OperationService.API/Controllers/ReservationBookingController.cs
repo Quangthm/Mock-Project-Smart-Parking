@@ -14,6 +14,10 @@ public sealed class ReservationBookingController(IMediator mediator) : ApiContro
     public async Task<IActionResult> Preview(ReservationPricePreview request, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(new PreviewReservationPriceQuery(request), ct) });
 
+    [HttpPost("/api/reservation-quotes")]
+    public async Task<IActionResult> ReviewQuote(ReviewReservationQuoteCommand request, CancellationToken ct) =>
+        Ok(new { success = true, data = await Mediator.Send(request, ct) });
+
     [HttpPost("/api/reservation-terms")]
     public async Task<IActionResult> Review(BookingSelection request, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(new ReviewReservationTermsCommand(request), ct) });

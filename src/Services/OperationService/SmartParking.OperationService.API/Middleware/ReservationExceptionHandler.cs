@@ -61,6 +61,7 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             && (context.Request.Path.StartsWithSegments("/api/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))

@@ -134,8 +134,8 @@ The 10 November single guarded database evaluation timestamp and no-entitlement-
 
 | Item | Contract |
 | --- | --- |
-| Method / URL | GET by slot GUID; exact route and field names OPEN with Facility owner |
-| Availability | Approved target; current facts route requires site and slot |
+| Method / URL | GET `/internal/reservation-dependencies/v1/slots/{slotId}` |
+| Availability | Implemented alongside the site-and-slot facts route. Both use the same Facility configuration snapshot. |
 | Authentication / origin | SERVICE; dedicated authenticated Operations identity, audience and permission checked by Facility |
 | Scope | Selected Facility slot; derive authoritative tenant/site in the owning repository |
 | Content type / headers | No body; JSON response; service bearer credential; no browser JWT |
@@ -143,10 +143,10 @@ The 10 November single guarded database evaluation timestamp and no-entitlement-
 **Request sample:** slot path identifier `33333333-3333-4333-8333-333333333333` (required UUID); no site or tenant input. **Response sample** (conceptual HTTP 200, known slot):
 
 ```json
-{"slotId":"33333333-3333-4333-8333-333333333333","siteId":"22222222-2222-4222-8222-222222222222","tenantId":"11111111-1111-4111-8111-111111111111","eligibleCarSlot":true,"configurationVersion":"opaque-version"}
+{"slotId":"33333333-3333-4333-8333-333333333333","siteId":"22222222-2222-4222-8222-222222222222","tenantId":"11111111-1111-4111-8111-111111111111","eligibleCarSlot":true,"version":"opaque-version","participatesInStructureGuard":true}
 ```
 
-Identifiers, eligibility and the opaque configuration evidence are required on a known result. Eligibility is a read-only observation. A disabled/incompatible known slot yields definitive ineligibility. Proposed error mappings to agree with owner are 400 malformed ID, 401/403 invalid identity or scope, 404 unknown slot and 503 owner unavailable. Use the Facility error envelope above. Retry transient reads within the review request budget; quote creation cannot substitute fabricated context. No protection or physical claim is made.
+Facility finds the live slot GUID in its own store and uses the existing site structure guard to read its configuration. Inactive site/tenant, deleted ancestry or incompatible category yields `eligibleCarSlot: false`. A missing or deleted slot gives 404 `SLOT_NOT_FOUND`. Invalid UUID gives 400. Missing or insufficient service identity gives 401/403. Structure contention can give 409 `STRUCTURE_BUSY`. Operations treats contention, generic routing 404, malformed results and transport failures as dependency failures. A new review can retry. The read creates no durable dependency or capacity claim.
 
 ### MassTransit slot validation for admission
 

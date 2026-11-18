@@ -391,3 +391,100 @@ Passed Git whitespace, changed relative links and anchors, JSON examples, FR/BR 
 - Updated [docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md](<../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md>). List Slice 2 retirement touchpoints and migration gates.
 - Updated [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff>). Mark legacy execution guidance superseded and link the active contract.
 - Updated this session record to capture verification and correction scope.
+
+## 18 November 2026 — Slice 2 implementation
+
+Baseline `ec9fdc38ca0a4c0e786f5cc646709e48a55d9d3b` on the expected feature branch. Existing user changes in ai/AGENTS.md, ai/context/user-coding-instructions.md, the SPARK-243 session and scripts/seed-site-car-tariff.ps1 are separate.
+
+Facility resolves a slot using its existing guarded facts query. The plate review coexists with the vehicle-based terms route used by the current checkout. Payment has no plate-bound issuance or authenticated proof read. Admission, provisioning and paid recovery still consume persisted legacy data. Coordinated booking cutover and deployed data retirement are blocked.
+
+### ReservationTerms retirement
+
+| Symbol or storage | Disposition | Consumer and removal condition |
+| --- | --- | --- |
+| Local commercial record on the new plate review | REPLACED | `ReviewReservationQuoteHandler` returns Payment's checked ID/version and disclosure with Operations policy. It has no terms repository, booking write, UoW or Facility acquisition. |
+| `DepositOrderRequest.OperationsTermsId`, `.OperationsTermsVersion`, `.AcceptedTerms` and duplicate vehicle/interval fields | REMOVED | Paid provisioning now passes the exact validated Payment quote ID/version, payable amount, method, currency, scope, H and operation/booking IDs. The current Payment wire still calls its quote version `termsVersion`. |
+| `ZeroPriceAcceptanceRequest.OperationsTermsId` and `.OperationsTermsVersion` | REMOVED | These fields had no owner consumer. The legacy handler still needs accepted commercial evidence. Its unavailable owner operation and existing lifecycle remain in place. |
+| `POST /api/reservation-terms`, `ReviewedTerms`, `ReviewReservationTermsCommand/Handler`, `BookingSelection.VehicleId/SiteId` | TEMPORARILY RETAINED | Both existing frontend reservation clients use this contract. Stop new issuance when the paired plate-based review/create flow supports exact proof and replay and deployed clients have switched. Let outstanding unused reviews expire. |
+| `ReservationTerms`, `Issue/CanAccept/Accept`, `IReservationTermsRepository.Add/LockAsync`, `ReservationTermsRepository`, EF mapping and DI | BLOCKED | Legacy admission locks by ID, checks Account, fingerprint, expiry and single-request acceptance. Retire after external proof, guarded quote single-use, paired client cutover and drainage of old requests. |
+| `CreateReservationRequest.TermsId/TermsVersion`, `ReservationRequest.IntentJson/Fingerprint` | TEMPORARILY RETAINED | Admission and worker deserialize the old intent. Preserve exact Account/key replay and conflict behavior for existing receipts. Version the new intent before enabling quote-based creates. |
+| `BookingTermsSnapshot`, `ReservationTerms.SnapshotJson` | BLOCKED | Progress consumes Facility version, operational-policy revisions and commercial terms. Replace its commercial content with Payment proof, preserve independent Operations policy and compare current Facility/coverage under guards. |
+| `ReservationRow.TermsId/TermsVersion`, `AcceptedPricingSnapshot`, `BookingContracts.AcceptedTerms`, UoW immutability check | BLOCKED | Provisioning, zero-price legacy recovery, paid collection binding, confirmation and reconciliation require original values. Move new writes to first-class quote references only with authoritative proof. Keep historic financial evidence until orders and late collections reconcile. |
+| `ReservationDepositEvidence`, `VerifiedReservationCollection` legacy terms fields | TEMPORARILY RETAINED | The present confirmation checks bind booking, collection, quote and local terms. Retire only with compatible, independently verified Payment evidence and old message drainage. |
+| `reservation_terms`, FK `reservations.terms_id`, `terms_version`, `accepted_pricing_snapshot`, booking completeness CHECK, demo history seed | BLOCKED | The original SQL requires these fields for request-backed rows. The seed inserts referenced reviews. Owner-approved inventory and migration must cover pending orders, confirmed history and unsettled collections before physical retirement. No deployed data was inspected or changed. |
+
+The operational-policy snapshot, original Account and plate, capacity claim, H/T and legitimate booked/deposit amounts remain required. Own booking history projects durable booking amounts and plate without fetching current tariffs. The confirmed notification fact uses reservation/Account/tenant/site/time. Preserve these reads and in-flight serializers through the transition. See the [Payment owner's implementation handoff](../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md).
+
+### Verification checkpoint
+
+The sandboxed VSTest runner timed out connecting to its test host. An outside-sandbox run reached the suites. Intermediate builds overlapped extraction of the owner interfaces and API host, and the initial Facility endpoint fixture failed authentication/configuration. The revised fixture installs explicit ephemeral signing configuration before the actual Facility host registers its authentication scheme. Final verification follows below.
+
+The signed end-to-end test exposed a cached IdentityModel signature provider holding a request-scoped RSA key after disposal. Both Operations outbound HTTP adapters now disable signature-provider caching for that short-lived key. This preserves the existing algorithms, service identity, audiences and permissions.
+
+### Validation and next-slice readiness
+
+| Check | Actual outcome |
+| --- | --- |
+| `dotnet build SmartParking.slnx --no-restore --nologo -m:1 -v:q` | Passed with 0 errors and 6 existing NuGet advisory warnings. An intermediate rebuild encountered a DLL locked by a still-running test host. The retry after its exit passed. |
+| `dotnet test SmartParking.slnx --no-build --nologo -m:1` | Final run passed across seven projects. 1,088 passed, 0 failed and 103 conditional skips. The slot-specific PostgreSQL case was also executed separately below. |
+| `dotnet test tests/Services/SmartParking.OperationService.Tests --no-build` | 68 passed. Includes plate input, changed intent/coverage, mismatched quote/money, stale expiry, unknown owner route, signed issuance and existing order/history checks. The review test registers no booking persistence or acquisition service. |
+| `dotnet test tests/Services/SmartParking.FacilityService.Tests --no-build` | 206 passed, 30 conditional skips without database configuration. Includes the anonymous rejection and signed lookup using the real Operations HTTP client, Facility host, auth scheme and mediator with fixture facts. |
+| `dotnet test tests/Services/SmartParking.FacilityService.Tests --no-build --filter FullyQualifiedName~SlotOnlyReviewResolvesLiveFacilityFactsWithoutCreatingDependency` | 1 passed on an isolated loopback PostgreSQL 18 cluster with the real schema and repository. Verified authoritative site/tenant, unknown slot, deleted ancestry, version change and zero dependency rows. Cluster stopped and temporary files removed. |
+| `node --test FE/tests/driver-reservation-api.test.cjs FE/tests/reservation-history.test.cjs` | 10 passed, including legacy accepted terms/idempotency-key reuse and Account-scoped history. |
+| `node --test tests/frontend/reservation-happy-path.test.cjs` | 2 passed, 3 failed. Its checkout fixture cannot resolve the component's existing import of `../../../lib/driverReservationApi`. The failing tests stop during module loading. Both the fixture and component match HEAD. |
+| `git diff --check`, documentation checks | Passed. Parsed 11 JSON examples. Checked handoff link targets and the 48-file implementation inventory against Git. |
+
+Live plate-quote issuance, immutable proof, quote-based booking, live order replay, deployed legacy reconciliation, Postman and browser acceptance are unverified. Slice 3 can reuse the plate normalizer, slot authority, coverage policy, expected commercial binding and quote validation. Payment proof and replay-safe consent must precede guarded quote-based booking. Preserve the current booking route until that transition is exercised.
+
+### Exact changed files
+
+All paths are repository-relative. The four pre-existing changes listed above are excluded.
+
+- `ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md`
+- `docs/03-design/api/reservation-facility-dependency-api-design.md`
+- `docs/03-design/api/reservation-first-slice-api-design.md`
+- `docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md`
+- `docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md`
+- `src/Services/FacilityService/SmartParking.FacilityService.API/Controllers/ReservationDependenciesController.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/BookingFacts.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/IReservationDependencyRepository.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReadBookingFactsQuery.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReservationDependencyContracts.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ResolveReservationSlotHandler.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ResolveReservationSlotQuery.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ResolveReservationSlotValidator.cs`
+- `src/Services/FacilityService/SmartParking.FacilityService.Persistence/ReservationDependencyRepository.cs`
+- `src/Services/OperationService/SmartParking.OperationService.API/Controllers/ReservationBookingController.cs`
+- `src/Services/OperationService/SmartParking.OperationService.API/Middleware/ReservationExceptionHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.API/OperationHost.cs`
+- `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/ApplicationDependencyInjection.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AcceptZeroPriceTermsHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingWorkflowContracts.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/DepositOrderRequest.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/FacilityBookingFacts.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationCommercialOwner.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationFacilityOwner.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationSubscriptionEligibility.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PaymentReservationQuote.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PlateCoverage.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProvisionReservationOrderHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationOrderProvisioning.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationQuoteBinding.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationSubscriptionEligibility.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewReservationQuoteCommand.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewReservationQuoteHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewReservationQuoteValidator.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewedOperationalPolicy.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewedReservationQuote.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ZeroPriceAcceptanceRequest.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationCarPlate.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationCommercialClient.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFacilityClient.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/EmptyReservationDependencies.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/PostgresStructureWorkflowTests.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/ReservationDependencyTestDoubles.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/ReservationSlotEndpointTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/PlateQuoteReviewTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/ReservationCommercialClientTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/StubHttpMessageHandler.cs`

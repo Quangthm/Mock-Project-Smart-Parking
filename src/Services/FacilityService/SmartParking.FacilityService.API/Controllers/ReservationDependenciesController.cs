@@ -20,6 +20,11 @@ public sealed class ReservationDependenciesController(IMediator mediator) : Cont
     [HttpPost("abort")]
     public Task<DependencyAcknowledgement> Abort(DependencyIntent request, CancellationToken ct) =>
         mediator.Send(new AbortDependencyCommand(request), ct);
+    [HttpGet("slots/{slotId}")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public Task<BookingFacts> ResolveSlot(Guid slotId, CancellationToken ct) =>
+        mediator.Send(new ResolveReservationSlotQuery(slotId), ct);
+
     [HttpGet("sites/{siteId:guid}/slots/{slotId:guid}")]
     public Task<BookingFacts> Read(Guid siteId, Guid slotId, CancellationToken ct) =>
         mediator.Send(new ReadBookingFactsQuery(siteId, slotId), ct);

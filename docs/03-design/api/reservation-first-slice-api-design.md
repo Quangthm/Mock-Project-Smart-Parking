@@ -7,7 +7,7 @@
 | Owning service / author | Operations / SmartPark architecture |
 | Jira design / implementation / verification | [SPARK-273](https://mangamanagement.atlassian.net/browse/SPARK-273) / follow-on slices / [QA](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md) |
 | Requirements baseline | SRS v1.1 and [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) |
-| Implementation | Target pending; current route and source evidence in [owner handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md) |
+| Implementation | Operations plate review and Facility slot resolution implemented. Payment issuance, proof and booking cutover pending. See the [Payment quote handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md). |
 
 ## Overview
 
@@ -27,13 +27,13 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 
 | Item | Contract |
 | --- | --- |
-| Method / URL | POST `/api/reservation-terms` reuse candidate; `POST /api/reservation-price-previews` may provide a nonbinding estimate |
-| Availability | Existing paths; target payload and quote ownership pending |
+| Method / URL | POST `/api/reservation-quotes` |
+| Availability | Operations consumer implemented. Returns 503 until the versioned Payment owner route is available. The current checkout continues to use `/api/reservation-terms`. |
 | Authentication / freshness | Driver JWT / TOKEN and local policy; estimate and quote review have no booking effect |
 | Resource scope | Caller’s quote; authoritative slot resolution via Facility |
 | Content type / headers | JSON; bearer auth |
 
-**Request sample** for review. Preview, if retained, uses the same selection semantics.
+**Request sample** for plate review. Additional fields, including actor, location, eligibility and amounts, fail binding. The separate legacy price preview remains estimate-only.
 
 ```json
 {"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS"}
@@ -44,15 +44,21 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 | licensePlate | string | Normalized using the agreed UserService rules. Operations independently canonicalizes/validates it and resolves ownership in admission. |
 | requestedSlotId | UUID | Facility resolves site/tenant and CAR eligibility. |
 | start, end | ISO 8601 with offset | Ordered interval. Server normalizes instants and applies effective policy. |
-| paymentMethod | enum | Enabled method accepted by the quote; illustrated token to agree. |
+| paymentMethod | enum | `PAYOS` for the current paid review. |
 
 **Response sample** (200, review). Preview is estimate-only and cannot supply an accepted quote reference.
 
 ```json
-{"success":true,"data":{"quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1","validUntil":"2026-12-01T07:55:00Z","canonicalPlate":"51A12345","siteId":"77777777-7777-4777-8777-777777777777","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","tariffVersion":"tariff-1","coverageVersion":"none-v1","bookedAmount":20000,"coveredAmount":0,"depositAmount":20000,"currency":"VND","disclosure":"Full prepayment"}}
+{"success":true,"data":{"quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1","validUntil":"2026-12-01T07:55:00Z","canonicalPlate":"51A12345","siteId":"77777777-7777-4777-8777-777777777777","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","tariffVersion":"tariff-1","isCovered":false,"coverageVersion":"none-v1","bookedAmount":20000,"coveredAmount":0,"depositAmount":20000,"currency":"VND","disclosure":"Full prepayment"}}
 ```
 
 Quote ID/version and validity are required. The reviewed result exposes the immutable selection and applicable terms, including the authoritative location, interval and method, for consent. Monetary fields are Payment-owned decimal amounts in the stated currency. Coverage and tariff versions are opaque. Stale or changed terms require fresh review. Dependency unavailability cannot be priced as zero.
+
+The response also includes `operationalPolicy` with `platformRevisionId`, `platformVersion`, `siteRevisionId`, `siteVersion`, effective integer `values`, `arrivalLateToleranceEnabled` and `cancellationTimezone`. Display these policies and Payment’s disclosure before consent. Clearing or changing the canonical plate, slot, either instant or method clears consent. A change of driver Account, expiry, changed policy, tariff terms or coverage that invalidates the binding requires a new review. A preview cannot restore consent.
+
+Malformed input returns 400. An owner-confirmed missing slot returns 404. Ineligible slot or stale quote returns 409. Missing owner routes, credentials, incomplete pricing evidence and mismatched owner responses fail closed with 503. Review creates no reservation, dependency token or order.
+
+**Client transition.** Keep the current review/create pair together. The current create route consumes legacy `termsId/termsVersion`. Enable submission of plate reviews only when Operations can verify the exact Payment proof, recheck coverage under its guards and consume the quote once. A quote ID cannot be passed as a terms ID.
 
 ### Submit durable admission
 
