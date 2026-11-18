@@ -1,5 +1,7 @@
 # Reservation availability, Facility integration and realtime handoff
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 Approved scope: booking through confirmation, CAR / Specific Slot. Payment producers stay with the Payment teammate; Facility producer and Operations enforcement are implemented in this task. SignalR relay/hub and frontend implementation belong to teammates. Code is not deployment-verified.
 
 ## Acceptance and concurrency

@@ -1,5 +1,7 @@
 # SPARK-273 — Reservation / PaymentService Integration Handoff
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](../2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 ## 1. Repository and branches
 
 Repository:

@@ -1,8 +1,10 @@
 # Reservation first slice — frontend handoff and readiness
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 > **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
 
-Reviewed 9 November 2026 in the local SPARK-273 checkout. Source inspection only: no frontend changes, frontend build, application startup, live API test or Docker publish verification was performed by the agent. The user subsequently reported a successful first-slice backend build and deferred tests until the booking workflow is ready. The resumed scope is booking through confirmed reservation, with producer implementations retained by teammates. This is a backlog for frontend/backend teammates, not a claim that bookings work. See the [continuation design and unresolved decisions](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#booking-through-confirmation-continuation-review--9-november).
+Reviewed 9 November 2026 in the local SPARK-273 checkout. Source inspection only: no frontend changes, frontend build, application startup, live API test or Docker publish verification was performed by the agent. The user subsequently reported a successful first-slice backend build and deferred tests until the booking workflow is ready. The resumed scope is booking through confirmed reservation, with producer implementations retained by teammates. This is a backlog for frontend/backend teammates, not a claim that bookings work. See the [continuation design and unresolved decisions](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#request-to-confirmation).
 
 ## What can be tested now
 

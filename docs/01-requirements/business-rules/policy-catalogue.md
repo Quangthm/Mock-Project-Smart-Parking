@@ -82,7 +82,7 @@ Retained D01–D06 labels in the preceding Source column refer to the October 20
 
 | Source key | RC1 disposition |
 |---|---|
-| MAX_ACTIVE_BOOKINGS | Superseded by D2 on 5 November: no per-Account/lot cap. Use verified-vehicle cross-lot interval exclusivity; retain commercial quotas and cancellation restrictions. |
+| MAX_ACTIVE_BOOKINGS | Superseded by D2 on 5 November: no per-Account/lot cap. The 18 November amendment applies same-plate/site interval exclusivity and independent physical-session guards; retain commercial quotas and cancellation restrictions. |
 | BOOKING_ACTION_LIMIT / WINDOW | Old demo6/24h inactive; use approved cancellation-abuse keys, no generic six-actions cap. |
 | VERIFIED_ARRIVAL_WAIT_LIMIT | Demo15 inactive; may alert only if separately specified; never forfeits verified arrival. |
 | BILLING_BLOCK_DURATION | Rate denominator may describe Owner price, but elapsed duration is never rounded up to blocks; old billing15/60 ceiling proposal superseded. |

@@ -315,3 +315,45 @@ This checkpoint supersedes the preceding statement that the registered commercia
 - Added current-status notes to the 10 November completion checklist and events/Facility handoff, and corrected the stale facility-dependency statement that the unavailable commercial adapter prevents live sales.
 - Final validation after documentation edits: **PASS** `git diff --check` (only the existing LF-to-CRLF working-copy warnings); Postman collection and environment JSON parse successfully.
 - Tests/live integration remain **NOT RUN — USER VERIFICATION REQUIRED**. Open blockers are production Operations→Payment authentication, quote-bound collection lookup, zero-price acceptance, reconciliation, and architecture-owner review of the generic `PaymentSucceededV1` deviation.
+
+## 18 November 2026 — Slice 1 architecture and contract baseline
+
+Slice 1 documentation is complete. SPARK-273 remains active for the separately authorized quote, admission and confirmation implementation slices.
+
+Inspected feature/SPARK-273-driver-book-parking-ahead-of-arrival at 3b60787d06f3452fff276f622219de1659ee49d0 with pre-existing staged, modified and untracked work. Read Jira SPARK-273 and reconciled earlier overlap and zero-price language with the newly approved amendment. The older decision records remain historical. Source inspection found worker-based admission and the paid adapter/consumer wiring. Zero-price acceptance remains unavailable and the covered branch, reservation admission saga and progress hub are target design.
+
+Documentation checks passed for added relative links, JSON examples, FR/BR headings, Mermaid branch balance and Git whitespace. Application builds, tests and runtime/manual checks are deferred. No stage, commit, branch, deployment or database action was performed. For later implementation, resolve owner wire compatibility, verify paid replay binding, prove Facility protection and audit acknowledged deferred commercial failures before retiring recovery paths.
+
+### Exact Slice 1 documentation files
+
+- Created [docs/05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md](<../../../docs/05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md>)
+- Created [docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md](<../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md>)
+- Modified [docs/01-requirements/business-rules/04-reservations-allocation.md](<../../../docs/01-requirements/business-rules/04-reservations-allocation.md>)
+- Modified [docs/01-requirements/business-rules/06-pricing-payments.md](<../../../docs/01-requirements/business-rules/06-pricing-payments.md>)
+- Modified [docs/01-requirements/business-rules/07-monthly-passes.md](<../../../docs/01-requirements/business-rules/07-monthly-passes.md>)
+- Modified [docs/01-requirements/business-rules/policy-catalogue.md](<../../../docs/01-requirements/business-rules/policy-catalogue.md>)
+- Modified [docs/01-requirements/requirements-traceability/04-reservations-allocation.md](<../../../docs/01-requirements/requirements-traceability/04-reservations-allocation.md>)
+- Modified [docs/01-requirements/requirements-traceability/06-pricing-payments.md](<../../../docs/01-requirements/requirements-traceability/06-pricing-payments.md>)
+- Modified [docs/01-requirements/srs/authorization-operation-classification.md](<../../../docs/01-requirements/srs/authorization-operation-classification.md>)
+- Modified [docs/01-requirements/srs/modules/04-reservations-allocation.md](<../../../docs/01-requirements/srs/modules/04-reservations-allocation.md>)
+- Modified [docs/01-requirements/srs/modules/06-pricing-payments.md](<../../../docs/01-requirements/srs/modules/06-pricing-payments.md>)
+- Modified [docs/01-requirements/srs/modules/07-monthly-passes.md](<../../../docs/01-requirements/srs/modules/07-monthly-passes.md>)
+- Modified [docs/01-requirements/srs/permissions.md](<../../../docs/01-requirements/srs/permissions.md>)
+- Modified [docs/01-requirements/srs/smartpark-srs-v1.1.md](<../../../docs/01-requirements/srs/smartpark-srs-v1.1.md>)
+- Modified [docs/01-requirements/srs/state-transitions.md](<../../../docs/01-requirements/srs/state-transitions.md>)
+- Modified [docs/01-requirements/use-cases/uc-res-01.md](<../../../docs/01-requirements/use-cases/uc-res-01.md>)
+- Modified [docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md](<../../../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md>)
+- Modified [docs/02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md](<../../../docs/02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md>)
+- Modified [docs/02-architecture/service-boundaries/ownership-and-events.md](<../../../docs/02-architecture/service-boundaries/ownership-and-events.md>)
+- Modified [docs/03-design/api/reservation-facility-dependency-api-design.md](<../../../docs/03-design/api/reservation-facility-dependency-api-design.md>)
+- Modified [docs/03-design/api/reservation-first-slice-api-design.md](<../../../docs/03-design/api/reservation-first-slice-api-design.md>)
+- Modified [docs/04-testing/postman/SPARK-273-manual-test-guide.md](<../../../docs/04-testing/postman/SPARK-273-manual-test-guide.md>)
+- Modified [docs/04-testing/reports/SPARK-273-deployment-checklist.md](<../../../docs/04-testing/reports/SPARK-273-deployment-checklist.md>)
+- Modified [docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md](<../../../docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](<../../../docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md>)
+- Modified [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff>)

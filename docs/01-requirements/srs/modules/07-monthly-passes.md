@@ -122,7 +122,7 @@ Owner views scoped collected/refunded money; Operator sees only necessary operat
 **Actors:** Driver, Operator  
 **Stories:** US-D14, US-O07
 
-For monthly and yearly products, at E stop coverage/new entry entitlement, not physical occupancy. Apply eligible monthly/yearly coverage before calculating ordinary reservation minimum: zero-price reservation confirms without payment with normal claims/cap checks; positive price uses approved prepayment. Prevent incompatible overlapping reservations and double charges; enforce A-01 dependency guard for voluntary cancellation.
+For monthly and yearly products, at E stop coverage/new entry entitlement, not physical occupancy. Apply eligible monthly/yearly coverage before calculating ordinary reservation minimum: the future fully covered reservation uses guarded confirmation after idempotent Payment zero-amount acceptance with linked order and receipt evidence. Positive price uses approved prepayment. See [FR-RES-04](04-reservations-allocation.md#fr-res-04). Prevent incompatible overlapping reservations and double charges; enforce A-01 dependency guard for voluntary cancellation.
 
 [Canonical M-01–M-09 rules](../../business-rules/07-monthly-passes.md).
 

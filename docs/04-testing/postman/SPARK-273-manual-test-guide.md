@@ -1,5 +1,7 @@
 # SPARK-273 reservation flow — Postman manual verification
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 The collection exercises the current Operations routes and uses the existing Payment checkout/status routes only when Operations has returned a real Payment order. It never creates a local or demo order to make the flow appear successful.
 
 ## Artifacts

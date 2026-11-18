@@ -1,6 +1,6 @@
 # Reservation first slice — deployment verification
 
-> **SPARK-273 architecture alignment (11–12 November 2026).** This document includes historical implementation notes. For the approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
+> **Historical source-baseline verification (11–12 November 2026).** For new work use the target verification below and the [18 November owner handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md). This document includes historical implementation notes. For the approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
 
 Status update on 12 November 2026: **Operations source is an integration baseline, not end-to-end ready.** The request workflow terminates at a durable `PENDING_PAYMENT` hold using receipt state `HOLD_CREATED` (contract version 2). A hold-changed consumer dispatches order provisioning or zero-price acceptance. The registered commercial adapter now calls Payment preview, quote and internal deposit-order endpoints; immutable payment-evidence validation and guarded paid/zero-price confirmation are present. The five-second due-work worker remains unchanged for expiry and recovery. Zero-price acceptance and reconciliation still fail closed; production Operations→Payment machine authentication and live delivery are unresolved; and the active paid-confirmation consumer uses generic `PaymentSucceededV1` rather than the proposed dedicated collection event. Build results are recorded in the SPARK-273 session. All test, database, broker, provider and manual acceptance remains `NOT RUN — USER VERIFICATION REQUIRED`.
 
@@ -217,3 +217,15 @@ The [implementation handoff](../../05-project-management/handoffs/2026-11-11-SPA
 - **BACKLOG D — PaymentService confirmation-outcome integration:** preview/quote/order adapters are implemented, but production machine authentication, the dedicated collection-event contract review, zero-price acceptance, quote-bound collection lookup, reconciliation, and durable decline/outcome delivery remain incomplete. Depends on review of PR #98 / SPARK-391 and the Payment team's actual implementation.
 
 All scheduler/recovery/Payment/live acceptance and manual checks remain `NOT RUN — USER VERIFICATION REQUIRED`.
+
+## 18 November target verification
+
+**NOT RUN.** Run from the repository root after the relevant implementation slices and owner wire reviews.
+
+```powershell
+dotnet build SmartParking.slnx --nologo
+dotnet test SmartParking.slnx --no-build --nologo --filter 'FullyQualifiedName~Reservation|FullyQualifiedName~AccountCurrent|FullyQualifiedName~VehicleBinding'
+node --test tests/frontend/*.test.cjs
+```
+
+Use the [scenario matrix](../requirements-traceability/reservation-first-slice-scenarios.md#admission-realtime-and-commercial-acceptance) with UserService, Facility, Operations, Payment, PostgreSQL, RabbitMQ and a browser on an isolated environment. Prepare two Accounts, one transfer fixture, two sites and competing compatible slots; use a verified test payOS merchant. Exercise real concurrency, duplicate delivery, lost responses, process restart at the committed hold boundary, and browser disconnect/reconnect while inspecting committed status, broker correlation, claim and order identity. Inspect the browser network trace through payment return for zero timer-driven status reads. Future covered cases require an owner-enabled fixture and accepted route; verify recorded acceptance, real zero-value order and receipt/obligation independent of provider/PDF. Legacy Postman artifacts exercise the old shape and cannot verify the target wire contracts.

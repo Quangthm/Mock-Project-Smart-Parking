@@ -1,5 +1,7 @@
 # Reservation producers — Payment and coverage handoff (11 November alignment)
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 Payment owner handoff, rechecked against the local source on 11 November 2026 at checkout `fff33f8f` (after the Payment merge). This is source review, not live verification. **Payment implementation remains with the Payment teammate. Facility producer implementation is now included in the Operations/Facility task.** Operations ports are in [BookingContracts.cs](../../../src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs); these service-local C# ports specify required semantics, **not agreed production Payment wire authentication**. There is no `src/Shared` build dependency.
 
 **12 November source update:** The Operations Payment adapter and dedicated confirmation consumer now exist locally, with minimal Payment compatibility fixes for preview/quote/order idempotency. This does not change Payment ownership or close the production authentication, zero-price, collection-binding, reconciliation or event-contract gates. The active generic `PaymentSucceededV1` path is an open deviation requiring owner review; tests and live integration are NOT RUN.

@@ -1,5 +1,7 @@
 # SPARK-273 — Cross-team implementation alignment and handoff
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 **Prepared:** 11 November 2026
 
 **Scope:** Booking through `CONFIRMED`, CAR / Specific Slot. Post-confirmation lifecycle remains a separately tracked phase.

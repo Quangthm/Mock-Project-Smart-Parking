@@ -1,5 +1,7 @@
 # Reservation completion checklist — 10 November 2026
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 The final evaluation-time cutoff is approved and replaces commit-timestamp verification. **Real booking remains unverified and is not release-ready.** This checklist separates work required for the current booking-through-confirmation deliverable from the full post-confirmation lifecycle. Items are not completed merely because contracts, Domain rules or source handlers exist. No frontend changes or deployed verification are claimed.
 
 ## Approved 11 November architecture alignment — additional release gates

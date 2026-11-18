@@ -56,7 +56,7 @@ Preserve accepted paid periods against later price or sales changes. Temporary c
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Overlapping available-only coverage must not duplicate sold rights or charges. Neither a monthly nor a yearly pass creates a reservation automatically; Driver may separately reserve capacity. Apply valid coverage before disclosed booking minimum (E03); if genuinely zero, confirm without payment, even under fixed-deposit mode, with ordinary atomic capacity and cap checks. Record entitlement/version/coverage basis. A-01 prevents voluntary pass cancellation while future reservations still depend on removed coverage. Guaranteed-resource lifecycle is FUTURE, not offered or accepted in MVP.
+Overlapping available-only coverage must not duplicate sold rights or charges. Neither a monthly nor a yearly pass creates a reservation automatically; Driver may separately reserve capacity. Apply valid coverage before disclosed booking minimum (E03); future fully covered reservation acceptance uses the linked zero-value order and durable receipt evidence under [BR-PAY-01/04/06](06-pricing-payments.md#reservation-first-slice-boundary), with ordinary guarded capacity checks and no provider collection. Record entitlement/version/coverage basis. A-01 prevents voluntary pass cancellation while future reservations still depend on removed coverage. Guaranteed-resource lifecycle is FUTURE, not offered or accepted in MVP.
 
 **Trace:** FR-MON-01–14; UC-MON-02, UC-MON-04
 

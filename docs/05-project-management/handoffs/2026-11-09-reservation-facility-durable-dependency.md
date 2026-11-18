@@ -1,5 +1,7 @@
 # Operations → Facility durable dependency
 
+> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+
 > **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
 
 Approved design; producer and consumer implemented in the current Commit 1 draft, **build/runtime UNVERIFIED**. Updated 11 November 2026. The user selected Facility's durable slot-management pattern and a dedicated Operations credential. Facility implementation is included in this task; Payment producers remain with the Payment teammate. No full resource mirror or shared source project is introduced.
