@@ -1,5 +1,7 @@
 # Session Review — 2026-11-12
 
+Current consolidated report: [SPARK-340 report](../../../docs/04-testing/reports/SPARK-340-report.md). Older filenames below identify historical sources; their full snapshots and SHA256 registry are linked from the consolidated report. Future verification results belong in that single report.
+
 ## 1. Session Information
 - **Current phase decision (18 November 2026):** P5 CLOSED at scoped implementation-review level after independent acceptance of F-A/F-B/F-C. User requests full tester verification on the published branch before any PR. Low findings tracked; rollout/UAT/parent acceptance pending. See Section34 and P5 closure record.
 - **Latest review decision (17 November 2026):** P4 conditional handoff, P5 CHANGES REQUESTED, P6 verified. User subsequently authorized tester-branch publication: five task-scoped commits pushed successfully to origin/feat/SPARK-340-admin-platform-policies, initial tip9a84aeaf. See Sections28–30 and tester handoff. No remote PR/merge/deploy.
@@ -921,3 +923,9 @@ P4 stays temporarily closed by user phase-handoff direction; skipped/blocked evi
 Created docs/04-testing/reports/SPARK-340-P5-closure-20261118.md and SPARK-340-pre-PR-full-test-prompt-20261118.md. Updated overview/P5/P6/PR draft/tester handoff to direct the next full run: fresh BE/FE baselines, PG suites, prepared-stack Newman58 with F8 negatives, Owner/SITE, temporal values, composed invariants, durability and browser UAT. Require separate test environment or explicit owner target/window for shared DB DDL/import/restart. Existing schema approval does not imply authority to migrate the user DB; no such operation performed here.
 
 Initial working tree contained reviewer session edits/two review artifacts and the unrelated SPARK-238 collection. Preserve all history, include relevant independent review artifacts in the docs delivery, leave SPARK-238 out of staging. No source/test/config change or repeated broad test run for this documentation-only update. Check diff/JSON/secret hygiene and publish to the same feature branch under explicit user authorization. Do not create PR, merge or deploy. Final remote tip is verified and reported after push.
+
+## 35. Report consolidation — 18 November 2026
+
+User explicitly requested one combined SPARK report and deletion of old report files. Consolidated47 tracked sources (40 testing reports/evidence/prompts/runbooks plus7 API review reports) into docs/04-testing/reports/SPARK-340-report.md. Preserved current decisions, active UAT/rollout/tester instructions and local PR draft; embedded full sanitized latest-independent and historical-HTTP JSON snapshots. Each original source has an immutable Git link at1bedfdae1b25218d0c7b728fa57087cec1ce8dab and SHA256 in the source registry; Git history is retained. Historical filenames in earlier session sections remain source identifiers.
+
+Retained API contract, approved schema-exception proposal, executable Postman collection/environment/guide, source/tests and this session. Updated persistent links and stale active guide counts/snapshot instructions. No product changes, DDL/import, Docker mutation, PR or merge. P4 conditional handoff, P5 scoped closure, pending tester sign-off and U19 dependency remain unchanged. Documentation/JSON/link/hash checks only; no new BE/FE execution claimed. Unrelated SPARK-238 collection is preserved and excluded from this delivery.

@@ -1,6 +1,6 @@
 # SPARK-340 / SPARK-370 — P4 Manual & Automated Verification Guide
 
-> F6–F8 update17/11: current collection has58 requests, adding4 negative create/update cases for explicit platform arrivalLateToleranceEnabled true/false. Historical Newman54-request results remain historical, not a run of this revision. Before upgrading an existing Payment stack, follow [approved DDL/repair guide](../reports/SPARK-340-F6-F8-rollout-guide.md); the dedicated binding table must exist before the new service binary runs. DDL/import have not been applied to the user's running DB by the implementation agent.
+> F6–F8 update17/11: current collection has58 requests, adding4 negative create/update cases for explicit platform arrivalLateToleranceEnabled true/false. Historical Newman54-request results remain historical, not a run of this revision. Before upgrading an existing Payment stack, follow [approved DDL/repair guide](../reports/SPARK-340-report.md#rollout); the dedicated binding table must exist before the new service binary runs. DDL/import have not been applied to the user's running DB by the implementation agent.
 
 **Epic:** SPARK-340 — US-A02 "Admin: Configure platform policy bounds and authorized integration settings"
 **Phase 4 task:** SPARK-370 — QA / Test Automation & Latent Defect Verification
@@ -10,8 +10,8 @@
 |---|---|
 | Postman collection | `docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json` |
 | Postman environment (example) | `docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_environment.example.json` |
-| Newman / UAT evidence | `docs/04-testing/reports/evidence/SPARK-370-Newman-UAT-Result.json` |
-| Session log | `ai/tasks/active/TASK-SPARK-340-SESSION-20261112.md` (Section 19) |
+| Consolidated report / evidence / current tester prompt | [SPARK-340-report.md](../reports/SPARK-340-report.md#evidence) |
+| Session log | `ai/tasks/active/TASK-SPARK-340-SESSION-20261112.md` (latest checkpoint) |
 
 This guide is the step-by-step procedure to reproduce every P4 gate: bring up the stack, obtain tokens, run backend/frontend suites, run the Newman UAT collection, and complete the manual checklists for the four latent-defect clusters.
 
@@ -142,15 +142,15 @@ Set `SMARTPARK_DRIVER_PASSWORD` in your shell to the locally seeded driver passw
 
 ## 4. Configure the Postman environment
 
-1. Copy the example to a local, uncommitted file:
+1. Copy the example to a private file outside Git:
    ```powershell
-   Copy-Item docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_environment.example.json `
-             docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.local.postman_environment.json
+   $spark340PrivateEnvironment = Join-Path $env:TEMP ('SPARK-340-env-' + [guid]::NewGuid().ToString('N') + '.json')
+   Copy-Item docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_environment.example.json $spark340PrivateEnvironment
    ```
-   (Do **not** commit the `.local.` copy.)
+   Use this path in step7. Do **not** commit the populated environment.
 2. Fill in `admin_token`, `owner_token`, `driver_token` from §3.
 3. Confirm `tenant_id`, `site_id`, `vehicle_id`, `slot_id` point at an existing seeded tenant/site/vehicle/slot in your local DB. The collection captures revision ids, draft ids, `expectedUpdatedAt`, tenant/site echoes and scheduled timestamps from responses; it never hardcodes empty vehicle/slot ids.
-4. Optionally set `reservation_id` to an existing confirmed booking owned by the same driver as `driver_token`. The snapshot folder uses it to read the booking before and after activation; when it is blank those two requests SKIP with an explicit message.
+4. Supply valid driver-owned vehicle/slot fixtures for the linked terms → receipt → booking flow. A separate existing booking or a revision read does not prove U19. If the commercial producer returns503, record FAIL/BLOCKED and downstream NOT RUN.
 5. Leave `payment_test_client_id`, `payment_test_api_key`, `payment_test_checksum_key` blank unless you are exercising the optional SANDBOX-credential request. When any of them is blank the request SKIPs; when supplied, the collection requires `200`, `apiKeyConfigured=true`, and no plaintext echo (a `400` never passes).
 
 Import both JSON files into Postman, or pass the env to Newman directly (§7).
@@ -166,8 +166,8 @@ dotnet test  SmartParking.slnx --nologo
 
 Expected:
 
-- Build: **0 errors** (only pre-existing NU1902 / NU1903 NuGet advisories).
-- Test: **1,126 passed / 102 skipped / 0 failed**.
+- Build: **0 errors**; record actual warnings and their causes.
+- Test: **0 failed**; record actual pass/skip totals. Latest independent source review recorded1190 passed /114 skipped; these are historical evidence, not the expected output of every future checkout.
 
 Targeted runs for the four clusters:
 
@@ -208,11 +208,15 @@ Expected:
 ## 7. Run the Newman UAT collection (requires the stack)
 
 ```powershell
+$spark340PrivateEnvironment = Read-Host 'Absolute private Postman environment path outside Git'
+$spark340RawReport = Join-Path $env:TEMP ('SPARK-340-Newman-' + [guid]::NewGuid().ToString('N') + '.json')
 npx --no-install newman run docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json `
-  -e docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.local.postman_environment.json `
+  -e $spark340PrivateEnvironment `
   --reporters cli,json `
-  --reporter-json-export docs/04-testing/reports/evidence/SPARK-370-Newman-UAT-Result.json
+  --reporter-json-export $spark340RawReport
 ```
+
+Raw JSON can contain authorization headers and private inputs. Keep it outside Git, sanitize it, then append actual run results/JSON to the [single report](../reports/SPARK-340-report.md#future-updates). Do not overwrite that Markdown file with the raw JSON exporter or recreate the retired per-run evidence files.
 
 Useful variants:
 
@@ -220,15 +224,15 @@ Useful variants:
 - Override a value without editing the env: `--env-var "site_id=<guid>"`
 - Stop on first failure: `--bail`
 
-### Per-folder expected outcome (51 requests total)
+### Per-folder scope (58 requests total; defined is not executed/passed)
 
 | Folder | Requests | Key expectations |
 |---|---|---|
 | 00 - RBAC Matrix | 12 | Anonymous 401, Driver 403, Owner 403, Admin 200 for operations catalogue, payment GET, notifications GET |
-| 01 - Operation Policies Lifecycle | 14 | Catalogue exposes exactly the 14 canonical keys (`ARRIVAL_LATE_TOLERANCE` has the 15..30 bound; all other keys null; four anti-abuse keys not overridable; ten time/count keys overridable); isolated draft create 201; `status=DRAFT` contains it; pagination `page=1 pageSize=5`; by-id 200 and 404; `PUT` with current `If-Match` 200 and an advanced token; stale `If-Match` 409 `RESOURCE_VERSION_CONFLICT`; immediate activate 200; CURRENT contains the activated revision and is non-empty; SUPERSEDED contains the closed predecessor; PLATFORM effective reports `inherited=false` / `source=PLATFORM_DEFAULT` and `arrivalLateTolerance.enabled=null`; SITE effective asserts inherited keys `PLATFORM_DEFAULT`, overridden keys `SITE_OVERRIDE`, and SKIPs when no active site policy exists |
+| 01 - Operation Policies Lifecycle | 18 | Typed14-key catalogue with actual null/configured bounds; draft/history/pagination/by-id, valid optimistic update and stale-token409, activation/effective provenance. Four F8 negative writes reject site-only enablement true/false on both create and update with400 VALIDATION_FAILED and the correct field. |
 | 02 - Payment Integration | 6 | GET returns `apiKeyConfigured`/`checksumKeyConfigured` booleans, no raw `apiKey`/`checksumKey`, masked `clientIdMasked`, capabilities; FIXTURE switch 200 `HEALTHY`; disallowed BaseUrl 400 `INVALID_PAYMENT_BASE_URL`; invalid mode 400 `VALIDATION_FAILED`; blank credential 400; SANDBOX credentials SKIP when `payment_test_*` is blank, otherwise require 200 + configured flags + no plaintext echo |
 | 03 - Notification Integration | 1 | Exactly 4 channel enums `EMAIL`, `SMS`, `PUSH`, `IN_APP` mapped to `LOCAL_EMAIL_CAPTURE_FIXTURE`, `LOCAL_SMS_FIXTURE`, `LOCAL_PUSH_FIXTURE`, `IN_APP_FIXTURE`, all `status=ACTIVE`, `isReady=true` |
-| 04 - Immutable Operational Policy Snapshot | 7 | Accept terms captures `operationalPolicy.platformRevisionId`, platform version, `PAYMENT_HOLD_DURATION` and commercial amounts; optional booking read before activation captures observable persisted fields; isolated changed draft is activated; PLATFORM effective moves to the replacement revision and shows the changed value; optional booking read after activation proves id/state/amounts/timestamps unchanged (the snapshot column is not exposed by `BookingView`; the `UnitOfWork` guard and xUnit are authoritative); accepted platform revision is re-read and its identity/version/policy value are unchanged |
+| 04 - Immutable Operational Policy Snapshot | 10 | Linked reviewed terms → durable receipt → same booking before/after activation, plus separate comparison of raw historical platform settings. Terms503 leaves the chain FAIL/BLOCKED and downstream NOT RUN. Source/UnitOfWork guards and policy revision reads do not replace accepted-booking snapshot evidence. U19 remains a SPARK-273 dependency. |
 | 05 - Scheduling & Write RBAC | 11 | Future `effectiveFrom` activation returns `SCHEDULED` and the SCHEDULED listing contains it; a second draft activated at the same timestamp is rejected with 409 `OVERLAPPING_POLICY_INTERVAL`; Owner and Driver receive 403 on POST draft, PUT draft and activate |
 
 ### Skip handling
@@ -251,7 +255,7 @@ If Docker services cannot be started, the honest evidence path is:
    ```powershell
    node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json','utf8'));let r=0,e=[];function w(i){for(const x of i){if(x.item)w(x.item);else{r++;for(const s of (x.event||[]))if(s.script)try{new Function(s.script.exec.join('\n'))}catch(err){e.push(x.name+': '+err.message)}}}}w(c.item);console.log('folders',c.item.length,'requests',r);if(e.length){console.log(e.join('\n'));process.exit(1)}console.log('ALL SCRIPTS SYNTAX OK')"
    ```
-   Expected: `folders 6 requests 51`, then `ALL SCRIPTS SYNTAX OK`. The collection has 6 folders / 51 requests; the example environment still declares 22 variables.
+   Expected for the current revision: `folders 6 requests 58`, then `ALL SCRIPTS SYNTAX OK`. Record actual script/environment counts from the checked-out files; don't copy historical51/54-request execution totals.
 3. Do **not** overwrite the recorded SPARK-370 execution with a fabricated pass; record the stack-unavailable limitation in the session log and keep the existing sanitized evidence intact.
 
 Do **not** record a Newman pass/fail that was not actually executed.
@@ -270,8 +274,8 @@ Do **not** record a Newman pass/fail that was not actually executed.
 
 ### Cluster 2 — Webhook security & order-key invariants
 
-- [ ] Create an order under SANDBOX; rotate the checksum key; a callback signed with the previous key **within** the 24h grace window validates.
-- [ ] A callback for an order created **before** the key's retention window (e.g. 48h ago) is rejected (`IsValidSignature=false`).
+- [ ] On an isolated fixture, issue a checkout with an exact binding, rotate mode/key, and verify the issued bound key still authenticates the callback.
+- [ ] Missing/corrupt binding is rejected with no current-key or timestamp inference; a trusted legacy mapping can be restored only through the approved repair flow. Retain bindings/key material with financial history, not an assumed blanket24h cutoff.
 - [ ] Switch mode; a legitimate in-flight callback still validates against the key/mode bound at issuance.
 - [ ] Trigger a provider error that echoes clientId/apiKey; response message and logs contain no plaintext credential (redacted).
 
@@ -289,20 +293,21 @@ Do **not** record a Newman pass/fail that was not actually executed.
 
 ### Immutable snapshot
 
-- [ ] Accept reservation terms; capture `operationalPolicy.platformRevisionId`, platform version, `PAYMENT_HOLD_DURATION` and the commercial amounts from the response.
-- [ ] (Optional) Set `reservation_id` to a confirmed booking and read `GET /api/me/reservations/{id}` before activation; capture `reservationId`, `state`, `start`, `end`, `bookedAmount`, `depositAmount`, `currency`, `createdAt`.
+- [ ] Accept reviewed terms with valid fixtures, submit them, capture the durable receipt and link it to the resulting booking. Record accepted policy provenance and commercial amounts.
+- [ ] Read that same linked booking before activation; capture its identity, state, amounts and accepted-policy evidence available through the supported verification path.
 - [ ] Admin activates a changed platform revision.
 - [ ] `GET .../effective` shows the replacement platform revision id and the changed `PAYMENT_HOLD_DURATION`.
-- [ ] (Optional) Re-read the same booking: id/state/amounts/timestamps are unchanged. The booking DTO does not expose `acceptedOperationalPolicySnapshot`; the DB `UnitOfWork` guard plus OperationService xUnit tests are authoritative for the snapshot column.
+- [ ] Re-read the same linked booking and verify the accepted snapshot is unchanged. Source/UnitOfWork tests support the persistence invariant but do not replace this end-to-end evidence. If the DTO omits the snapshot, document that evidence gap explicitly.
 - [ ] Re-read the accepted platform revision by id: id, version, cancellation timezone and all 14 accepted policy values are unchanged (`effectiveUntil` may legitimately close when a later revision activates).
+- [ ] If terms returns503 OWNER_UNAVAILABLE, keep U19 BLOCKED under SPARK-273; do not infer PASS from revision reads or unrelated bookings.
 
 ---
 
 ## 10. Evidence capture
 
-- Save the Newman JSON export to `docs/04-testing/reports/evidence/SPARK-370-Newman-UAT-Result.json`.
+- Save raw Newman JSON only to the private path outside Git chosen in step7. Append a sanitized snapshot and actual counts to [SPARK-340-report.md](../reports/SPARK-340-report.md#future-updates), not to a new dated report file.
 - Optionally attach screenshots of Postman/Newman summaries (no secrets visible).
-- Append the run result (timestamp, pass/fail counts, environment) to `ai/tasks/active/TASK-SPARK-340-SESSION-20261112.md` Section 19.
+- Append a short checkpoint/link to the run's section in `ai/tasks/active/TASK-SPARK-340-SESSION-20261112.md`.
 
 ---
 
@@ -311,7 +316,7 @@ Do **not** record a Newman pass/fail that was not actually executed.
 | Symptom | Cause / fix |
 |---|---|
 | `401` on admin routes | Missing/expired token, or `Authorization: Bearer {{token}}` not set |
-| `403` with a valid token | Token role is not `ADMIN` (owner/driver are expected to get 403) |
+| `403` with a valid token | Current Admin endpoints require lowercase `admin`; owner/driver are expected to get403. |
 | `409` on `PUT draft` | Stale `If-Match`; re-read the revision and use its current `updatedAt` |
 | `409` on activate | Overlapping interval (GiST) or an intersecting site policy conflict |
 | `400 INVALID_PAYMENT_BASE_URL` | `baseUrl` not in the allowlist for the selected mode (`LIVE`/`SANDBOX` → `https://api-merchant.payos.vn`; `FIXTURE` → `http://localhost:5173` or `https://fixture.internal`) |
@@ -324,11 +329,11 @@ Do **not** record a Newman pass/fail that was not actually executed.
 ## 12. Acceptance checklist
 
 - [ ] `dotnet build` 0 errors
-- [ ] `dotnet test` 0 failed (≥ 1,126 passed)
+- [ ] `dotnet test` 0 failed; actual pass/fail/skip counts recorded
 - [ ] `npm --prefix FE run build` exit 0
 - [ ] `node --test tests/frontend/*.test.cjs` 261/261
-- [ ] Postman collection + environment valid (6 folders / 51 requests / 22 vars)
+- [ ] Postman collection + environment valid (current collection:6 folders /58 requests; record actual variable count)
 - [ ] Newman executed **or** limitation documented in evidence + session log
-- [ ] Schema Freeze respected (no migrations/DDL)
+- [ ] Schema Freeze respected except the explicitly approved additive Payment binding-table exception; shared-target DDL/import requires its own authorized target/window
 - [ ] No plaintext apiKey/checksumKey anywhere in artifacts/logs
-- [ ] Working tree uncommitted (no commit/push)
+- [ ] Reviewer does not commit/push unless explicitly assigned; no PR/merge/deployment in this verification task
