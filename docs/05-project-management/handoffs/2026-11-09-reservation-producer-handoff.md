@@ -1,12 +1,14 @@
 # Reservation producers — Payment and coverage handoff (11 November alignment)
 
-> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+> **Superseded execution guidance.** Legacy Operations terms, vehicle-ID binding and zero-price no-order instructions are historical. Use the [current Payment confirmation handoff](2026-11-18-SPARK-273-payment-confirmation-handoff.md) for the paid event gate and covered HTTP acceptance. For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
 
 Payment owner handoff, rechecked against the local source on 11 November 2026 at checkout `fff33f8f` (after the Payment merge). This is source review, not live verification. **Payment implementation remains with the Payment teammate. Facility producer implementation is now included in the Operations/Facility task.** Operations ports are in [BookingContracts.cs](../../../src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs); these service-local C# ports specify required semantics, **not agreed production Payment wire authentication**. There is no `src/Shared` build dependency.
 
 **12 November source update:** The Operations Payment adapter and dedicated confirmation consumer now exist locally, with minimal Payment compatibility fixes for preview/quote/order idempotency. This does not change Payment ownership or close the production authentication, zero-price, collection-binding, reconciliation or event-contract gates. The active generic `PaymentSucceededV1` path is an open deviation requiring owner review; tests and live integration are NOT RUN.
 
 ## Delivery requested from the Payment teammate
+
+> **Historical delivery checklist.** The current Payment and service handoffs govern new implementation.
 
 Deliver server-side preview and **versioned accepted-price terms**, combine commercial quote acceptance **inside idempotent `EnsureOrder` (no separate acceptance HTTP call)**, and provide reservation deposit orders with Operations' exact H, verified collection lookup for targeted recovery, durable collection notifications and idempotent reconciliation/refund status. Return a versioned OpenAPI/message schema and setup instructions, including issuer/sender/audience/permissions, paths, RabbitMQ exchanges/queues/ACLs and a sample configured tariff. Do not use browser-supplied amounts or demo payment as authority. Operations owns booking capacity and confirmation; Payment owns money and provider reconciliation. Coverage must be coordinated with its authoritative owner.
 

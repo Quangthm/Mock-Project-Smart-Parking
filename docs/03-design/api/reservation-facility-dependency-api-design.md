@@ -17,7 +17,7 @@ Operations obtains immutable Facility resource facts with a durable configuratio
 | Traceability | Reference |
 | --- | --- |
 | Booking use case / related contracts | [Reservation API](reservation-first-slice-api-design.md) |
-| Approved direction and recovery | [Reservation architecture](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md), [durable dependency](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md) |
+| Approved direction and recovery | [Current reservation workflow](../../02-architecture/architecture-decisions/reservation-workflow-target.md), [durable dependency](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md) |
 | Classification / security | [Operation matrix](../../01-requirements/srs/authorization-operation-classification.md); no fabricated human actor |
 
 ## API specification

@@ -16,7 +16,7 @@ Driver reviews an authoritative quote, submits durable admission, and observes c
 | Traceability | Reference |
 | --- | --- |
 | Applicable FR / BR / UC / US | [FR-RES-01–05, 10, 12 / UC-RES-01 / US-D01](../../01-requirements/srs/modules/04-reservations-allocation.md#fr-res-01); [BR-RES-01, 02, 07 / BR-POL-04](../../01-requirements/business-rules/04-reservations-allocation.md#br-res-01); [FR-PAY-04, 09](../../01-requirements/srs/modules/06-pricing-payments.md#fr-pay-04) |
-| Permission / service ownership | [Operation matrix](../../01-requirements/srs/authorization-operation-classification.md); [ownership and sequence](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#ownership) |
+| Permission / service ownership | [Operation matrix](../../01-requirements/srs/authorization-operation-classification.md); [ownership and sequence](../../02-architecture/architecture-decisions/reservation-workflow-target.md#ownership) |
 | Approved decisions | [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) |
 
 ## API Specification
@@ -36,12 +36,12 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 **Request sample** for review. Preview, if retained, uses the same selection semantics.
 
 ```json
-{"licensePlate":"51A-123.45","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS"}
+{"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS"}
 ```
 
 | Body field | Format | Contract |
 | --- | --- | --- |
-| licensePlate | string | Canonicalizable under agreed UserService normalization. Ownership is resolved in admission. |
+| licensePlate | string | Normalized using the agreed UserService rules. Operations independently canonicalizes/validates it and resolves ownership in admission. |
 | requestedSlotId | UUID | Facility resolves site/tenant and CAR eligibility. |
 | start, end | ISO 8601 with offset | Ordered interval. Server normalizes instants and applies effective policy. |
 | paymentMethod | enum | Enabled method accepted by the quote; illustrated token to agree. |
@@ -73,7 +73,7 @@ Content-Type: application/json
 ```
 
 ```json
-{"licensePlate":"51A-123.45","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1"}
+{"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1"}
 ```
 
 `quoteId` is a required UUID and `quoteVersion` a required opaque version. Submission of the exact reviewed binding records consent. Client VehicleId and SiteId are not required or authoritative. Client amounts, coverage and actor fields confer no authority.
@@ -140,7 +140,7 @@ Codes below are semantic examples to map to the existing envelope and finalized 
 
 ### Authorization workflow and retry outcomes
 
-[Authorization ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [saga design](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#request-to-confirmation) define trusted actor, durable start, read-only concurrency, branch/attempt fences and effect ownership. Current role/Account, plate and Facility all gate the hold. Use ADR §9 budgets with owner-reviewed overrides. Unknown commits or commercial effects resolve under the original identity. Timeouts on read-only checks may terminate admission without implying ineligibility. Paid and covered confirmation use one strictly pre-T guarded timestamp and committed lifecycle. See [owner recovery handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#covered-acceptance-recovery).
+[Authorization ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [saga design](../../02-architecture/architecture-decisions/reservation-workflow-target.md#request-to-confirmation) define trusted actor, durable start, read-only concurrency, branch/attempt fences and effect ownership. Current role/Account, plate and Facility all gate the hold. Use ADR §9 budgets with owner-reviewed overrides. Unknown commits or commercial effects resolve under the original identity. Timeouts on read-only checks may terminate admission without implying ineligibility. Paid confirmation uses one guarded Operations database timestamp strictly before T. For the future covered branch, H is `min(hold creation + effective reservation hold duration, T)`. Require authoritative acceptance and a protected claim at the guarded evaluation strictly before H. If expiry wins, release the hold and require fresh review and a new request. Later acceptance is for reconciliation only. See [owner recovery handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#covered-acceptance-recovery).
 
 ### SignalR progress contract
 
@@ -150,11 +150,11 @@ Conceptual notification content is event ID, request ID, optional reservation ID
 
 ## Sequence diagram
 
-See the [HTTP, MassTransit and SignalR sequence and state table](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#request-to-confirmation).
+See the [HTTP, MassTransit and SignalR sequence and state table](../../02-architecture/architecture-decisions/reservation-workflow-target.md#request-to-confirmation).
 
 ## Cross-owner interfaces to agree
 
-[Facility API](reservation-facility-dependency-api-design.md) · [UserService, PaymentService and frontend handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md)
+[Facility API](reservation-facility-dependency-api-design.md) · [Service handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md) · [Payment paid/covered owner gates](../../05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md)
 
 ## Open questions and deferred items
 
@@ -162,6 +162,7 @@ See the [HTTP, MassTransit and SignalR sequence and state table](../../02-archit
 | --- | --- | --- | --- |
 | Wire compatibility | Route reuse, field/state names, expiry/error mappings and compatibility with legacy terms/receipts | Review, create, reads, hub | Operations, Payment, frontend / SPARK-273 |
 | Owner contracts | Slot lookup route, plate and slot message versions, trust and bounded deadlines | Review and admission | Facility, UserService, Operations / SPARK-273 |
+| Paid event | Prove immutable quote and distinct collection identity under the 11 November contract, or agree a versioned event | Paid confirmation | Payment and Operations / SPARK-273 |
 | Covered integration | Exact HTTP route/fields and receipt implementation; entitlement logic deferred | Covered acceptance | Payment, Operations / SPARK-273 |
 
 ## Review checks

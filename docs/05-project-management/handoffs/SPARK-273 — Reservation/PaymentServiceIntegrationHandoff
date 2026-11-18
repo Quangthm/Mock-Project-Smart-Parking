@@ -1,6 +1,6 @@
 # SPARK-273 — Reservation / PaymentService Integration Handoff
 
-> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](../2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+> **Superseded execution guidance.** This WIP recovery snapshot describes legacy terms payloads and generic event wiring. Use the [current Payment confirmation handoff](../2026-11-18-SPARK-273-payment-confirmation-handoff.md) for the paid event gate and future covered contract. For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](../2026-11-18-SPARK-273-reservation-owner-handoffs.md).
 
 ## 1. Repository and branches
 
@@ -23,6 +23,8 @@ The WIP branch preserves partially completed corrections. It has not been fully 
 Follow `ai/AGENTS.md`, `ai/rule.md`, the latest `SmartPark-Coding-Skill-v1.0.md` and applicable service architecture conventions.
 
 ## 2. Intended final implementation
+
+> **Superseded execution section.** The steps below describe the earlier integration baseline.
 
 The objective is to complete the positive-deposit reservation workflow while minimizing changes to PaymentService.
 

@@ -1,6 +1,6 @@
 # Reservation availability, Facility integration and realtime handoff
 
-> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+> **Historical handoff.** Prior UI polling guidance below is superseded by request-scoped SignalR and one-time recovery reads. Preserve the Facility protection protocol subject to the current proof gate. For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
 
 Approved scope: booking through confirmation, CAR / Specific Slot. Payment producers stay with the Payment teammate; Facility producer and Operations enforcement are implemented in this task. SignalR relay/hub and frontend implementation belong to teammates. Code is not deployment-verified.
 
@@ -68,6 +68,8 @@ Any successfully applied structure outcome invalidates the whole site, including
 All deliveries are at least once. Consumers deduplicate eventId, persist processing outcomes, tolerate reordering and resume after restart. MassTransit message identities are `urn:message:SmartParking.OperationService.Application.Reservations:<type name from the table>`. Consumers must use that identity explicitly (or independently reproduce namespace/type); sharing an assembly is unnecessary. The wire envelope follows MassTransit, with the DTO under `message`. Exchange names alone do not replace that identity. Provision durable bound queues and service-restricted ACLs before enabling relay. A durable exchange without a queue does not retain a subscriber backlog. Do not publish credentials, plates, images or provider payloads.
 
 ## SignalR relay and frontend contract (teammate implementation)
+
+> **Historical realtime proposal.** The [current SignalR contract](../../03-design/api/reservation-first-slice-api-design.md#signalr-progress-contract) governs new work.
 
 Use these v1 client message names: reservationHoldChanged, reservationConfirmed, reservationAvailabilityChanged, facilityStructureApplied. Preserve eventId/schemaVersion=1 and scope; private booking messages use authenticated Account subscriptions, never a client-provided account/group name. Site channels receive only public invalidation fields, never booking/account/payment IDs.
 

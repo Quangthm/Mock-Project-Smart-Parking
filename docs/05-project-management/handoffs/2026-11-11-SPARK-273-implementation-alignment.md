@@ -1,6 +1,6 @@
 # SPARK-273 — Cross-team implementation alignment and handoff
 
-> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+> **Superseded execution guidance.** The older step order, terms payloads and refresh directions below are historical. Use the current saga, quote and SignalR contracts, plus the [Payment confirmation handoff](2026-11-18-SPARK-273-payment-confirmation-handoff.md). For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
 
 **Prepared:** 11 November 2026
 
@@ -15,6 +15,8 @@
 The **creation workflow ends at the committed `PENDING_PAYMENT` hold**. PaymentService creates/replays a real deposit order for that committed reservation and publishes a durable **verified collection event** after provider verification. A separate Operations consumer confirms through the guarded domain transition, not from the browser and not from continuous Payment polling. The **aggregate-only fast path is conditional on verified Facility/writer invariants**; the current Facility confirmation dependency remains necessary until that gate passes. After H, pre-T verified money may attempt fresh compatible reacquisition; otherwise reconcile/refund without a booking. At/after T, no ordinary new confirmation.
 
 ## Sequence and owner responsibilities
+
+> **Superseded execution section.** Current slice boundaries and DTO authority are in the 18 November handoffs.
 
 | Step | Operation | Owner | Durable result / handoff |
 |---|---|---|---|
@@ -110,6 +112,8 @@ The order request binds the stable `OperationId`/request ID, `ReservationId`, au
 - Until proved, **do not remove confirmation `acquire`**. Tests must cover conflicting edit, concurrent entry, delayed notifications, reconnect, two-service partial failure, and direct-write bypass risks. Expired hold requires a fresh dependency and capacity evaluation.
 
 ## Frontend teammate — must deliver
+
+> **Superseded frontend instructions.** Use plate/slot and Payment quote references, and authenticated SignalR with recovery reads.
 
 - Preserve present slot/time/vehicle/method layout; replace local `driverData`/hourly estimate with backend authoritative review while keeping preview feedback. Submit `POST /api/reservation-requests` with one stable UUID key and accepted `termsId/termsVersion`.
 - Treat `202`/request processing separately from hold success, and hold success separately from `CONFIRMED`. Use receipt/own booking to learn reservation ID, H and **real** `paymentOrderId`; do not substitute booking ID as order ID. Pass actual order to authenticated Payment checkout; do not render fake bank/QR values.

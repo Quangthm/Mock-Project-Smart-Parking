@@ -357,3 +357,37 @@ Documentation checks passed for added relative links, JSON examples, FR/BR headi
 - Modified [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md>)
 - Modified [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](<../../../docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md>)
 - Modified [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff>)
+
+## 18 November 2026 — Corrective Slice 1 review
+
+Rechecked the four-slice baseline on feature/SPARK-273-driver-book-parking-ahead-of-arrival at 594ee7f10ef642467b70e9eaa6d5dd5d772499ed. That commit already tracks the SPARK-244 occupancy-outbox handoff. The file is separate work and is excluded from this corrective diff and reservation scope. Branch-level separation requires a separately authorized Git or delivery action.
+
+Paid collection remains a Payment/Operations contract gate. The generic event lacks explicit collection identity and quote binding; the current Payment lookup has placeholder quote fields. Covered acceptance requires matching owner evidence and a protected claim at the guarded checkpoint strictly before H. Expiry requires fresh review and submission. The quote cutover retains legacy replay, history and unsettled obligations until owner-approved data retirement.
+
+Passed Git whitespace, changed relative links and anchors, JSON examples, FR/BR identity checks, exact restoration of the historical proposal body, Mermaid branch balance and protected-path diff verification. Builds, tests, Postman and deployment were not run.
+
+### Exact corrective documentation files
+
+- Created [docs/02-architecture/architecture-decisions/reservation-workflow-target.md](<../../../docs/02-architecture/architecture-decisions/reservation-workflow-target.md>). Document current workflow, sequence and states separately.
+- Created [docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md>). Separate paid collection evidence from future covered HTTP acceptance.
+- Updated [docs/01-requirements/business-rules/04-reservations-allocation.md](<../../../docs/01-requirements/business-rules/04-reservations-allocation.md>). Separate paid recovery from covered expiry.
+- Updated [docs/01-requirements/business-rules/07-monthly-passes.md](<../../../docs/01-requirements/business-rules/07-monthly-passes.md>). Bind coverage to canonical plate and preserve Account context.
+- Updated [docs/01-requirements/srs/modules/04-reservations-allocation.md](<../../../docs/01-requirements/srs/modules/04-reservations-allocation.md>). Separate paid recovery from covered expiry.
+- Updated [docs/01-requirements/srs/modules/07-monthly-passes.md](<../../../docs/01-requirements/srs/modules/07-monthly-passes.md>). Bind coverage to canonical plate and preserve Account context.
+- Updated [docs/01-requirements/srs/smartpark-srs-v1.1.md](<../../../docs/01-requirements/srs/smartpark-srs-v1.1.md>). Align summary with coverage ownership and confirmation deadlines.
+- Updated [docs/01-requirements/srs/state-transitions.md](<../../../docs/01-requirements/srs/state-transitions.md>). Record covered expiry and preserved plate coverage.
+- Updated [docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md](<../../../docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md>). Link to the current reservation target.
+- Updated [docs/02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md](<../../../docs/02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md>). Restore the original proposal body with historical scope.
+- Updated [docs/02-architecture/service-boundaries/ownership-and-events.md](<../../../docs/02-architecture/service-boundaries/ownership-and-events.md>). Clarify service authority and coverage after registration changes.
+- Updated [docs/03-design/api/reservation-facility-dependency-api-design.md](<../../../docs/03-design/api/reservation-facility-dependency-api-design.md>). Link the Facility contracts to the current workflow.
+- Updated [docs/03-design/api/reservation-first-slice-api-design.md](<../../../docs/03-design/api/reservation-first-slice-api-design.md>). Align normalized input, paid event gate and covered expiry.
+- Updated [docs/04-testing/reports/SPARK-273-deployment-checklist.md](<../../../docs/04-testing/reports/SPARK-273-deployment-checklist.md>). Separate legacy verification and add event/expiry release checks.
+- Updated [docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md](<../../../docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md>). Specify distinct paid event and covered expiry cases.
+- Updated [docs/05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md](<../../../docs/05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md>). Record the paid gate, covered expiry and slice split.
+- Updated [docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md>). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md>). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md>). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](<../../../docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md>). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md](<../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md>). List Slice 2 retirement touchpoints and migration gates.
+- Updated [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff>). Mark legacy execution guidance superseded and link the active contract.
+- Updated this session record to capture verification and correction scope.

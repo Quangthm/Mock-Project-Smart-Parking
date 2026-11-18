@@ -1,10 +1,10 @@
 # Reservation first slice — frontend handoff and readiness
 
-> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+> **Superseded execution guidance.** Earlier selection payloads using VehicleId/SiteId or Operations terms, and polling examples, describe the legacy client. The current target uses normalized plate, selected slot, a Payment quote reference and SignalR recovery reads. For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
 
 > **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
 
-Reviewed 9 November 2026 in the local SPARK-273 checkout. Source inspection only: no frontend changes, frontend build, application startup, live API test or Docker publish verification was performed by the agent. The user subsequently reported a successful first-slice backend build and deferred tests until the booking workflow is ready. The resumed scope is booking through confirmed reservation, with producer implementations retained by teammates. This is a backlog for frontend/backend teammates, not a claim that bookings work. See the [continuation design and unresolved decisions](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md#request-to-confirmation).
+Reviewed 9 November 2026 in the local SPARK-273 checkout. Source inspection only: no frontend changes, frontend build, application startup, live API test or Docker publish verification was performed by the agent. The user subsequently reported a successful first-slice backend build and deferred tests until the booking workflow is ready. The resumed scope is booking through confirmed reservation, with producer implementations retained by teammates. This is a backlog for frontend/backend teammates, not a claim that bookings work. See the [continuation design and unresolved decisions](../../02-architecture/architecture-decisions/reservation-workflow-target.md#request-to-confirmation).
 
 ## What can be tested now
 
@@ -72,6 +72,8 @@ The user resumed implementation and approved the flow below and final evaluation
 
 ## Approved client flow and examples
 
+> **Historical examples.** Legacy payloads and refresh behavior below are retained for migration analysis.
+
 1. As site/slot/time change, call `POST /api/reservation-price-previews`. Display the server-calculated amount on the form, before proceeding with the selected method. Vehicle/method may be absent for this preview. Keep any existing browser calculation responsive, but refresh from authoritative pricing and discard responses for an older form selection. Never submit a browser amount as authority.
 2. After vehicle, interval and method are complete, call `POST /api/reservation-terms`. Show the returned commercial and operational terms. If an updated amount differs from the earlier display, require acceptance of the updated terms. No layout change is required merely to reorder the inputs.
 3. On acceptance, POST `/api/reservation-requests` with the reviewed terms ID/version, exact selection, `mode=SPECIFIC_SLOT`, paymentMethod and a stable UUID Idempotency-Key. Preserve that key through retries of the same intent.
@@ -93,6 +95,8 @@ The user explicitly excludes these from the current through-confirmation deliver
 - Show requested slot, assigned slot and observed slot distinctly. Audit history is produced through durable events and consumed by its owning service.
 
 ## 11 November 2026 — amended creation, payment and confirmation flow
+
+> **Superseded execution section.** Apply the current target linked above for request fields, realtime status and covered confirmation.
 
 **Status:** approved implementation direction; not a claim of FE/backend readiness. This section supersedes older wording that keeps the create workflow open while awaiting payment. See the [authoritative 11 November decision](../decision-log/2026-11-11-reservation-event-driven-confirmation.md) and [cross-team checklist](2026-11-11-SPARK-273-implementation-alignment.md).
 
