@@ -21,7 +21,7 @@ Scoped Operator may request a hold for handled incident/appeal; Owner for escala
 
 Missing required evidence keeps evidence-dependent decisions pending; a case can exist with EVIDENCE_PENDING. Approved emergency operations may proceed with an audited missing-evidence incident. Never display failed upload as successfully attached.
 
-Accepted recommended operational target: provider deletion confirmation within 24 hours after deletion becomes due, with retry/alert if overdue. This does **not** extend a hard maximum-retention deadline: schedule provider work accordingly, restrict ordinary delivery when due/no hold, and record unresolved failures honestly. Confirm originals/derived delivery copies according to evaluated provider capabilities. Financial documents: 7 years from issuance, subject to holds; conversations: 90 days from last message, unaffected by administrative reads; hold review every 30 days and at case closure (§16.4). C-20 categories otherwise retained.
+Accepted recommended operational target: provider deletion confirmation within 24 hours after deletion becomes due, with retry/alert if overdue. This does **not** extend a hard maximum-retention deadline: schedule provider work accordingly, restrict ordinary delivery when due/no hold, and record unresolved failures honestly. Confirm originals/derived delivery copies according to evaluated provider capabilities. Financial documents: 7 years from issuance, subject to holds; Assistant conversations: one current conversation per Account and role, retained until reset. Reset hides the old transcript and makes it due for deletion after 7 days, subject to acknowledged holds; hold review every 30 days and at case closure (§16.4). C-20 categories otherwise retained.
 
 | Data / action | Approved policy | Remaining precise specification |
 |---|---|---|
@@ -31,7 +31,7 @@ Accepted recommended operational target: provider deletion confirmation within 2
 | Audit logs | Existing 7 years | Existing audit scope and protected access retained. |
 | Operational logs | Existing 90 days hot + 1 year cold | Preserve class distinction and existing lifecycle; production duration cannot be “tested” by a short demo. |
 | Financial documents | 7 years from issuance, subject to holds | Project-policy approval, not a conclusion about applicable law. Preserve issuance/version/adjustment links. |
-| Assistant conversations | 90 days from the last message | Administrative reads do not reset the clock; necessary case evidence follows its own owner/class/hold, not indiscriminate full-chat copying. |
+| Assistant conversations | Current conversation retained until confirmed reset. Prior transcript hidden immediately and due for deletion after 7 days. | One current conversation per Account and role. Acknowledged holds preserve scoped evidence without restoring access. |
 | Hold review | Every 30 days and at case closure | Review is not auto-release. Retain other active holds when one originating hold is released; overdue reviews alert authorized handler. |
 | Deletion proof | Provider outcome plus asset/version/time, retries and capability-appropriate verification, including derived copies | Evaluate actual provider capabilities; record unresolved failure honestly. |
 | Deletion operational target | Existing 24-hour confirmation target | Does not extend any hard retention deadline; start work accordingly and restrict ordinary access when due without hold. |
