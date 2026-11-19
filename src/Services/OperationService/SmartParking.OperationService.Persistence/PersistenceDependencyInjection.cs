@@ -37,6 +37,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IVehicleLocationRepository, VehicleLocationRepository>();
         services.AddScoped<IOccupancyOutboxStore, OccupancyOutboxStore>();
         services.AddScoped<Application.Policies.Ports.ILotPolicyRepository, LotPolicyRepository>();
+        services.AddScoped<Application.PassPlans.Ports.IPassPlanRepository, PassPlanRepository>();
         return services;
     }
 }

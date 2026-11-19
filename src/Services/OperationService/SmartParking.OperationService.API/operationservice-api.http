@@ -1,0 +1,142 @@
+@baseUrl = http://localhost:5055
+@siteId = b0000000-0000-4000-8000-000000000001
+@planId = d1000000-0000-4000-8000-000000000001
+@foreignZoneId = e0000000-0000-4000-8000-000000000099
+@ownerToken = <PASTE_OWNER_JWT_HERE>
+@serviceToken = <PASTE_RS256_OPERATIONS_SERVICE_JWT_HERE>
+@publishIdempotencyKey = publish-monthly-v1
+
+### Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+### A1. Get Site Pass Plans (Happy Path - 200 OK)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### A1. Error - Unauthenticated (401 UNAUTHENTICATED)
+GET {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans
+Accept: application/json
+
+### A2. Save Monthly Pass Plan Draft (Happy Path - 200 OK)
+PUT {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/MONTHLY/draft
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "zoneId": null,
+  "vehicleTypes": ["CAR", "MOTORCYCLE"],
+  "ordinaryCoverageRules": {
+    "dayCovered": true,
+    "nightCovered": true,
+    "excludedZoneIds": []
+  },
+  "isAvailableOnly": true
+}
+
+### A2. Error - Coverage Rules Missing & Guaranteed Capacity Forbidden (400 VALIDATION_ERROR)
+PUT {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/MONTHLY/draft
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "zoneId": null,
+  "vehicleTypes": ["CAR"],
+  "ordinaryCoverageRules": {
+    "dayCovered": false,
+    "nightCovered": false,
+    "excludedZoneIds": []
+  },
+  "isAvailableOnly": false
+}
+
+### A2. Error - Unsupported Zone Outside Site (422 UNSUPPORTED_LOT_SCOPE)
+PUT {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/MONTHLY/draft
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "zoneId": "{{foreignZoneId}}",
+  "vehicleTypes": ["CAR"],
+  "ordinaryCoverageRules": {
+    "dayCovered": true,
+    "nightCovered": true,
+    "excludedZoneIds": []
+  },
+  "isAvailableOnly": true
+}
+
+### A3. Publish Monthly Pass Plan Revision (Happy Path - 200 OK)
+POST {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/MONTHLY/publish
+Authorization: Bearer {{ownerToken}}
+Idempotency-Key: {{publishIdempotencyKey}}
+Content-Type: application/json
+
+{
+  "publishNote": "Initial monthly plan launch"
+}
+
+### A3. Error - Publish Idempotency Conflict (409 IDEMPOTENCY_CONFLICT)
+POST {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/MONTHLY/publish
+Authorization: Bearer {{ownerToken}}
+Idempotency-Key: {{publishIdempotencyKey}}
+Content-Type: application/json
+
+{
+  "publishNote": "Different note with reused idempotency key"
+}
+
+### A4. Enable Monthly Pass Plan (Happy Path - 200 OK, requires financial terms in PaymentService)
+PATCH {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/MONTHLY/enablement
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "isEnabled": true,
+  "expectedPlanRevision": 1
+}
+
+### A4. Error - Enable Yearly Pass Plan Blocked by Q05 (422 YEARLY_POLICY_BLOCKED_Q05)
+PATCH {{baseUrl}}/api/v1/lots/{{siteId}}/pass-plans/YEARLY/enablement
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "isEnabled": true,
+  "expectedPlanRevision": 1
+}
+
+### B1. Driver Browse Public Site Pass Offers (Happy Path - 200 OK Anonymous)
+GET {{baseUrl}}/api/v1/sites/{{siteId}}/pass-offers?vehicleType=CAR
+Accept: application/json
+
+### B1. Error - Invalid Vehicle Filter (400 VALIDATION_ERROR)
+GET {{baseUrl}}/api/v1/sites/{{siteId}}/pass-offers?vehicleType=TRUCK
+Accept: application/json
+
+### B2. Internal Validate & Freeze Pass Plan Snapshot (Happy Path - 200 OK RS256 Service JWT)
+POST {{baseUrl}}/internal/pass-plans/validate-and-freeze
+Authorization: Bearer {{serviceToken}}
+Content-Type: application/json
+
+{
+  "siteId": "{{siteId}}",
+  "planId": "{{planId}}",
+  "expectedPlanRevision": 1,
+  "productType": "MONTHLY",
+  "vehicleType": "CAR"
+}
+
+### B2. Error - X-Service-Key Forbidden / Missing Service JWT (401 UNAUTHENTICATED)
+POST {{baseUrl}}/internal/pass-plans/validate-and-freeze
+X-Service-Key: local-dev-service-key
+Content-Type: application/json
+
+{
+  "siteId": "{{siteId}}",
+  "planId": "{{planId}}",
+  "expectedPlanRevision": 1,
+  "productType": "MONTHLY",
+  "vehicleType": "CAR"
+}
