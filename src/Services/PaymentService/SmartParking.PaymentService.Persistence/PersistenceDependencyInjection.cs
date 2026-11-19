@@ -60,6 +60,9 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
         services.AddScoped<IReservationQuoteRepository, ReservationQuoteRepository>();
         services.AddScoped<IRefundRequestRepository, RefundRequestRepository>();
+        services.AddScoped<ISubscriptionFinancialTermRepository, SubscriptionFinancialTermRepository>();
+        services.AddScoped<ISubscriptionClosureCompensationRepository, SubscriptionClosureCompensationRepository>();
+        services.AddScoped<IPassRevenueRepository, PassRevenueRepository>();
         services.AddScoped<IEventPublisher, OutboxEventPublisher>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
