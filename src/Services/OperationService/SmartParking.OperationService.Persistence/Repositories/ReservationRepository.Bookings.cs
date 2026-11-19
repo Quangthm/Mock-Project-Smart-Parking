@@ -20,7 +20,7 @@ public sealed partial class ReservationRepository
             (r.Status == "PARKING" ||
                 r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now) ||
                 r.Status == "CONFIRMED" || r.Status == "ALLOCATED") &&
-            (r.Status == "PARKING" || r.ExpectedStartTime < claimEnd &&
+            (r.Status == "PARKING" || r.SiteId == proposed.SiteId && r.ExpectedStartTime < claimEnd &&
                 (r.ClaimEndTime ?? r.ExpectedEndTime) > proposed.ExpectedStartTime), ct))
             throw new ReservationGateException(409, "VEHICLE_TIME_CONFLICT", "This plate already has a conflicting booking or physical visit.");
     }

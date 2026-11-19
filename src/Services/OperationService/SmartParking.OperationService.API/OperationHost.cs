@@ -49,6 +49,7 @@ public static class OperationHost
                     };
                 });
         }
+        builder.Services.AddSingleton<IReservationProgressRelay, ReservationProgressRelay>();
         builder.Services.AddReservationMessaging(builder.Configuration);
         builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
         ApiErrors.Configure(builder.Services);
@@ -101,6 +102,9 @@ public static class OperationHost
         if (admissionEnabled) app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        if (admissionEnabled)
+            app.MapHub<ReservationProgressHub>("/hubs/reservation-progress", options =>
+                options.CloseOnAuthenticationExpiration = true);
         app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout");
         return app;
     }

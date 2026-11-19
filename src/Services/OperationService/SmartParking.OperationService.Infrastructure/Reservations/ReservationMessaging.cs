@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MassTransit;
 using SmartParking.Contracts.Audit;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
@@ -15,70 +15,21 @@ using SmartParking.OperationService.Infrastructure.Messaging;
 
 namespace SmartParking.OperationService.Infrastructure.Reservations;
 
-public sealed class AccountAccessRequester(ISendEndpointProvider endpoints) : IAccountAccessRequester
-{
-    public async Task RequestAsync(AccountAccessRequestV1 request, CancellationToken ct)
-    {
-        var endpoint = await endpoints.GetSendEndpoint(new Uri($"queue:{AccountAccessEndpoints.Requests}"));
-        await endpoint.Send(request, context =>
-        {
-            context.MessageId = request.AttemptId;
-            context.CorrelationId = request.WorkflowId;
-        }, ct);
-    }
-}
-
-public sealed class DisabledAccountAccessRequester : IAccountAccessRequester
-{
-    public Task RequestAsync(AccountAccessRequestV1 request, CancellationToken ct) =>
-        throw new ReservationGateException(503, "RESERVATION_ADMISSION_DISABLED", "Reservation admission is not enabled.");
-}
-
-public sealed class DisabledReservationFactsPublisher : IReservationFactsPublisher
-{
-    public Task AvailabilityChangedAsync(ReservationAvailabilityChangedV1 fact, CancellationToken ct) =>
-        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
-    public Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct) =>
-        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
-    public Task HoldChangedAsync(ReservationHoldChangedV1 fact, CancellationToken ct) =>
-        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
-    public Task ConfirmedAsync(ReservationConfirmedV1 fact, CancellationToken ct) =>
-        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
-}
-
-public sealed class AccountAccessDecisionConsumer(IMediator mediator) : IConsumer<AccountAccessDecisionV1>
-{
-    public Task Consume(ConsumeContext<AccountAccessDecisionV1> context) =>
-        mediator.Send(new RecordAccountAccessDecisionCommand(context.Message), context.CancellationToken);
-}
-
-public sealed class ReservationHoldChangedConsumer(IReservationBookingRepository bookings, IMediator mediator)
-    : IConsumer<ReservationHoldChangedV1>
-{
-    public Task Consume(ConsumeContext<ReservationHoldChangedV1> context) =>
-        DispatchAsync(bookings, mediator, context.Message, context.CancellationToken);
-
-    public static async Task DispatchAsync(IReservationBookingRepository bookings, IMediator mediator,
-        ReservationHoldChangedV1 message, CancellationToken ct)
-    {
-        if (message.State != "PENDING_PAYMENT") return;
-        var observed = await bookings.FindOrderProvisioningAsync(message.ReservationId, ct);
-        if (observed is null || observed.RequestId is null || observed.Status != "PENDING_PAYMENT") return;
-        if (observed.DepositAmount > 0m)
-        {
-            await mediator.Send(new ProvisionReservationOrderCommand(message.ReservationId), ct);
-            return;
-        }
-        if (observed.DepositAmount == 0m)
-            await mediator.Send(new AcceptZeroPriceTermsCommand(message.ReservationId), ct);
-    }
-}
-
 public static class ReservationMessaging
 {
     public static IServiceCollection AddReservationMessaging(this IServiceCollection services, IConfiguration configuration)
     {
+        services.TryAddScoped<IQuoteAdmissionStarter, UnavailableQuoteAdmissionStarter>();
         var admissionEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
+        var sagaEnabled = admissionEnabled && configuration.GetValue<bool>("ReservationAdmission:SagaConsumersEnabled");
+        if (sagaEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerUser"]) ||
+                string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerPassword"]) ||
+                !configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
+                throw new InvalidOperationException("Saga endpoints require restricted credentials and durable outbox delivery.");
+            services.AddScoped<IAdmissionMessages, AdmissionMessages>();
+        }
         var auditEnabled = configuration.GetValue<bool>("Messaging:AuditEnabled");
         var gateCheckoutEnabled = configuration.GetValue<bool>("Messaging:Enabled");
         if (auditEnabled) services.AddScoped<IOperationsAuditPublisher, OperationsAuditPublisher>();
@@ -107,8 +58,21 @@ public static class ReservationMessaging
             throw new InvalidOperationException("Configure Operations broker credentials for enabled messaging.");
         services.AddMassTransit(registration =>
         {
+            if (sagaEnabled)
+            {
+                registration.AddConsumer<PlateDecisionConsumer>();
+                registration.AddConsumer<SlotDecisionConsumer>();
+                registration.AddSagaStateMachine<ReservationAdmissionMachine, Persistence.Entities.ReservationAdmissionState>()
+                    .EntityFrameworkRepository(repository =>
+                    {
+                        repository.ConcurrencyMode = ConcurrencyMode.Pessimistic;
+                        repository.ExistingDbContext<ReservationDbContext>();
+                        repository.UsePostgres();
+                    });
+            }
             if (admissionEnabled)
             {
+                registration.AddConsumer<ReservationProgressConsumer>();
                 registration.AddConsumer<AccountAccessDecisionConsumer>();
                 registration.AddConsumer<ReservationHoldChangedConsumer>();
                 registration.AddConsumer<ReservationPaymentSucceededConsumer>();
@@ -159,6 +123,12 @@ public static class ReservationMessaging
                 bus.Message<ReservationHoldChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));
                 if (admissionEnabled)
                 {
+                    bus.ReceiveEndpoint(ReservationProgressPublisher.Queue, endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(1)));
+                        endpoint.ConfigureConsumer<ReservationProgressConsumer>(context);
+                    });
                     bus.ReceiveEndpoint("smartpark-operation-reservation-hold-changed-v1", endpoint =>
                     {
                         endpoint.UseMessageRetry(retry => retry.Intervals(
@@ -183,6 +153,28 @@ public static class ReservationMessaging
                     publish.ExchangeType = "fanout";
                 });
                 // Audit owner provisions/binds the durable queue before relay is enabled.
+                if (sagaEnabled)
+                {
+                    bus.ReceiveEndpoint("operations-reservation-plate-results-v1", endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
+                        endpoint.ConfigureConsumer<PlateDecisionConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint("operations-reservation-slot-results-v1", endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
+                        endpoint.ConfigureConsumer<SlotDecisionConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint(AdmissionMessages.SagaQueue, endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseMessageRetry(r => r.Interval(3, TimeSpan.FromMilliseconds(250)));
+                        endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
+                        endpoint.ConfigureSaga<Persistence.Entities.ReservationAdmissionState>(context);
+                    });
+                }
                 if (admissionEnabled) bus.ReceiveEndpoint(AccountAccessEndpoints.Decisions, endpoint =>
                 {
                     endpoint.UseMessageRetry(retry =>
@@ -198,103 +190,11 @@ public static class ReservationMessaging
         services.Configure<MassTransitHostOptions>(options => options.WaitUntilStarted = false);
         if (admissionEnabled)
         {
+            services.AddScoped<IReservationProgressPublisher, ReservationProgressPublisher>();
             services.AddHostedService<ReservationAuthorizationWorker>();
             services.AddHostedService<ReservationFacilityDependencyWorker>();
             services.AddHostedService<ReservationOrderProvisioningWorker>();
         }
         return services;
-    }
-}
-
-// This queue is independent of receipt terminal state: completed/expired bookings can still
-// owe a durable Facility completion or abort acknowledgement after a remote outage.
-public sealed class ReservationFacilityDependencyWorker(IServiceScopeFactory scopes, TimeProvider clock,
-    ILogger<ReservationFacilityDependencyWorker> logger) : BackgroundService
-{
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), clock);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                using var queryScope = scopes.CreateScope();
-                var due = await queryScope.ServiceProvider.GetRequiredService<IReservationFacilityDependencyRepository>()
-                    .DueAsync(clock.GetUtcNow(), 100, stoppingToken);
-                foreach (var token in due)
-                {
-                    try
-                    {
-                        using var scope = scopes.CreateScope();
-                        await scope.ServiceProvider.GetRequiredService<IMediator>()
-                            .Send(new AdvanceFacilityDependencyCommand(token), stoppingToken);
-                    }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-                    catch (Exception error)
-                    {
-                        logger.LogWarning("Facility dependency retained ({FailureType}).", error.GetType().Name);
-                        try
-                        {
-                            using var retryScope = scopes.CreateScope();
-                            await retryScope.ServiceProvider.GetRequiredService<IMediator>()
-                                .Send(new ScheduleFacilityDependencyRetryCommand(token), stoppingToken);
-                        }
-                        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-                        catch (Exception retryError)
-                        { logger.LogWarning("Facility dependency scheduling retained ({FailureType}).", retryError.GetType().Name); }
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception error)
-            { logger.LogWarning("Facility dependency sweep retained ({FailureType}).", error.GetType().Name); }
-        }
-    }
-}
-
-public sealed class ReservationAuthorizationWorker(IServiceScopeFactory scopes, TimeProvider clock,
-    ILogger<ReservationAuthorizationWorker> logger) : BackgroundService
-{
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), clock);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                using var scope = scopes.CreateScope();
-                var due = await scope.ServiceProvider.GetRequiredService<IReservationRequestRepository>().DueAsync(clock.GetUtcNow(), stoppingToken);
-                foreach (var id in due)
-                {
-                    using var requestScope = scopes.CreateScope();
-                    try
-                    {
-                        var mediator = requestScope.ServiceProvider.GetRequiredService<IMediator>();
-                        await mediator.Send(new AdvanceReservationAuthorizationCommand(id), stoppingToken);
-                        await mediator.Send(new ProgressReservationCommand(id), stoppingToken);
-                    }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-                    catch (Exception error)
-                    {
-                        logger.LogWarning("Reservation work retained ({FailureType}).", error.GetType().Name);
-                        using var recoveryScope = scopes.CreateScope();
-                        try
-                        {
-                            await recoveryScope.ServiceProvider.GetRequiredService<IMediator>()
-                                .Send(new RecordReservationWorkFailureCommand(id), stoppingToken);
-                        }
-                        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-                        catch (Exception recoveryError)
-                        { logger.LogWarning("Reservation recovery scheduling retained ({FailureType}).", recoveryError.GetType().Name); }
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception error)
-            {
-                // No raw SQL/connection/provider values in this background failure log.
-                logger.LogWarning("Reservation authorization sweep failed ({FailureType}); pending state is retained.", error.GetType().Name);
-            }
-        }
     }
 }

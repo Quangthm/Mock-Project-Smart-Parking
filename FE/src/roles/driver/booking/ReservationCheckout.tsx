@@ -4,11 +4,10 @@ import { driverReservationApi, type ReservationSelection } from "../../../lib/dr
 import { formatStatus } from "../../../lib/formatStatus"
 import {
   reservationsApi,
-  type OwnReservation,
   type ReservationReceipt,
   type ReservationTerms,
 } from "../../../lib/reservationsApi"
-import { useServerRefresh } from "../../../lib/serverRefresh"
+import { useReservationProgress } from "../../../lib/reservationProgress"
 import { PaymentCheckout } from "../payments/PaymentCheckout"
 
 type Attempt = {
@@ -22,7 +21,7 @@ type Attempt = {
   reservationId?: string
 }
 
-const terminal = new Set(["REJECTED", "DENIED", "EXPIRED", "FAILED_DEPENDENCY", "CANCELLED"])
+const terminal = new Set(["REJECTED", "DENIED", "EXPIRED", "FAILED_DEPENDENCY", "TIMED_OUT", "DEPENDENCY_UNAVAILABLE", "CANCELLED", "UNFULFILLABLE"])
 
 export function readReservationAttempt(storageKey: string): Attempt | null {
   try {
@@ -43,7 +42,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
   const [reviewed, setReviewed] = useState<{ terms: ReservationTerms; selection: ReservationSelection } | null>(null)
   const [accepted, setAccepted] = useState(false)
   const [receipt, setReceipt] = useState<ReservationReceipt | null>(null)
-  const [booking, setBooking] = useState<OwnReservation | null>(null)
+  const { snapshot, connected, reconnect } = useReservationProgress(attempt?.requestId)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(Date.now)
@@ -78,24 +77,13 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
     }
   }
 
-  async function refresh(value: Attempt, submit = false) {
-    if (!value.requestId && !submit) return
-
+  async function submit(value: Attempt) {
     // An ambiguous create response is retried only with its persisted intent and key.
-    const next = value.requestId
-      ? await reservationsApi.receipt(value.requestId)
-      : await driverReservationApi.create(value.intent, value.key)
+    const next = await driverReservationApi.create(value.intent, value.key)
     if (!current()) return
 
-    if (!value.requestId || (next.reservationId && value.reservationId !== next.reservationId)) {
-      save({ ...value, requestId: next.requestId, reservationId: next.reservationId ?? undefined })
-    }
+    save({ ...value, requestId: next.requestId, reservationId: next.reservationId ?? undefined })
     setReceipt(next)
-
-    if (next.reservationId) {
-      const currentBooking = await reservationsApi.booking(next.reservationId)
-      if (current()) setBooking(currentBooking)
-    }
   }
 
   function review() {
@@ -131,48 +119,30 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
       }
       // Persist before the HTTP request so retries cannot create a second intent.
       save(value)
-      await refresh(value, true)
+      await submit(value)
     })
   }
 
   useEffect(() => {
-    if (attempt?.requestId) void run(() => refresh(attempt))
-    // Only resume a known receipt on initial mount; an unacknowledged create
-    // remains available through "Retry same request" with the original key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (attempt && snapshot?.reservationId && attempt.reservationId !== snapshot.reservationId) {
+      save({ ...attempt, reservationId: snapshot.reservationId })
+    }
+  }, [attempt, snapshot?.reservationId])
 
   const failed = Boolean(
-    (receipt && terminal.has(receipt.state)) || (booking && terminal.has(booking.state)),
+    terminal.has(snapshot?.admissionState ?? receipt?.state ?? "") || terminal.has(snapshot?.reservationState ?? ""),
   )
-  const confirmed = !failed && booking?.state === "CONFIRMED"
-
-  useServerRefresh(
-    attempt?.requestId && !failed && !confirmed ? attempt.requestId : undefined,
-    isCurrent => attempt ? run(async () => {
-      if (isCurrent()) await refresh(attempt)
-    }) : undefined,
-    5000,
-  )
+  const confirmed = !failed && snapshot?.reservationState === "CONFIRMED"
 
   useEffect(() => {
-    if (!booking?.holdExpiresAt || confirmed || failed) return
+    if (!snapshot?.holdExpiresAt || confirmed || failed) return
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [booking?.holdExpiresAt, confirmed, failed])
+  }, [snapshot?.holdExpiresAt, confirmed, failed])
 
-  const holdExpired = Boolean(booking?.holdExpiresAt && Date.parse(booking.holdExpiresAt) <= now)
-  const orderId = !failed && booking?.state === "PENDING_PAYMENT" && !holdExpired &&
-    attempt?.intent.paymentMethod === "PAYOS" ? booking.orderId : null
-
-  useEffect(() => {
-    if (!orderId || !booking?.reservationId) return
-    try {
-      sessionStorage.setItem(`sp_reservation_order:${orderId}`, booking.reservationId)
-    } catch {
-      // The payment result page can still find the booking through Operations.
-    }
-  }, [orderId, booking?.reservationId])
+  const holdExpired = Boolean(snapshot?.holdExpiresAt && Date.parse(snapshot.holdExpiresAt) <= now)
+  const orderId = connected && !failed && snapshot?.reservationState === "PENDING_PAYMENT" &&
+    snapshot.paymentReadiness === "AVAILABLE" && !holdExpired && attempt?.intent.paymentMethod === "PAYOS" ? snapshot.orderId : null
 
   function closeAttempt() {
     if (!current()) return
@@ -212,9 +182,10 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
 
     {attempt && <p role="status">
       {confirmed ? "Reservation confirmed." : failed
-        ? formatStatus(receipt?.code || booking?.state || receipt?.state || "Reservation failed")
-        : booking?.state === "PENDING_PAYMENT"
-          ? holdExpired ? "The payment deadline has passed. Checking the reservation outcome."
+        ? formatStatus(snapshot?.outcomeCode || receipt?.code || snapshot?.reservationState || snapshot?.admissionState || receipt?.state || "Reservation failed")
+        : attempt.requestId && !connected ? "Waiting for live reservation updates."
+        : snapshot?.reservationState === "PENDING_PAYMENT"
+          ? holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
             : orderId ? "Your payment order is ready."
             : attempt.intent.paymentMethod === "CASH" ? "Cash reservation acceptance is not available in this flow."
             : "Waiting for the reservation payment order."
@@ -222,20 +193,29 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
           : "The request has no receipt yet. Retry with the same request key."}
     </p>}
 
-    {booking && <>
-      <p>Booked total: {money(booking.bookedAmount, booking.currency ?? "VND")} · Due now: {money(booking.depositAmount, booking.currency ?? "VND")}</p>
-      {booking.holdExpiresAt && <p>Payment deadline: {new Date(booking.holdExpiresAt).toLocaleString()}</p>}
+    {snapshot && <dl aria-label="Reservation checks" className="grid gap-2 sm:grid-cols-2">
+      {([["Account", snapshot.checks.account], ["Registered plate", snapshot.checks.vehicle],
+        ["Facility slot", snapshot.checks.facility], ["Booking evaluation", snapshot.checks.booking]] as const)
+        .map(([label, status]) => <div key={label}><dt>{label}</dt><dd>{formatStatus(status)}</dd></div>)}
+      {snapshot.reservationState && <div><dt>Reservation</dt><dd>{formatStatus(snapshot.reservationState)}</dd></div>}
+      {snapshot.paymentReadiness && <div><dt>Payment order</dt><dd>{formatStatus(snapshot.paymentReadiness)}</dd></div>}
+    </dl>}
+
+    {snapshot?.reservationId && <>
+      <p>Booked total: {money(snapshot.bookedAmount, snapshot.currency ?? "VND")} · Due now: {money(snapshot.depositAmount, snapshot.currency ?? "VND")}</p>
+      {snapshot.holdExpiresAt && <p>Payment deadline: {new Date(snapshot.holdExpiresAt).toLocaleString()}</p>}
     </>}
 
-    {orderId && <PaymentCheckout key={orderId} showMethodPicker={false} bookingOrderId={orderId} holdExpiresAt={booking?.holdExpiresAt ?? undefined} />}
+    {orderId && <PaymentCheckout key={orderId} showMethodPicker={false} reservationOrderId={orderId}
+      reservationRequestId={attempt?.requestId} holdExpiresAt={snapshot?.holdExpiresAt} />}
 
     <div className="flex flex-wrap gap-3">
       {!attempt && <button type="button" className="btn-outline" disabled={busy} onClick={onBack}>Back to payment methods</button>}
       {!attempt && <button type="button" className="btn-primary" disabled={busy || !selection || (Boolean(reviewed) && (!accepted || Date.parse(reviewed!.terms.validUntil) <= now))} onClick={reviewed ? confirm : review}>
         {busy ? "Loading…" : reviewed ? "Accept terms and reserve" : "Review price and terms"}
       </button>}
-      {attempt && !failed && !confirmed && <button type="button" className="btn-outline" disabled={busy} onClick={() => void run(() => refresh(attempt, true))}>
-        {busy ? "Checking…" : attempt.requestId ? "Check reservation status" : "Retry same request"}
+      {attempt && !failed && !confirmed && (!attempt.requestId || !connected) && <button type="button" className="btn-outline" disabled={busy} onClick={() => attempt.requestId ? reconnect() : void run(() => submit(attempt))}>
+        {busy ? "Checking…" : attempt.requestId ? "Reconnect" : "Retry same request"}
       </button>}
       {(failed || confirmed) && <button type="button" className="btn-primary" onClick={closeAttempt}>Done</button>}
     </div>

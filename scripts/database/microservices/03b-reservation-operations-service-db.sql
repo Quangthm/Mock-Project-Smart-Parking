@@ -15,7 +15,14 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     operation TEXT NOT NULL CHECK (operation = 'CREATE_RESERVATION'),
     intent_json JSONB NOT NULL,
     fingerprint TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
+    progress_version BIGINT NOT NULL DEFAULT 1 CHECK (progress_version > 0),
+    account_check TEXT,
+    plate_check TEXT,
+    slot_check TEXT,
+    resolved_site_id UUID,
+    resolved_tenant_id UUID,
+    facility_version TEXT,
+    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,
     overall_deadline TIMESTAMPTZ NOT NULL,
@@ -37,7 +44,12 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     CHECK (admitted_at < overall_deadline)
 );
 CREATE INDEX IF NOT EXISTS ix_reservation_requests_due ON reservation_requests(next_action_at, id)
-    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING');
+    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING');
+
+CREATE TABLE IF NOT EXISTS reservation_admission_sagas (
+    correlation_id UUID PRIMARY KEY REFERENCES reservation_requests(id),
+    current_state TEXT NOT NULL
+);
 
 -- Review snapshots are immutable; acceptance binds each review to one workflow.
 CREATE TABLE IF NOT EXISTS reservation_terms (
@@ -343,7 +355,8 @@ CREATE TABLE IF NOT EXISTS reservations (
     CHECK (request_id IS NULL OR status NOT IN ('CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED') OR
         (confirmation_evaluated_at IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_at = confirmation_evaluated_at AND confirmed_at < expected_start_time AND confirmation_effect_id IS NOT NULL)),
     CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL)),
-    CONSTRAINT no_overlapping_reservations_per_vehicle EXCLUDE USING gist (
+    CONSTRAINT no_overlapping_reservations_per_site_plate EXCLUDE USING gist (
+        site_id WITH =,
         normalized_plate WITH =,
         tstzrange(expected_start_time, COALESCE(claim_end_time, expected_end_time), '[)') WITH &&
     ) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))

@@ -67,6 +67,7 @@ internal static class BookingContracts
         row.ZeroPriceAcceptanceState,
         row.BookedAmount, row.DepositAmount, row.Currency, row.ConfirmedAt, row.CreatedAt)
     {
+        RequestId = row.RequestId,
         LicensePlate = row.OriginalPlate ?? row.NormalizedPlate
     };
 

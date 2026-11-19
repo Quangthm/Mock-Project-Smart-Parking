@@ -22,6 +22,10 @@ public sealed class ReservationBookingController(IMediator mediator) : ApiContro
     public async Task<IActionResult> Review(BookingSelection request, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(new ReviewReservationTermsCommand(request), ct) });
 
+    [HttpGet("/api/me/reservations/by-order/{orderId:guid}/request")]
+    public async Task<IActionResult> FindRequest(Guid orderId, CancellationToken ct) =>
+        Ok(new { success = true, data = new { requestId = await Mediator.Send(new ReadOwnOrderRequest(orderId), ct) } });
+
     [HttpGet("/api/me/reservations/{id:guid}")]
     public async Task<IActionResult> Read(Guid id, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(new ReadOwnBookingQuery(id), ct) });

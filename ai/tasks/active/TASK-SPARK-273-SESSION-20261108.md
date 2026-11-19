@@ -488,3 +488,11 @@ All paths are repository-relative. The four pre-existing changes listed above ar
 - `tests/Services/SmartParking.OperationService.Tests/PlateQuoteReviewTests.cs`
 - `tests/Services/SmartParking.OperationService.Tests/ReservationCommercialClientTests.cs`
 - `tests/Services/SmartParking.OperationService.Tests/StubHttpMessageHandler.cs`
+
+## 19 November 2026 — Slice 3 gated implementation
+
+The branch remains at `960aaef8742740f567008a8bf97a0133be6d950f`. See the [Slice 3 owner handoff and file inventory](../../../docs/05-project-management/handoffs/2026-11-19-SPARK-273-slice-3.md) for the Saga, admission isolation, same-site overlap, committed SignalR progress, recovery dispositions, test commands and remaining deployment gates.
+
+Operations has 74 distinct passing cases across the final suite and its one targeted restart-test rerun. Facility passed 71, UserService passed 12 and frontend passed 20. Fresh PostgreSQL, RabbitMQ and an authenticated test WebSocket exercised the Operations path. Owner replies were controlled. Hard-crash boundaries, deployed ACLs and a real provider transaction remain unverified.
+
+Production quote submission remains gated. Payment proof and consumption semantics, guarded quote-based hold creation, and the historical terms/data transition keep the branch open. The existing frontend review/create pair and post-hold recovery remain available. No staging, commit, push or deployment.

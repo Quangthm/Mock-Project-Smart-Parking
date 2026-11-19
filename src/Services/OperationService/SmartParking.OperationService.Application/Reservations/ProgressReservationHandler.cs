@@ -91,7 +91,16 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         await guards.LockVehicleAsync(request.VehiclePlate!, ct);
         await guards.LockSiteAsync(input.SiteId, ct);
         var current = resourceFacts.Booking;
-        BookingContracts.ValidateFacility(current, selection);
+        try
+        {
+            BookingContracts.ValidateFacility(current, selection);
+        }
+        catch (ReservationGateException error) when (error.Code == "SLOT_INELIGIBLE")
+        {
+            request.RecordLegacySlotCheck(false);
+            throw;
+        }
+        request.RecordLegacySlotCheck(true);
         var policy = await mediator.Send(new ResolveReservationPoliciesQuery(current.TenantId, current.SiteId, now), ct);
         if (current != accepted.Facility || policy.Platform.Id != accepted.PlatformPolicyId ||
             policy.Platform.Version != accepted.PlatformPolicyVersion || policy.Site.Id != accepted.SitePolicyId ||

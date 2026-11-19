@@ -22,6 +22,8 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.AddTransactionalOutboxEntities();
+        modelBuilder.Entity<ReservationAdmissionState>().HasKey(x => x.CorrelationId);
+        Map<ReservationAdmissionState>(modelBuilder, "reservation_admission_sagas");
         Map<ReservationRequest>(modelBuilder, "reservation_requests");
         Map<ReservationTerms>(modelBuilder, "reservation_terms");
         Map<ReservationFacilityDependency>(modelBuilder, "reservation_facility_dependencies");
