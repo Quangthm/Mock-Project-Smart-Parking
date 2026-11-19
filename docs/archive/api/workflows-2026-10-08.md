@@ -95,7 +95,7 @@ Parking dùng `Services:Operation`, `Services:Key`; optional HTTPS `Services:Str
 
 Recovery: `scripts/recover-structure-hold.ps1 -SiteId <id> -ParkingStopped -SchemaRoot <checkout>` inspect trước; `-Apply` chỉ sau khi mọi Parking instance đã dừng. Script kiểm tra không còn DB connections, publish physical/capacity/backup snapshot, release fence rồi finalize operations có physical marker. Không release mù với outcome null.
 
-AI scaffold: xem [chatbot-scaffold](../../03-design/ai/chatbot-scaffold.md). Disabled mặc định, model/backend ports và read allowlist; không thêm chatbot business rules hoặc live writes.
+AI scaffold: xem [chatbot-scaffold](../../03-design/ai/chatbot-design.md#chatbot-scaffold). Disabled mặc định, model/backend ports và read allowlist; không thêm chatbot business rules hoặc live writes.
 
 ## Owner email OTP correction (08/10/2026)
 

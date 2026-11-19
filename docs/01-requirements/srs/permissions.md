@@ -40,6 +40,7 @@ Every action below requires the applicable role/permission and target resource s
 | audit.search | — | case-needed facts only | owned staff/case facts only | authorized audit search | Notification/Audit; no log-edit grant |
 | support.case.handle | submit/view own | assigned lot matters | escalated owned case | platform/account/global dispute | Notification/Audit; scoped context references, asynchronous |
 | knowledge.publish | — | — | supply content outside publication workflow | publish versioned approved corpus | IoT Assistant; no Developer actor or Owner publication |
+| assistant.chat | own current chat and reset | — | own current chat and reset | own current chat and reset | IoT Assistant scopes each chat by authenticated Account and role |
 | assistant.tools | own authorized calls | no extra role powers | no extra role powers | no extra role powers | Domain APIs reauthorize; UI confirms normal reservation commands |
 | cancellation-abuse.configure/dispose-alert | — | — | — | platform policy/disposition | Operations authoritative restriction; Audit projects; no automatic ban |
 | retention.execute | — | request scoped holds | request scoped holds | policy/investigation within baseline | Data-owning service; automatic due processing, no blanket private read |

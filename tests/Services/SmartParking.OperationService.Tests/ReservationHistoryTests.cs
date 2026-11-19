@@ -24,6 +24,28 @@ public sealed class ReservationHistoryTests
     private static readonly CancellationToken Ct = CancellationToken.None;
 
     [Fact]
+    public async Task AssistantDateRange_FiltersBeforePaginationAndPreservesHistoryLinksAndVehicle()
+    {
+        var account = Guid.NewGuid();
+        var matching = CreateBooking(account);
+        matching.VehicleType = "CAR";
+        matching.OriginalPlate = "SYNTHETIC";
+        var outside = CreateBooking(account);
+        outside.CreatedAt = CreatedAt.AddMinutes(5);
+        outside.ExpectedStartTime = matching.ExpectedEndTime;
+        outside.ExpectedEndTime = matching.ExpectedEndTime.AddHours(1);
+        var allocation = CreateAllocation(matching, "RESERVED", CreatedAt);
+        await using var db = await CreateDbAsync(matching, outside, allocation);
+        await using var services = CreateServices(db, account);
+        var result = Assert.Single(await services.GetRequiredService<IMediator>().Send(
+            new ReadOwnBookingsQuery(PageSize: 1, From: matching.ExpectedStartTime,
+                To: matching.ExpectedEndTime), Ct));
+        Assert.Equal(matching.Id, result.ReservationId);
+        Assert.Equal(allocation.SlotId, result.AllocatedSlotId);
+        Assert.Equal(new BookingVehicle("CAR", "SYNTHETIC"), result.Vehicle);
+    }
+
+    [Fact]
     public async Task ListAndDetail_ReturnSameOwnBookingWithRecordedPlateAndIndependentStates()
     {
         var accountId = Guid.NewGuid();
@@ -77,6 +99,11 @@ public sealed class ReservationHistoryTests
         Assert.True(detailJson.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal(JsonValueKind.Array, listJson.RootElement.GetProperty("data").ValueKind);
         var data = detailJson.RootElement.GetProperty("data");
+        foreach (var representation in new[] { data, listJson.RootElement.GetProperty("data")[0] })
+        {
+            Assert.Equal(booking.RequestId!.Value, representation.GetProperty("requestId").GetGuid());
+            Assert.Equal("51A-12345", representation.GetProperty("vehicle").GetProperty("displayLabel").GetString());
+        }
         Assert.Equal(item.ReservationId, data.GetProperty("reservationId").GetGuid());
         Assert.Equal(JsonValueKind.Null, data.GetProperty("paymentStatus").ValueKind);
         Assert.Equal(JsonValueKind.Null, data.GetProperty("siteName").ValueKind);

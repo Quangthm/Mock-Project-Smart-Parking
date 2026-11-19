@@ -19,6 +19,7 @@ public static class FacilityHost
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
+        builder.AddDiscoveryCatalogue();
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddDbContext<ParkingDbContext>(options =>
@@ -114,6 +115,7 @@ public static class FacilityHost
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapDiscoveryCatalogue();
         return app;
     }
 }

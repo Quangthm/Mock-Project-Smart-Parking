@@ -28,6 +28,7 @@ services:
       - ./scripts/database/microservices/02-facility-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
       - ./scripts/database/microservices/03a-parking-structure-ops-service-db.sql:/docker-entrypoint-initdb.d/02-base.sql:ro
       - ./scripts/database/integration/realtime-projection.sql:/docker-entrypoint-initdb.d/03-realtime-projection.sql:ro
+      - ./scripts/database/migrations/20261106_facility_discovery_publication.sql:/docker-entrypoint-initdb.d/04-discovery-publication.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartpark_facility -d smartpark_facility"]
       interval: 5s
@@ -90,8 +91,13 @@ services:
     volumes:
       - iot-schema-data:/var/lib/postgresql/data
       - ./scripts/database/microservices/06-iot-recognition-service-db.sql:/docker-entrypoint-initdb.d/01-base.sql:ro
+      # Ordered Assistant schema for new volumes. Existing volumes keep their data.
+      - ./scripts/database/migrations/20261103_iot_assistant_management.sql:/docker-entrypoint-initdb.d/02-assistant-management.sql:ro
+      - ./scripts/database/migrations/20261105_iot_assistant_s02.sql:/docker-entrypoint-initdb.d/03-assistant-s02.sql:ro
+      - ./scripts/database/migrations/20261105_iot_assistant_s05.sql:/docker-entrypoint-initdb.d/04-assistant-s05.sql:ro
+      - ./scripts/database/migrations/20261110_iot_assistant_current_chat.sql:/docker-entrypoint-initdb.d/05-assistant-current-chat.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smartpark_iot -d smartpark_iot"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U smartpark_iot -d smartpark_iot"]
       interval: 5s
       timeout: 3s
       retries: 10

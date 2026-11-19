@@ -7,6 +7,7 @@ public sealed record BookingView(Guid ReservationId, string State, Guid SiteId, 
     DateTimeOffset CreatedAt)
 {
     public Guid? RequestId { get; init; }
+    public BookingVehicle? Vehicle { get; init; }
     public string? SiteName { get; init; }
     public string? SiteAddress { get; init; }
     public string? LicensePlate { get; init; }

@@ -19,6 +19,8 @@ public static class OperationHost
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
+        builder.AddParkingSearch();
+        builder.AddOwnReservationReadDependencies();
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddApplicationServices();
@@ -102,6 +104,7 @@ public static class OperationHost
         if (admissionEnabled) app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapParkingSearch();
         if (admissionEnabled)
             app.MapHub<ReservationProgressHub>("/hubs/reservation-progress", options =>
                 options.CloseOnAuthenticationExpiration = true);
