@@ -59,10 +59,10 @@ Hướng dẫn QA hiện hành: [setup máy mới/add-on, dữ liệu và test t
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
-./scripts/initialize-assistant-docker.ps1
+./scripts/setup-assistant-docker.ps1 -Initialize
 ```
 
-Initializer ghi đường dẫn tương đối từ root `.env` tới `.cache/assistant-docker`, tạo JWT/PFX/TLS riêng và bảo toàn bộ cấu hình đã có. Nó không xuất bản corpus: đặt cặp Markdown + `publication.json` đã được Admin duyệt vào thư mục knowledge, sau đó bật Guest release và làm các bước setup bên dưới. Cả chat đăng nhập cũng cần corpus hợp lệ. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `./scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey`: giữ nguyên private key và xuất đúng public key, tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Bộ Assistant/TLS đã có phải giữ và cấu hình thủ công; không rotate bằng initializer.
+Initializer ghi đường dẫn tương đối từ root `.env` tới `.cache/assistant-docker`, tạo JWT/PFX/TLS riêng và bảo toàn bộ cấu hình đã có. Nó không xuất bản corpus: đặt cặp Markdown + `publication.json` đã được Admin duyệt vào thư mục knowledge, sau đó bật Guest release và làm các bước setup bên dưới. Cả chat đăng nhập cũng cần corpus hợp lệ. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `./scripts/setup-assistant-docker.ps1 -Initialize -UseExistingSigningKey`: giữ nguyên private key và xuất đúng public key, tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Bộ Assistant/TLS đã có phải giữ và cấu hình thủ công; không rotate bằng initializer.
 
 
 #### Tìm bãi qua Docker (Discovery local)
@@ -98,7 +98,7 @@ Kiểm offline: `./scripts/test-discovery-docker.ps1`. Kiểm đầu vào máy h
 **Smoke test cách ly cho tester.** Mở Docker Desktop ở chế độ Linux containers và chạy từ thư mục gốc bằng Windows PowerShell 5.1+ hoặc PowerShell 7+:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-docker-setup.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant.ps1 -Suite Docker
 ```
 
 Bộ test tự tạo PostgreSQL, JWT và tài liệu FAQ mẫu. Tester có thể chạy trước khi chuẩn bị `.env`, tài khoản UserService và provider key. Test build image `smartpark/assistant:local`, kiểm Settings, quyền Admin/Driver, FAQ và lịch sử qua lần chạy lại setup, rồi dọn container và volume test.

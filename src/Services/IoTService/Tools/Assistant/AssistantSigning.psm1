@@ -1,3 +1,6 @@
+﻿# Assistant signing tools for Windows PowerShell 5.1 and PowerShell 7.
+. (Join-Path $PSScriptRoot '../../../../../scripts/jwt-environment.ps1')
+
 # Windows PowerShell 5.1 bridge to the repository's .NET 10 cryptography APIs.
 # Key material travels through redirected stdin only, never process arguments.
 function Invoke-AssistantCrypto {
@@ -55,3 +58,5 @@ function ConvertFrom-AssistantSigningJson([string]$Json) {
     }
     return (Convert-AssistantJsonValue ($Json | ConvertFrom-Json))
 }
+
+Export-ModuleMember -Function Invoke-AssistantCrypto, ConvertFrom-AssistantSigningJson

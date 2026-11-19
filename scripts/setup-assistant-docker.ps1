@@ -1,11 +1,393 @@
+﻿#requires -Version 5.1
+<#
+.SYNOPSIS
+Set up Assistant Docker or explicitly select a local provisioning operation.
+.DESCRIPTION
+The default mode preserves Docker setup and preflight. Initialize provisions local
+signing and TLS material. ExportSigning copies an explicitly verified existing key
+into .cache. PublishKnowledge prepares a deployment copy after recorded Admin review.
+#>
+[CmdletBinding(DefaultParameterSetName = 'Docker')]
 param(
+    [Parameter(ParameterSetName = 'Docker', Position = 0)]
+    [Parameter(ParameterSetName = 'Initialize')]
+    [Parameter(ParameterSetName = 'ExportSigning')]
     [string]$EnvPath,
-    [switch]$ValidateOnly,
-    [switch]$NoBuild,
-    [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$SchemaProject = 'smartpark-schema'
+
+    [Parameter(ParameterSetName = 'Docker')][switch]$ValidateOnly,
+    [Parameter(ParameterSetName = 'Docker')][switch]$NoBuild,
+    [Parameter(ParameterSetName = 'Docker')]
+    [ValidatePattern('^[a-z0-9][a-z0-9_-]*$')][string]$SchemaProject = 'smartpark-schema',
+
+    [Parameter(Mandatory, ParameterSetName = 'Initialize')][switch]$Initialize,
+    [Parameter(ParameterSetName = 'Initialize')][switch]$UseExistingSigningKey,
+
+    [Parameter(Mandatory, ParameterSetName = 'ExportSigning')][switch]$ExportSigning,
+    [Parameter(Mandatory, ParameterSetName = 'ExportSigning')][string]$Source,
+    [Parameter(ParameterSetName = 'ExportSigning')][string]$UserSecretsPath,
+    [Parameter(ParameterSetName = 'ExportSigning')][uri]$UserJwksUri,
+    [Parameter(ParameterSetName = 'ExportSigning')][switch]$ConfirmExistingSource,
+    [Parameter(ParameterSetName = 'ExportSigning')][string]$OutputPath = '.cache/assistant-signing/user-private.pem',
+
+    [Parameter(Mandatory, ParameterSetName = 'PublishKnowledge')][switch]$PublishKnowledge,
+    [Parameter(Mandatory, ParameterSetName = 'PublishKnowledge')][string]$ApprovedBy,
+    [Parameter(Mandatory, ParameterSetName = 'PublishKnowledge')][string]$ApprovalReference,
+    [Parameter(ParameterSetName = 'PublishKnowledge')]
+    [string]$SourcePath = 'docs/03-design/ai/p1/knowledge/smartpark-knowledge.md',
+    [Parameter(ParameterSetName = 'PublishKnowledge')]
+    [string]$OutputDirectory = '.cache/assistant-docker/knowledge'
 )
+
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+
+function Initialize-AssistantDocker {
+    if (!$EnvPath) { $EnvPath = Join-Path $root '.env' }
+    if (!(Test-Path -LiteralPath $EnvPath -PathType Leaf)) {
+        throw 'Copy .env.example to .env before initializing the local Assistant.'
+    }
+    $EnvPath = (Resolve-Path -LiteralPath $EnvPath).Path
+    $envDirectory = Split-Path $EnvPath -Parent
+    $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $EnvPath -NoExport
+    . (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+
+    $relativeDirectory = '.cache/assistant-docker'
+    $directory = Join-Path $envDirectory $relativeDirectory
+    $signingNames = @('SMARTPARK_JWT_PRIVATE_KEY_FILE', 'SMARTPARK_JWT_PRIVATE_KEY_PEM', 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64')
+    $protectedNames = @(
+        'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH', 'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD',
+        'SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH', 'Assistant__Jwt__PublicKeyFile', 'Assistant__Jwt__PublicKeyPem',
+        'Assistant__Management__KeyDirectory', 'Assistant__Management__KeyEncryptionCertificatePath',
+        'Assistant__Management__KeyEncryptionCertificatePassword', 'Assistant__Guest__KnowledgeDirectory'
+    )
+    if (!$UseExistingSigningKey) { $protectedNames = $signingNames + $protectedNames }
+    foreach ($name in $protectedNames) {
+        if ((Test-JwtConfiguredValue $settings[$name]) -or
+            (Test-JwtConfiguredValue ([Environment]::GetEnvironmentVariable($name, 'Process')))) {
+            if ($settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] -ceq "$relativeDirectory/user-private.pem" -and
+                (Test-Path -LiteralPath $directory -PathType Container)) {
+                Write-Host 'Existing local Assistant files and settings were preserved. Run setup.ps1 -AssistantCheck to inspect the configuration.'
+                return
+            }
+            throw "Existing local configuration found for $name. Keep its original JWT, certificates, and keyring and configure the Assistant inputs manually."
+        }
+    }
+    if (Test-Path -LiteralPath $directory) {
+        throw 'Local Assistant material directory already exists. Review it before retrying.'
+    }
+    if ((Get-JwtSigningEnvironment).Count) {
+        throw 'Existing process JWT signing configuration found. Preserve it and configure Assistant manually.'
+    }
+    $userProject = Join-Path $root 'src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj'
+    $userSecretsId = ([xml][IO.File]::ReadAllText($userProject)).Project.PropertyGroup.UserSecretsId | Where-Object { $_ } | Select-Object -First 1
+    $userSecretsDirectory = if ($env:APPDATA) { Join-Path $env:APPDATA 'Microsoft/UserSecrets' } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.microsoft/usersecrets' }
+    $userSecretsPath = Join-Path $userSecretsDirectory "$userSecretsId/secrets.json"
+    if (!$UseExistingSigningKey -and (Test-Path -LiteralPath $userSecretsPath -PathType Leaf) -and
+        [IO.File]::ReadAllText($userSecretsPath) -match '"(?:Jwt:)?PrivateKeyPem(?:Base64)?"\s*:') {
+        throw 'Existing UserService signing material found in .NET user-secrets. Preserve it and configure Assistant manually.'
+    }
+
+    # Windows PowerShell 5.1 uses .NET Framework, which lacks the modern PEM and
+    # certificate APIs. Run only cryptography in the already-required .NET 10 SDK.
+    $cryptoInput = @{ UseExistingSigningKey = [bool]$UseExistingSigningKey }
+    if ($UseExistingSigningKey) {
+        $file = $settings[$signingNames[0]]
+        $inline = $settings[$signingNames[1]]
+        $base64 = $settings[$signingNames[2]]
+        if (!($signingNames | Where-Object { Test-JwtConfiguredValue $settings[$_] })) {
+            throw 'Set the existing UserService signing key in .env before using -UseExistingSigningKey. If it lives in user-secrets, preserve the same key in a private PEM file and configure SMARTPARK_JWT_PRIVATE_KEY_FILE.'
+        }
+        if (Test-JwtConfiguredValue $file) { $cryptoInput['Pem'] = Read-JwtPrivateKeyFile $file $envDirectory }
+        elseif (Test-JwtConfiguredValue $inline) { $cryptoInput['Pem'] = $inline.Replace('\n', "`n") }
+        if (Test-JwtConfiguredValue $base64) { $cryptoInput['Base64'] = $base64 }
+        elseif ($cryptoInput['Pem'] -and $base64 -like 'replace-with-*') {
+            throw 'Clear the Base64 template placeholder before using an existing PEM signing key.'
+        }
+    }
+    Import-Module (Join-Path $root 'src/Services/IoTService/Tools/Assistant/AssistantSigning.psm1') -Scope Local
+    $changes = @{
+        SMARTPARK_USER_DOCKER_TLS_ENABLED = 'true'
+        SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH = "$relativeDirectory/user-service.pfx"
+        SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH = "$relativeDirectory/user-ca.crt"
+        SMARTPARK_ASSISTANT_DOCKER_ENABLED = 'true'
+        Assistant__Jwt__PublicKeyFile = "$relativeDirectory/user-public.pem"
+        Assistant__Jwt__Issuer = if ($settings['SMARTPARK_JWT_ISSUER']) { $settings['SMARTPARK_JWT_ISSUER'] } else { 'SmartParking.UserService' }
+        Assistant__Jwt__Audience = if ($settings['SMARTPARK_JWT_AUDIENCE']) { $settings['SMARTPARK_JWT_AUDIENCE'] } else { 'SmartParking' }
+        Assistant__Management__KeyDirectory = "$relativeDirectory/keyring"
+        Assistant__Management__KeyEncryptionCertificatePath = "$relativeDirectory/assistant.pfx"
+        Assistant__Guest__KnowledgeDirectory = "$relativeDirectory/knowledge"
+        Assistant__Guest__ReleaseEnabled = 'false'
+        Assistant__Chat__ReleaseEnabled = 'true'
+        Assistant__Reads__User__Enabled = 'true'
+        Assistant__Reads__User__Origin = 'https://user-service:8443'
+    }
+    if (!$UseExistingSigningKey) {
+        $changes['SMARTPARK_JWT_PRIVATE_KEY_FILE'] = "$relativeDirectory/user-private.pem"
+        $changes['SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64'] = ''
+    }
+    $attempt = [Guid]::NewGuid().ToString('N')
+    $stagingDirectory = "$directory-$attempt.tmp"
+    $temporary = "$EnvPath.assistant-$attempt.tmp"
+    $cryptoInput.Directory = $stagingDirectory
+    try {
+        $material = Invoke-AssistantCrypto -Request $cryptoInput -HelperName 'assistant-docker-crypto.cs'
+        $changes['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD'] = $material.ServerPassword
+        $changes['Assistant__Management__KeyEncryptionCertificatePassword'] = $material.ProtectionPassword
+        $seen = @{}
+        $updated = @(foreach ($line in [IO.File]::ReadAllLines($EnvPath)) {
+            if ($line -match '^\s*([^#=\s]+)\s*=' -and $changes.ContainsKey($Matches[1])) {
+                $name = $Matches[1]
+                if (!$seen[$name]) { "$name=$($changes[$name])"; $seen[$name] = $true }
+            } else { $line }
+        })
+        foreach ($name in ($changes.Keys | Sort-Object)) {
+            if (!$seen[$name]) { $updated += "$name=$($changes[$name])" }
+        }
+        [IO.File]::WriteAllLines($temporary, $updated, [Text.UTF8Encoding]::new($false))
+        # Directory.Move refuses an existing destination, including one created by a competing initializer.
+        [IO.Directory]::Move($stagingDirectory, $directory)
+        try {
+            [IO.File]::Replace($temporary, $EnvPath, [System.Management.Automation.Language.NullString]::Value)
+        } catch {
+            [IO.Directory]::Move($directory, $stagingDirectory)
+            throw
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -ErrorAction Stop }
+        if (Test-Path -LiteralPath $stagingDirectory) {
+            $staged = Get-Item -LiteralPath $stagingDirectory -Force
+            if ($staged.FullName -ne [IO.Path]::GetFullPath($stagingDirectory) -or !$staged.PSIsContainer -or
+                ($staged.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw 'Unexpected Assistant staging path. Inspect the directory before retrying.'
+            }
+            Remove-Item -LiteralPath $staged.FullName -Recurse -Force -ErrorAction Stop
+        }
+    }
+    Write-Host 'Local Assistant JWT, keyring protection, and User HTTPS material configured in .env.'
+    Write-Host 'For chat, deploy the approved Markdown and publication.json into the local knowledge directory, then configure the provider and enable Assistant in Admin Settings.'
+}
+
+function Export-AssistantSigning {
+    . (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+    Import-Module (Join-Path $root 'src/Services/IoTService/Tools/Assistant/AssistantSigning.psm1') -Scope Local
+    if (!$UserJwksUri -and !$ConfirmExistingSource) {
+        throw 'Supply UserJwksUri to verify the live key, or ConfirmExistingSource after independently confirming the existing UserService source.'
+    }
+    if (![IO.Path]::IsPathRooted($OutputPath)) { $OutputPath = Join-Path $root $OutputPath }
+    $OutputPath = [IO.Path]::GetFullPath($OutputPath)
+    $allowed = [IO.Path]::GetFullPath((Join-Path $root '.cache')) + [IO.Path]::DirectorySeparatorChar
+    if (!$OutputPath.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase)) { throw 'OutputPath must be inside the repository .cache directory.' }
+    if (Test-Path -LiteralPath $OutputPath) { throw 'Output already exists; nothing was overwritten.' }
+    if (!$EnvPath) { $EnvPath = '.env' }
+    if (![IO.Path]::IsPathRooted($EnvPath)) { $EnvPath = Join-Path $root $EnvPath }
+    $EnvPath = [IO.Path]::GetFullPath($EnvPath)
+    $arguments = @{ EnvPath = $EnvPath }
+    if ($UserSecretsPath) { $arguments.UserSecretsPath=$UserSecretsPath }
+    if ($UserJwksUri) { $arguments.UserJwksUri=$UserJwksUri }
+    $report = (& (Join-Path $PSScriptRoot 'check-assistant-setup.ps1') -InspectSigning @arguments) | ConvertFrom-Json
+    $selected = @($report.Sources | Where-Object Source -ceq $Source)
+    if ($selected.Count -ne 1 -or $selected[0].Status -ne 'CONFIGURED') { throw 'Select exactly one CONFIGURED source from the inspector output.' }
+    if ($UserJwksUri -and ($report.LiveJwksStatus -ne 'READ' -or $selected[0].MatchesLiveJwks -ne $true)) { throw 'Selected key does not match the live UserService JWKS; nothing exported.' }
+    $value = $null; $base64 = $false
+    if ($Source.StartsWith('process:')) {
+        $name = $Source.Substring('process:'.Length)
+        $normalized = $name.Replace('_','').Replace(':','')
+        $value = [Environment]::GetEnvironmentVariable($name, 'Process')
+        if ($normalized -match 'PRIVATEKEYFILE$') {
+            if (!(Test-JwtConfiguredValue $value)) { throw 'Selected signing source changed or is invalid; nothing exported.' }
+            $value = Read-JwtPrivateKeyFile $value (Split-Path -Parent $EnvPath)
+        } elseif ($normalized -notmatch 'PRIVATEKEYPEM(?:BASE64)?$') {
+            throw 'Export supports process FILE, PEM and Base64 aliases only.'
+        }
+        $base64 = $normalized.EndsWith('BASE64', [StringComparison]::OrdinalIgnoreCase)
+    } elseif ($Source.StartsWith('UserService user-secrets:')) {
+        if (!$UserSecretsPath) {
+            $project = Join-Path $root 'src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj'
+            $id = ([xml][IO.File]::ReadAllText($project)).Project.PropertyGroup.UserSecretsId | Where-Object { $_ } | Select-Object -First 1
+            $directory = if ($env:APPDATA) { Join-Path $env:APPDATA 'Microsoft/UserSecrets' } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.microsoft/usersecrets' }
+            $UserSecretsPath = Join-Path $directory "$id/secrets.json"
+        } elseif (![IO.Path]::IsPathRooted($UserSecretsPath)) { $UserSecretsPath=Join-Path $root $UserSecretsPath }
+        try {
+            $secrets = ConvertFrom-AssistantSigningJson ([IO.File]::ReadAllText($UserSecretsPath))
+            $name = $Source.Substring('UserService user-secrets:'.Length)
+            if ($name.StartsWith('nested Jwt.')) { $value=$secrets['Jwt'][$name.Substring('nested Jwt.'.Length)] }
+            else { $value=$secrets[$name] }
+            $base64 = $name.EndsWith('Base64', [StringComparison]::OrdinalIgnoreCase)
+        } catch { throw 'Selected user-secrets source could not be read; nothing exported.' }
+    } else { throw 'Export supports process and UserService user-secrets sources only. Existing .env sources already have a provisioning path.' }
+    if ($base64) {
+        try { $value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($value)) }
+        catch { throw 'Selected signing source changed or is invalid; nothing exported.' }
+    }
+    $directory = Split-Path $OutputPath -Parent
+    $null = New-Item -ItemType Directory -Path $directory -Force
+    # Reject junctions/symlinks in the destination ancestry before writing secrets.
+    for ($current=$directory; $current -and $current -ne $root; $current=Split-Path $current -Parent) {
+        if ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Destination contains a link; nothing exported.' }
+    }
+    $result = Invoke-AssistantCrypto @{Operation='export';Pem=$value;ExpectedFingerprint=$selected[0].PublicSpkiSha256;OutputPath=$OutputPath}
+    Write-Host 'Existing signing key preserved in the requested .cache file. No .env or source values changed.'
+    Write-Host ('Public SPKI SHA256: ' + $result.Fingerprint)
+}
+
+function Publish-AssistantKnowledge {
+    foreach ($entry in @(@('ApprovedBy', $ApprovedBy, 128), @('ApprovalReference', $ApprovalReference, 1024))) {
+        $value = $entry[1].Trim()
+        if (!$value -or $value.Length -gt $entry[2] -or $value -match '[\x00-\x1f<>]' -or
+            $value -match '(?i)^(admin|test|tester|example|placeholder|null|none|todo|tbd)$|replace[_ -]?with|your[_ -]|actual[_ -]|real[_ -](admin|review)|approved_admin_record_reference') {
+            throw "$($entry[0]) must identify the actual recorded Admin approval, not a placeholder."
+        }
+    }
+    $ApprovedBy = $ApprovedBy.Trim()
+    $ApprovalReference = $ApprovalReference.Trim()
+    function RootPath([string]$value) {
+        if (![IO.Path]::IsPathRooted($value)) { $value = Join-Path $root $value }
+        return [IO.Path]::GetFullPath($value)
+    }
+    $SourcePath = RootPath $SourcePath
+    $OutputDirectory = RootPath $OutputDirectory
+    $markdownPath = Join-Path $OutputDirectory 'smartpark-knowledge.md'
+    $manifestPath = Join-Path $OutputDirectory 'publication.json'
+    if ((Test-Path -LiteralPath $markdownPath) -or (Test-Path -LiteralPath $manifestPath)) {
+        throw 'Publication target already contains a corpus or manifest. Preserve it; use a new deployment directory for a reviewed new version.'
+    }
+    $utf8 = [Text.UTF8Encoding]::new($false, $true)
+    $sourceBytes = [IO.File]::ReadAllBytes($SourcePath)
+    if ($sourceBytes.Length -gt 262144) { throw 'Knowledge source exceeds the runtime 256 KiB limit.' }
+    $source = $utf8.GetString($sourceBytes).TrimStart([char]0xfeff).Replace("`r`n", "`n")
+    $parts = $source -split "`n---`n", 2
+    if (!$source.StartsWith("---`n") -or $parts.Count -ne 2) { throw 'Missing Markdown frontmatter.' }
+    $metadata = $parts[0] -split "`n"
+    function Field([string]$name) {
+        $values = @($metadata | Where-Object { $_.StartsWith($name + ':', [StringComparison]::Ordinal) })
+        if ($values.Count -ne 1) { throw "Expected exactly one frontmatter field: $name." }
+        return $values[0].Substring($name.Length + 1).Trim()
+    }
+    $version = Field 'version'
+    if ($version -cnotmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$' -or (Field 'locale') -cne 'vi') { throw 'Invalid version or locale.' }
+    $audience = Field 'audience'
+    if ($audience -notmatch '^\[.*\]$' -or 'public' -cnotin @($audience.Trim('[', ']') -split ',' | ForEach-Object { $_.Trim() })) {
+        throw 'The approved source must explicitly include public audience.'
+    }
+    # Keep the reviewed validity window; never extend expired or future content.
+    $now = [DateTimeOffset]::UtcNow
+    $times = @{}
+    foreach ($fieldName in @('effective_from', 'effective_to')) {
+        $value = Field $fieldName
+        $instant = [DateTimeOffset]::MinValue
+        if ($value -ceq 'null') { $times[$fieldName] = $null; continue }
+        if ($value.Length -gt 64 -or $value -cnotmatch 'T.*(?:Z|[+-]\d{2}:\d{2})$' -or
+            ![DateTimeOffset]::TryParse($value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$instant)) {
+            throw "Invalid $fieldName timestamp."
+        }
+        $times[$fieldName] = $instant
+    }
+    if (($null -ne $times.effective_from -and $times.effective_from -gt $now) -or
+        ($null -ne $times.effective_to -and $times.effective_to -le $now) -or
+        ($null -ne $times.effective_from -and $null -ne $times.effective_to -and $times.effective_from -ge $times.effective_to)) {
+        throw 'The reviewed corpus is not currently effective.'
+    }
+    $publishedAt = $now.ToString('O', [Globalization.CultureInfo]::InvariantCulture)
+    $updates = @{ publication_state = 'published'; review_status = 'approved'; published_at = $publishedAt; published_by = ($ApprovedBy | ConvertTo-Json -Compress) }
+    foreach ($key in $updates.Keys) {
+        $null = Field $key
+        $metadata = @($metadata | ForEach-Object { if ($_.StartsWith($key + ':', [StringComparison]::Ordinal)) { "${key}: $($updates[$key])" } else { $_ } })
+    }
+    $published = ($metadata -join "`n") + "`n---`n" + $parts[1]
+    # Match the bounded Markdown contract before creating any deployment files.
+    $body = $parts[1]
+    $headings = [regex]::Matches($body, '(?m)^## \[([a-zA-Z0-9._-]+)\] ([^\n]+)$')
+    if ($headings.Count -lt 1 -or $headings.Count -gt 30 -or
+        [regex]::Matches($body, '(?m)^## ').Count -ne $headings.Count) { throw 'Expected 1–30 valid knowledge sections.' }
+    $ids = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    for ($i = 0; $i -lt $headings.Count; $i++) {
+        $heading = $headings[$i]
+        $id = $heading.Groups[1].Value
+        $title = $heading.Groups[2].Value.Trim()
+        $start = $heading.Index + $heading.Length
+        $end = if ($i + 1 -lt $headings.Count) { $headings[$i + 1].Index } else { $body.Length }
+        $section = $body.Substring($start, $end - $start)
+        $contentMarker = "`n### Nội dung`n"
+        $contentStart = $section.IndexOf($contentMarker, [StringComparison]::Ordinal)
+        if ($id -cnotmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$' -or !$ids.Add($id) -or
+            !$title -or $title.Length -gt 200 -or $title -match '[\x00-\x1f\x7f-\x9f]' -or
+            $contentStart -lt 0 -or $section.LastIndexOf($contentMarker, [StringComparison]::Ordinal) -ne $contentStart) {
+            throw 'Invalid section identifier, title, or content heading.'
+        }
+        $aliases = @($section.Substring(0, $contentStart) -split "`n" | Where-Object { $_.StartsWith('Từ khóa:', [StringComparison]::Ordinal) })
+        if ($aliases.Count -ne 1 -or $aliases[0].Length -gt 2000) { throw 'Invalid section search aliases.' }
+        $terms = @($aliases[0].Substring('Từ khóa:'.Length) -split ';' | Where-Object { $_.Trim() })
+        if ($terms.Count -lt 1 -or $terms.Count -gt 100) { throw 'Invalid section search alias count.' }
+        $content = $section.Substring($contentStart + $contentMarker.Length - 1)
+        $englishMarker = "`n### English: "
+        $englishStart = $content.IndexOf($englishMarker, [StringComparison]::Ordinal)
+        if ($englishStart -ge 0) {
+            if ($content.IndexOf("`n### ", [StringComparison]::Ordinal) -ne $englishStart -or
+                $content.LastIndexOf($englishMarker, [StringComparison]::Ordinal) -ne $englishStart) { throw 'Invalid English block position or duplicate.' }
+            $titleEnd = $content.IndexOf("`n", $englishStart + $englishMarker.Length)
+            if ($titleEnd -lt 0) { throw 'Missing English content.' }
+            $englishTitle = $content.Substring($englishStart + $englishMarker.Length, $titleEnd - $englishStart - $englishMarker.Length).Trim()
+            $english = $content.Substring($titleEnd)
+            $englishNotes = $english.IndexOf("`n### ", [StringComparison]::Ordinal)
+            if ($englishNotes -ge 0) {
+                if (!$english.Substring($englishNotes).StartsWith("`n### Đối chiếu — không gửi đến AI`n", [StringComparison]::Ordinal)) { throw 'Unknown English note heading.' }
+                $english = $english.Substring(0, $englishNotes)
+            }
+            $english = $english.Trim()
+            if (!$englishTitle -or $englishTitle.Length -gt 200 -or $englishTitle -match '[\x00-\x1f\x7f-\x9f]' -or
+                !$english -or $english.Length -gt 6000 -or $english -match '[\x00-\x09\x0b-\x1f\x7f-\x9f]') { throw 'Invalid English title or content.' }
+            $content = $content.Substring(0, $englishStart)
+        }
+        $notes = $content.IndexOf("`n### ", [StringComparison]::Ordinal)
+        if ($notes -ge 0) {
+            if (!$content.Substring($notes).StartsWith("`n### Đối chiếu — không gửi đến AI`n", [StringComparison]::Ordinal)) { throw 'Unknown section note heading.' }
+            $content = $content.Substring(0, $notes)
+        }
+        $content = $content.Trim()
+        if (!$content -or $content.Length -gt 6000 -or $content -match '[\x00-\x09\x0b-\x1f\x7f-\x9f]') { throw 'Invalid or oversized section content.' }
+    }
+    $bytes = $utf8.GetBytes($published)
+    if ($bytes.Length -gt 262144) { throw 'Published corpus exceeds the runtime 256 KiB limit.' }
+    # SHA256.Create/ComputeHash and BitConverter also work on .NET Framework (Windows PowerShell 5.1).
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try { $digest = [BitConverter]::ToString($sha256.ComputeHash($bytes)).Replace('-', '') } finally { $sha256.Dispose() }
+    $manifest = [ordered]@{
+        sha256 = $digest
+        version = $version
+        approvedBy = $ApprovedBy
+        approvalReference = $ApprovalReference
+        role = 'admin'
+        publishedAt = $publishedAt
+        effectiveTo = if ($null -eq $times.effective_to) { $null } else { $times.effective_to.ToString('O') }
+    } | ConvertTo-Json
+    # CreateNew refuses races/overwrites. Manifest is written last: partial publication
+    # cannot pass the runtime digest/metadata gate. A failed copy must be reviewed.
+    $null = [IO.Directory]::CreateDirectory($OutputDirectory)
+    foreach ($file in @(@($markdownPath, $bytes), @($manifestPath, $utf8.GetBytes($manifest + "`n")))) {
+        $stream = [IO.File]::Open($file[0], [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $stream.Write($file[1], 0, $file[1].Length); $stream.Flush($true) } finally { $stream.Dispose() }
+    }
+    Write-Host "Prepared deployment copy version $version in $OutputDirectory."
+    Write-Host 'Approval metadata records your supplied review; it does not verify Admin identity. Run setup.ps1 -AssistantCheck before starting the Assistant.'
+}
+
+if ($PSCmdlet.ParameterSetName -eq 'Initialize') {
+    if (!$Initialize) { throw '-Initialize must be enabled to select this operation.' }
+    Initialize-AssistantDocker
+    return
+}
+if ($PSCmdlet.ParameterSetName -eq 'ExportSigning') {
+    if (!$ExportSigning) { throw '-ExportSigning must be enabled to select this operation.' }
+    Export-AssistantSigning
+    return
+}
+if ($PSCmdlet.ParameterSetName -eq 'PublishKnowledge') {
+    if (!$PublishKnowledge) { throw '-PublishKnowledge must be enabled to select this operation.' }
+    Publish-AssistantKnowledge
+    return
+}
+
+# Default Docker setup and preflight.
 if (!$EnvPath) { $EnvPath = Join-Path $root '.env' }
 if (!(Test-Path -LiteralPath $EnvPath -PathType Leaf)) {
     throw 'Copy .env.example to .env and configure the approved Assistant inputs before using -WithAssistant.'

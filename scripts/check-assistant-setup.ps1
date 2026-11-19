@@ -1,7 +1,229 @@
-# Static, read-only readiness report. Never export env, query DB or call providers.
-param([Parameter(Mandatory)][string]$EnvPath)
+﻿#requires -Version 5.1
+<#
+.SYNOPSIS
+Check Assistant configuration, inspect signing or print schema inventory SQL.
+.DESCRIPTION
+Readiness reads configuration and files without running external tools, contacting
+services or exporting environment variables. InspectSigning reports source names
+and public fingerprints. SchemaSql prints SQL without opening a database connection.
+#>
+[CmdletBinding(DefaultParameterSetName = 'Readiness')]
+param(
+    [Parameter(Mandatory, ParameterSetName = 'Readiness', Position = 0)]
+    [Parameter(ParameterSetName = 'InspectSigning')]
+    [string]$EnvPath = '.env',
+
+    [Parameter(Mandatory, ParameterSetName = 'InspectSigning')][switch]$InspectSigning,
+    [Parameter(ParameterSetName = 'InspectSigning')][string]$UserSecretsPath,
+    [Parameter(ParameterSetName = 'InspectSigning')][uri]$UserJwksUri,
+
+    [Parameter(Mandatory, ParameterSetName = 'SchemaSql')][switch]$SchemaSql
+)
+
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
+$root = Split-Path -Parent $PSScriptRoot
+
+function Get-AssistantSigningReport {
+    . (Join-Path $PSScriptRoot 'jwt-environment.ps1')
+    Import-Module (Join-Path $root 'src/Services/IoTService/Tools/Assistant/AssistantSigning.psm1') -Scope Local
+    if ($UserJwksUri -and ($UserJwksUri.Scheme -notin @('http','https') -or
+        !$UserJwksUri.IsLoopback -or $UserJwksUri.UserInfo -or $UserJwksUri.Fragment)) {
+        throw 'UserJwksUri must be an explicit loopback HTTP(S) endpoint without credentials or fragment.'
+    }
+    if (![IO.Path]::IsPathRooted($EnvPath)) { $EnvPath = Join-Path $root $EnvPath }
+    $envDirectory = Split-Path ([IO.Path]::GetFullPath($EnvPath)) -Parent
+    $records = [Collections.Generic.List[object]]::new()
+    function Add-KeySource([string]$Source, [string]$Value, [string]$Kind) {
+        $status = 'MISSING'; $fingerprint = $null
+        if (Test-JwtConfiguredValue $Value) {
+            $status = 'INVALID'
+            try {
+                if ($Kind -eq 'FILE') { $Value = Read-JwtPrivateKeyFile $Value $envDirectory }
+                elseif ($Kind -eq 'BASE64') { $Value = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value)) }
+                elseif ($Kind -eq 'ENVPEM') { $Value = $Value.Replace('\n', "`n") }
+                elseif ($Kind -ne 'PEM') { throw 'Unsupported signing alias.' }
+                $fingerprint = (Invoke-AssistantCrypto @{Operation='private';Pem=$Value}).Fingerprint
+                $status = 'CONFIGURED'
+            } catch [InvalidOperationException] { throw } catch { $status = 'INVALID' }
+        }
+        $records.Add([pscustomobject]@{ Source=$Source; Status=$status; PublicSpkiSha256=$fingerprint; MatchesLiveJwks=$null })
+    }
+    $settings = @{}
+    if (Test-Path -LiteralPath $EnvPath -PathType Leaf) {
+        try { $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $EnvPath -NoExport }
+        catch { $records.Add([pscustomobject]@{Source='.env file';Status='UNREADABLE';PublicSpkiSha256=$null;MatchesLiveJwks=$null}) }
+    }
+    foreach ($slot in @(
+        @('SMARTPARK_JWT_PRIVATE_KEY_FILE','FILE'),
+        @('SMARTPARK_JWT_PRIVATE_KEY_PEM','ENVPEM'),
+        @('SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64','BASE64'))) {
+        Add-KeySource ('.env:' + $slot[0]) $settings[$slot[0]] $slot[1]
+    }
+    $processSources = Get-JwtSigningEnvironment
+    if (!$processSources.Count) { Add-KeySource 'process:signing aliases' '' 'PEM' }
+    foreach ($name in ($processSources.Keys | Sort-Object)) {
+        $normalized = $name.Replace('_','').Replace(':','')
+        $kind = if ($normalized -match 'PRIVATEKEYPEMBASE64$') { 'BASE64' }
+            elseif ($normalized -match 'PRIVATEKEYPEM$') { 'PEM' }
+            elseif ($normalized -match 'PRIVATEKEYFILE$') { 'FILE' } else { 'UNKNOWN' }
+        Add-KeySource ('process:' + $name) $processSources[$name] $kind
+    }
+    if (!$UserSecretsPath) {
+        $project = Join-Path $root 'src/Services/UserService/SmartParking.UserService.API/SmartParking.UserService.API.csproj'
+        $id = ([xml][IO.File]::ReadAllText($project)).Project.PropertyGroup.UserSecretsId | Where-Object { $_ } | Select-Object -First 1
+        $secretsDirectory = if ($env:APPDATA) { Join-Path $env:APPDATA 'Microsoft/UserSecrets' }
+            else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.microsoft/usersecrets' }
+        $UserSecretsPath = Join-Path $secretsDirectory "$id/secrets.json"
+    } elseif (![IO.Path]::IsPathRooted($UserSecretsPath)) { $UserSecretsPath = Join-Path $root $UserSecretsPath }
+    $secrets = @{}
+    if (Test-Path -LiteralPath $UserSecretsPath -PathType Leaf) {
+        try { $secrets = ConvertFrom-AssistantSigningJson ([IO.File]::ReadAllText($UserSecretsPath)) }
+        catch { $records.Add([pscustomobject]@{Source='UserService user-secrets file';Status='UNREADABLE';PublicSpkiSha256=$null;MatchesLiveJwks=$null}) }
+    }
+    foreach ($name in @('PrivateKeyPem','PrivateKeyPemBase64')) {
+        $kind = if ($name.EndsWith('Base64')) { 'BASE64' } else { 'PEM' }
+        Add-KeySource ('UserService user-secrets:Jwt:' + $name) $secrets["Jwt:$name"] $kind
+        if ($secrets['Jwt'] -is [Collections.IDictionary] -and $secrets['Jwt'].Contains($name)) {
+            Add-KeySource ('UserService user-secrets:nested Jwt.' + $name) $secrets['Jwt'][$name] $kind
+        }
+    }
+    $liveFingerprints = @(); $jwksStatus = 'NOT_REQUESTED'
+    if ($UserJwksUri) {
+        try {
+            # No redirects: a local endpoint must not redirect this request elsewhere.
+            $jwks = Invoke-RestMethod -Uri $UserJwksUri -TimeoutSec 10 -MaximumRedirection 0 -ErrorAction Stop
+            foreach ($key in $jwks.keys) {
+                if ($key.kty -ne 'RSA') { continue }
+                $liveFingerprints += (Invoke-AssistantCrypto @{Operation='public';Modulus=[string]$key.n;Exponent=[string]$key.e}).Fingerprint
+            }
+            if (!$liveFingerprints.Count) { throw 'No RSA public keys.' }
+            $jwksStatus = 'READ'
+            foreach ($record in $records) {
+                if ($record.Status -eq 'CONFIGURED') { $record.MatchesLiveJwks = $record.PublicSpkiSha256 -in $liveFingerprints }
+            }
+        } catch { $jwksStatus = 'UNAVAILABLE_OR_INVALID' }
+    }
+    $distinct = @($records | Where-Object Status -eq 'CONFIGURED' | Select-Object -ExpandProperty PublicSpkiSha256 -Unique)
+    # Structured output prevents table truncation; only explicitly safe fields leave the script.
+    [pscustomobject]@{
+        Sources = @($records.ToArray())
+        DistinctPrivateKeyCount = $distinct.Count
+        MultipleDifferentKeys = $distinct.Count -gt 1
+        LiveJwksStatus = $jwksStatus
+        LivePublicSpkiSha256 = @($liveFingerprints)
+        Note = 'Read-only inventory; no key selected. A fingerprint match identifies public-key identity, not configuration precedence. Missing live matches do not authorize rotation.'
+    } | ConvertTo-Json -Depth 5
+}
+
+if ($PSCmdlet.ParameterSetName -eq 'InspectSigning') {
+    if (!$InspectSigning) { throw '-InspectSigning must be enabled for signing inspection.' }
+    Get-AssistantSigningReport
+    return
+}
+if ($PSCmdlet.ParameterSetName -eq 'SchemaSql') {
+    if (!$SchemaSql) { throw '-SchemaSql must be enabled to print schema inventory SQL.' }
+    @'
+-- REVIEW ONLY: diagnostic inventory, not a migration or readiness certificate.
+-- Execute only after approval against the reviewed IoT datasource and schema.
+-- Current migrations use unqualified tables: this inventory assumes public.
+-- If datasource search_path differs, stop and review schema mapping first.
+-- psql: use the selected connection/service securely, ON_ERROR_STOP=1.
+-- No application rows, credentials, JWTs, plaintext or ciphertext are returned.
+BEGIN READ ONLY;
+SET LOCAL search_path = public, pg_catalog;
+SET LOCAL statement_timeout = '5s';
+SET LOCAL lock_timeout = '1s';
+
+WITH expected(table_name, column_name, type_name, required_not_null) AS (
+    VALUES
+    ('assistant_management_state','id','integer',true),
+    ('assistant_management_state','state','jsonb',true),
+    ('assistant_management_credentials','slot_id','uuid',true),
+    ('assistant_management_credentials','version','uuid',true),
+    ('assistant_management_credentials','protected_value','text',true),
+    ('assistant_management_receipts','actor','uuid',true),
+    ('assistant_management_receipts','mutation_id','uuid',true),
+    ('assistant_management_receipts','fingerprint','text',true),
+    ('assistant_management_receipts','revision','bigint',true),
+    ('assistant_management_receipts','action','text',true),
+    ('assistant_management_receipts','at','timestamp with time zone',true),
+    ('assistant_connection_tests','actor','uuid',true),
+    ('assistant_connection_tests','request_id','uuid',true),
+    ('assistant_connection_tests','configuration_id','uuid',true),
+    ('assistant_connection_tests','revision','bigint',true),
+    ('assistant_connection_tests','model','text',true),
+    ('assistant_connection_tests','admitted_at','timestamp with time zone',true),
+    ('assistant_connection_tests','result','jsonb',false),
+    ('assistant_conversations','id','uuid',true),
+    ('assistant_conversations','owner_account_id','uuid',true),
+    ('assistant_conversations','client_conversation_id','uuid',true),
+    ('assistant_conversations','locale','character varying(2)',true),
+    ('assistant_conversations','revision','bigint',true),
+    ('assistant_conversations','expires_at','timestamp with time zone',true),
+    ('assistant_conversations','retention_hold','boolean',true),
+    ('assistant_messages','id','uuid',true),
+    ('assistant_messages','conversation_id','uuid',true),
+    ('assistant_messages','sequence','bigint',true),
+    ('assistant_messages','client_message_id','uuid',true),
+    ('assistant_messages','response','jsonb',true),
+    ('assistant_requests','id','uuid',true),
+    ('assistant_requests','conversation_id','uuid',true),
+    ('assistant_requests','owner_account_id','uuid',true),
+    ('assistant_requests','client_message_id','uuid',true),
+    ('assistant_requests','fingerprint','character varying(64)',true),
+    ('assistant_requests','state','character varying(16)',true),
+    ('assistant_requests','deadline','timestamp with time zone',true),
+    ('assistant_requests','created_at','timestamp with time zone',true),
+    ('assistant_requests','finished_at','timestamp with time zone',false),
+    ('assistant_requests','user_message_id','uuid',true),
+    ('assistant_requests','answer','jsonb',false),
+    ('assistant_requests','error_code','character varying(64)',false),
+    ('assistant_requests','snapshot','jsonb',true)
+), observed AS (
+    SELECT e.*, c.oid AS table_oid, c.relkind, a.attname,
+        pg_catalog.format_type(a.atttypid,a.atttypmod) AS actual_type, a.attnotnull
+    FROM expected e
+    LEFT JOIN pg_catalog.pg_namespace n ON n.nspname='public'
+    LEFT JOIN pg_catalog.pg_class c ON c.relnamespace=n.oid AND c.relname=e.table_name
+    LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid AND a.attname=e.column_name
+        AND a.attnum>0 AND NOT a.attisdropped
+)
+SELECT table_name, column_name,
+    CASE WHEN table_oid IS NULL THEN 'MISSING_TABLE'
+         WHEN relkind NOT IN ('r','p') THEN 'WRONG_RELATION_KIND'
+         WHEN attname IS NULL THEN 'MISSING_COLUMN'
+         WHEN actual_type<>type_name THEN 'TYPE_MISMATCH'
+         WHEN attnotnull<>required_not_null THEN 'NULLABILITY_MISMATCH'
+         ELSE 'COLUMN_SHAPE_MATCH' END AS diagnostic
+FROM observed ORDER BY table_name,column_name;
+
+-- Inventory definitions for review: matching names alone cannot prove correctness.
+SELECT tablename, indexname, indexdef
+FROM pg_catalog.pg_indexes
+WHERE schemaname='public' AND tablename IN (
+    'assistant_management_state','assistant_management_credentials','assistant_management_receipts',
+    'assistant_connection_tests','assistant_conversations','assistant_messages','assistant_requests')
+ORDER BY tablename,indexname;
+
+SELECT c.relname AS table_name, con.conname, pg_catalog.pg_get_constraintdef(con.oid) AS definition,
+    con.convalidated AS validated
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class c ON c.oid=con.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND c.relname IN (
+    'assistant_management_state','assistant_management_credentials','assistant_management_receipts',
+    'assistant_connection_tests','assistant_conversations','assistant_messages','assistant_requests')
+ORDER BY c.relname,con.conname;
+ROLLBACK;
+-- Missing new ownership/sequence fields on existing conversation/message tables
+-- identifies a legacy/partial shape, not permission to reset or infer Account IDs.
+-- Even all COLUMN_SHAPE_MATCH does not establish complete schema, privileges,
+-- JSON state migration, legacy-row conversion, locks/concurrency or runtime readiness.
+'@
+    return
+}
+
+# Default static readiness report.
 $envFile = (Resolve-Path -LiteralPath $EnvPath).Path
 $envDirectory = Split-Path -Parent $envFile
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
@@ -58,8 +280,8 @@ if (!$settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -or $settings['SMARTPARK_AS
     Report 'SMARTPARK_ASSISTANT_DOCKER_ENABLED' 'INVALID' 'Expected true or false.'
 }
 foreach ($name in @('Assistant__Guest__ReleaseEnabled','Assistant__Chat__ReleaseEnabled')) {
-    if ($settings[$name] -eq 'true') { Report $name 'CONFIGURED' 'Release flag enabled; runtime gates still apply.' }
-    elseif (!$settings[$name] -or $settings[$name] -eq 'false') { Report $name 'DISABLED' 'Admission disabled.' }
+    if ($settings[$name] -ceq 'true') { Report $name 'CONFIGURED' 'Release flag enabled; runtime gates still apply.' }
+    elseif (!$settings[$name] -or $settings[$name] -ceq 'false') { Report $name 'DISABLED' 'Admission disabled.' }
     else { Report $name 'INVALID' 'Expected true or false.' }
 }
 foreach ($owner in @('User','Operations','Search')) {

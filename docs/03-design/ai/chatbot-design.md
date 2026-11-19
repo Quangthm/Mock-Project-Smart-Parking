@@ -43,7 +43,7 @@ Provider FAQ nhận một article public đã duyệt và câu hỏi giới hạ
 
 ## 3. Knowledge và xử lý FAQ
 
-Nguồn biên tập duy nhất là [smartpark-knowledge.md](p1/knowledge/smartpark-knowledge.md), phiên bản biên tập 0.4.1. Hai mục `vehicle-guide` và `booking-guide` có thêm bản tiếng Anh trong cùng tệp. Hash xuất bản bao phủ cả hai ngôn ngữ. Runtime đọc cặp `smartpark-knowledge.md` và `publication.json` riêng trong thư mục do `.env` cấu hình. Markdown trong Git đang là bản nháp. Admin duyệt đúng phiên bản, deployment operator xuất bản theo bản ghi duyệt bằng `scripts/publish-assistant-knowledge.ps1`.
+Nguồn biên tập duy nhất là [smartpark-knowledge.md](p1/knowledge/smartpark-knowledge.md), phiên bản biên tập 0.4.1. Hai mục `vehicle-guide` và `booking-guide` có thêm bản tiếng Anh trong cùng tệp. Hash xuất bản bao phủ cả hai ngôn ngữ. Runtime đọc cặp `smartpark-knowledge.md` và `publication.json` riêng trong thư mục do `.env` cấu hình. Markdown trong Git đang là bản nháp. Admin duyệt đúng phiên bản, deployment operator xuất bản theo bản ghi duyệt bằng `scripts/setup-assistant-docker.ps1 -PublishKnowledge`.
 
 Loader kiểm SHA-256 của bytes thực tế, version, `publication_state=published`, `review_status=approved`, audience có `public`, người duyệt, `role=admin`, thời gian công bố/hiệu lực và giới hạn cấu trúc. Manifest phải khớp version/hash/thời gian Markdown, không có timestamp tương lai hoặc hết hạn. `role` chỉ ghi metadata, quyền ghi thư mục triển khai cần được kiểm soát. Bộ file thiếu, draft, sai hash hoặc malformed làm nguồn unavailable. Việc sửa draft không tự cập nhật publication runtime.
 

@@ -26,6 +26,7 @@ Các khối `.env` bên dưới đã điền giá trị cho Docker local. Mật 
 
 - Cài **Git**, **Docker Desktop** và **.NET SDK 10**. Mở Docker Desktop, chọn Linux containers và đợi engine chạy.
 - Mở PowerShell tại **thư mục gốc dự án**, nơi có `setup.ps1` và `.env.example`. Các lệnh bên dưới đều chạy tại đây.
+- Nếu Windows PowerShell 5.1 chặn `.ps1` do execution policy, dùng `powershell.exe -NoProfile -ExecutionPolicy Bypass` để mở một phiên riêng cho checkout QA đã xác minh. Làm theo chính sách máy của nhóm nếu thiết lập do quản trị viên quản lý.
 - Nhận từ người bàn giao **hai file knowledge đã duyệt**: `smartpark-knowledge.md` và `publication.json`. Thiếu hai file này thì chưa test chat được; vẫn có thể setup và test kết nối Gemini theo **2.7 mốc A**.
 - Chuẩn bị API key Gemini hoặc OpenAI nếu cần test AI trả lời thật. Key này sẽ nhập trong giao diện Admin ở mục 2.5.
 
@@ -37,27 +38,46 @@ winget install --id Microsoft.DotNet.SDK.10 -e
 winget install --id Docker.DockerDesktop -e
 ```
 
+Windows PowerShell 5.1 đủ để setup. Nếu cần chạy đủ các ca `Offline` ở mục 7.1, cài thêm PowerShell 7 bằng `winget install --id Microsoft.PowerShell -e`.
+
 Nếu Docker Desktop yêu cầu cài WSL, mở PowerShell với quyền Administrator, chạy `wsl --install`, khởi động lại máy khi được yêu cầu rồi mở Docker Desktop. Xem [hướng dẫn Docker Desktop trên Windows](https://docs.docker.com/desktop/setup/install/windows-install/) và [cài .NET SDK cho Windows](https://learn.microsoft.com/en-us/dotnet/core/install/windows).
 
-Nếu chưa có repo, sau khi nhánh của PR #93 đã nhận bản handoff mới, mở terminal mới và chạy:
+Lấy SHA của commit chứa bộ script Assistant từ người bàn giao QA. Nếu chưa có repo, tải repo về trước:
 
 ```powershell
-git clone --branch AI-ChatBot https://github.com/Quangthm/Mock-Project-Smart-Parking.git
+git clone https://github.com/Quangthm/Mock-Project-Smart-Parking.git
 cd Mock-Project-Smart-Parking
 ```
 
-Nếu đã có repo, dùng checkout chứa bản bàn giao và mở Windows PowerShell 5.1 có sẵn ở root (PowerShell 7 cũng dùng được). Kiểm công cụ và phiên bản repo:
+Nếu đã có repo, dùng checkout sạch và chạy `git fetch origin` để lấy commit đã được công bố. Từ root repo, mở Windows PowerShell 5.1 hoặc PowerShell 7 rồi chuyển tới đúng commit được bàn giao:
+
+```powershell
+$handoffCommit = (Read-Host 'Nhập SHA commit bàn giao Assistant').Trim()
+if (!$handoffCommit) { throw 'Cần SHA commit bàn giao để tiếp tục.' }
+git switch --detach $handoffCommit
+if ($LASTEXITCODE -ne 0) { throw 'Không checkout được commit bàn giao. Kiểm tra lại SHA và quyền truy cập.' }
+git rev-parse HEAD
+```
+
+Đối chiếu SHA vừa in với SHA được bàn giao, sau đó kiểm công cụ và ba script:
 
 ```powershell
 $PSVersionTable.PSVersion
 dotnet --version
 docker info
 docker compose version
-git rev-parse --short HEAD
-Get-Content scripts/inspect-assistant-signing.ps1 -TotalCount 1
+Get-Command ./scripts/setup-assistant-docker.ps1 -Syntax
+Get-Command ./scripts/check-assistant-setup.ps1 -Syntax
+Get-Command ./scripts/test-assistant.ps1 -Syntax
 ```
 
-Lệnh cuối cần hiện `#requires -Version 5.1`. Nếu file còn yêu cầu 7.0 hoặc chưa tồn tại, hãy lấy bản cập nhật của nhánh. Nếu `docker info` báo lỗi, mở lại Docker Desktop trước khi làm tiếp. Chạy FE bằng Docker thì không cần cài Node trên máy.
+Ba lệnh `Get-Command` cần hiện cú pháp của setup, check và test. Nếu thiếu một trong ba file hoặc thiếu các tham số dưới đây, hãy dùng checkout có bản bàn giao mới. Nếu `docker info` báo lỗi, mở lại Docker Desktop trước khi làm tiếp. Chạy FE bằng Docker thì không cần cài Node trên máy.
+
+| Script | Cách dùng |
+| --- | --- |
+| `./scripts/setup-assistant-docker.ps1` | Chạy Assistant Docker trên stack DB local đã dựng. `-ValidateOnly` kiểm đầu vào trước. `-Initialize` dùng ở 2.2 hoặc 2.3, `-ExportSigning` ở 2.3 và `-PublishKnowledge` ở 2.7. Chọn một chế độ mỗi lần. |
+| `./scripts/check-assistant-setup.ps1` | `-EnvPath .env` kiểm cấu hình tĩnh, tương đương nhánh `./setup.ps1 -AssistantCheck`. `-InspectSigning` kiểm nguồn ký, có thể kèm `-UserJwksUri` loopback. `-SchemaSql` in SQL inventory để duyệt. |
+| `./scripts/test-assistant.ps1` | Chạy `-Suite Offline`, `DockerPreflight`, `Docker` hoặc `Postgres` theo mục 7. |
 
 ### 2.2. Máy mới dùng Docker
 
@@ -67,7 +87,7 @@ Copy chạy nguyên khối này:
 
 ```powershell
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
-./scripts/initialize-assistant-docker.ps1
+./scripts/setup-assistant-docker.ps1 -Initialize
 ```
 
 Script tự tạo khóa đăng nhập, chứng chỉ kết nối và thư mục lưu khóa chatbot. Nó cũng tự điền đường dẫn/mật khẩu tương ứng vào `.env`. Nếu báo đã có khóa UserService, chuyển sang **2.3**, không xóa khóa cũ.
@@ -137,6 +157,8 @@ Assistant__Reads__Search__Enabled=false
 - `Assistant__Management__KeyEncryptionCertificatePassword`
 - `SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD`
 
+Nếu chưa có cặp knowledge đã duyệt và chỉ kiểm kết nối provider, dùng hai cờ `false` ở mục **2.7 mốc A** trước khi chạy bước 5.
+
 Các mật khẩu DB/Admin/Owner/Operator/RabbitMQ và service key để setup xử lý ở bước 5. Không cần nhập API key AI vào `.env`.
 
 Các đường dẫn `.cache/...` tính từ thư mục chứa `.env`, nên chuyển thư mục dự án sang ổ khác vẫn dùng được khi giữ bộ file tương ứng.
@@ -161,10 +183,15 @@ Secret key chỉ dùng ở backend; site key là key công khai. Tắt Turnstile
 
 **Bước 5 — Dựng toàn hệ thống**
 
-Lưu `.env`, rồi chạy từng lệnh theo thứ tự. Lệnh báo lỗi thì xử lý trước khi chạy lệnh tiếp:
+Lưu `.env`, rồi chạy kiểm tra tĩnh:
 
 ```powershell
 .\setup.ps1 -AssistantCheck
+```
+
+Xử lý các dòng `MISSING` và `INVALID` ở cấu hình bắt buộc trước khi tiếp tục. Trong mốc A, hai file corpus được phép thiếu. `NOT_REQUIRED` là mục không áp dụng cho cấu hình hiện tại. `UNVERIFIED` cần kiểm khi runtime chạy. Sau đó chạy từng lệnh và dừng nếu lệnh báo lỗi:
+
+```powershell
 .\setup.ps1 -SkipSonarQube -NonInteractive
 .\scripts\run-app-service.ps1 -Service All -NoLogWindow
 
@@ -190,7 +217,7 @@ Giữ `.env` đang dùng. Không copy đè `.env.example` và **không dán kh�
 **Kiểm tra khóa trước khi chạy setup.** Khi root `.env` đang trống, bước đồng bộ của full `setup.ps1` có thể xóa signing key trong user-secrets. Từ root, chạy:
 
 ```powershell
-./scripts/inspect-assistant-signing.ps1
+./scripts/check-assistant-setup.ps1 -InspectSigning
 ```
 
 Công cụ kiểm ba dạng khóa trong root `.env`, biến của process hiện tại và user-secrets UserService của tài khoản Windows hiện tại. Kết quả chỉ gồm tên nguồn, trạng thái và dấu vân tay **public key**, không in private key. Công cụ không thấy biến của một container/process khác hoặc secrets của tài khoản Windows khác.
@@ -203,21 +230,28 @@ Công cụ kiểm ba dạng khóa trong root `.env`, biến của process hiện
 | Chỉ `UserService user-secrets:...` / `process:...` là `CONFIGURED` | Cần đưa **chính khóa này** về file local riêng và trỏ root `.env` tới file đó; làm theo phần khôi phục ở dưới. |
 | Tất cả `MISSING` | Kiểm tài khoản Windows/host/container thực sự chạy UserService. DB không lưu JWT private key. Chưa đủ căn cứ kết luận được phép tạo khóa mới. |
 
-Nếu UserService hiện đang chạy, dùng đúng cổng UserService của máy (Docker mặc định 5035), kiểm public JWKS:
+Nếu UserService đang chạy, dùng URL JWKS loopback của môi trường đó để kiểm public key. Ví dụ mặc định cho Docker là `http://localhost:5035/.well-known/jwks.json`. Dùng cổng publish thực tế và path đã cấu hình trong `SMARTPARK_JWT_JWKS_PATH` nếu môi trường đã đổi. Chạy hai khối lệnh kiểm và xuất khóa trong cùng phiên PowerShell để dùng chung URL:
 
 ```powershell
-./scripts/inspect-assistant-signing.ps1 -UserJwksUri http://localhost:5035/.well-known/jwks.json
+$userJwksUri = [uri](Read-Host 'Nhập URL JWKS loopback thực tế của UserService').Trim()
+if (!$userJwksUri.IsAbsoluteUri) { throw 'Cần URL JWKS đầy đủ.' }
+./scripts/check-assistant-setup.ps1 -InspectSigning -UserJwksUri $userJwksUri
 ```
 
 Chỉ nguồn có `MatchesLiveJwks=true` mới có bằng chứng khớp khóa public đang phục vụ; `UNAVAILABLE_OR_INVALID` là chưa xác minh được, không phải khóa sai. Xem cổng thực tế bằng `docker ps` nếu đã đổi cấu hình. JWKS chỉ chứa public key, không thể dùng nó tạo lại private key.
 
 **Khôi phục từ user-secrets hoặc biến process, không chép secret qua màn hình**
 
-Khi inspector tìm được nguồn đúng, copy **tên nguồn** ở trường `Source` (không phải giá trị khóa). Ví dụ tên có thể là `UserService user-secrets:Jwt:PrivateKeyPem`. Chạy:
+Khi đã xác định đúng nguồn, copy **tên nguồn** ở trường `Source`, ví dụ `UserService user-secrets:Jwt:PrivateKeyPem`. Chạy bước này cho cả hai phương án export bên dưới:
 
 ```powershell
-$signingSource = Read-Host 'Dán chính xác Source có CONFIGURED và khớp UserService'
-./scripts/export-assistant-signing.ps1 -Source $signingSource -UserJwksUri http://localhost:5035/.well-known/jwks.json
+$signingSource = Read-Host 'Dán chính xác Source đã xác nhận thuộc UserService'
+```
+
+Nếu đã kiểm được JWKS live, chọn nguồn có `MatchesLiveJwks=true` và chạy:
+
+```powershell
+./scripts/setup-assistant-docker.ps1 -ExportSigning -Source $signingSource -UserJwksUri $userJwksUri
 ```
 
 Script chỉ xuất khi public fingerprint khớp JWKS, giữ nguyên khóa cũ, ghi vào `.cache/assistant-signing/user-private.pem`, không in private key và không ghi đè file. **Không đặt file khôi phục vào `.cache/assistant-docker` trước initializer**, vì initializer từ chối thư mục vật liệu đã tồn tại.
@@ -225,7 +259,7 @@ Script chỉ xuất khi public fingerprint khớp JWKS, giữ nguyên khóa cũ,
 Nếu UserService đang tắt nên không kiểm JWKS được, chỉ người đã xác nhận độc lập nguồn này thuộc môi trường hiện tại mới dùng lệnh thay thế sau. Tham số này là xác nhận của người chạy, không phải công cụ tự chứng minh nguồn đúng:
 
 ```powershell
-./scripts/export-assistant-signing.ps1 -Source $signingSource -ConfirmExistingSource
+./scripts/setup-assistant-docker.ps1 -ExportSigning -Source $signingSource -ConfirmExistingSource
 ```
 
 Sau khi export thành công, sửa **đúng ba dòng** trong root `.env`, giữ nguyên KeyId/Issuer/Audience và mọi cấu hình DB:
@@ -246,13 +280,13 @@ Clear-JwtSigningEnvironment
 **Kiểm tra lại trước khi khởi tạo Assistant.** Áp dụng cho cả khóa có sẵn trong root `.env` và khóa vừa khôi phục:
 
 ```powershell
-./scripts/inspect-assistant-signing.ps1
+./scripts/check-assistant-setup.ps1 -InspectSigning
 ```
 
 Chỉ tiếp tục khi thấy nguồn khóa trong root `.env` là `CONFIGURED`, không có nguồn lỗi hoặc xung đột, và đã đối chiếu đúng khóa của UserService. Nếu dùng file/PEM, xóa giá trị mẫu `replace-with-*` ở dòng Base64. Chạy:
 
 ```powershell
-./scripts/initialize-assistant-docker.ps1 -UseExistingSigningKey
+./scripts/setup-assistant-docker.ps1 -Initialize -UseExistingSigningKey
 ```
 
 Initializer tạo vật liệu riêng cho Assistant và giữ khóa ký đã chọn. Nếu nguồn chỉ tồn tại trong container hay máy của người triển khai khác, người đó cần cấu hình file khóa trên máy test qua kênh secret của nhóm. Giữ private key, nội dung `.env` và output `docker inspect` ngoài ticket/chat.
@@ -269,7 +303,6 @@ Chép hai file knowledge như bước 2 của mục 2.2. Trong `.env`, thay/thê
 
 ```dotenv
 SMARTPARK_ASSISTANT_DOCKER_ENABLED=true
-SMARTPARK_ASSISTANT_DOCKER_PORT=5076
 Assistant__Guest__ReleaseEnabled=true
 Assistant__Chat__ReleaseEnabled=true
 Assistant__Guest__AllowedOrigins__0=http://localhost:5173
@@ -279,7 +312,7 @@ Assistant__Reads__Operations__Enabled=false
 Assistant__Reads__Search__Enabled=false
 ```
 
-Máy đã đăng nhập được thì giữ cấu hình Turnstile hiện tại.
+Giữ cổng Assistant đang cấu hình. Nếu `SMARTPARK_ASSISTANT_DOCKER_PORT` chưa có giá trị, setup dùng mặc định `5076`. Máy đã đăng nhập được thì giữ cấu hình Turnstile hiện tại.
 
 **Bước 3 — Chạy thêm Assistant và cập nhật FE**
 
@@ -316,6 +349,8 @@ Khởi động lại Vite. FE chạy Docker thì bỏ qua bước này vì runne
 
 ### 2.4. Kiểm sẵn sàng và kích hoạt
 
+Các URL dưới đây dùng cổng Docker mặc định. Nếu đã đổi cấu hình, dùng URL FE và URL Assistant mà runner in sau khi khởi động.
+
 1. Mở `http://localhost:5173`, đăng nhập Admin bằng thông tin trong `.env` local; hoàn thành Turnstile/MFA nếu cấu hình.
 2. Gọi `http://localhost:5076/health/live`: HTTP 204 là bình thường, chỉ chứng minh tiến trình sống.
 3. Gọi `http://localhost:5076/api/assistant/status`: HTTP 200/envelope thành công. Trước bật Settings có thể `enabled=false` hoặc `guestFaq=false`.
@@ -334,13 +369,13 @@ Khởi động lại Vite. FE chạy Docker thì bỏ qua bước này vì runne
 
 ### 2.6. Test API chatbot trực tiếp bằng Postman
 
-Chỉ cần phần này khi muốn tách lỗi UI với lỗi backend. **API chatbot là Assistant ở cổng 5076**, không phải API camera Python 5001/5002. Không cần key Gemini/OpenAI trong header của các request dưới đây; key provider đã lưu qua Admin Settings ở 2.5.
+Chỉ cần phần này khi muốn tách lỗi UI với lỗi backend. Dùng URL của Assistant mà runner in sau khi khởi động. Cổng Docker mặc định là `5076`, còn `5001`/`5002` là API camera Python. Assistant lấy key Gemini/OpenAI từ Admin Settings ở 2.5. Để key provider ngoài Postman.
 
 **Bước 1 — Tạo environment Postman local**
 
 | Variable | Điền giá trị |
 | --- | --- |
-| `assistantUrl` | `http://localhost:5076` |
+| `assistantUrl` | URL Assistant thực tế, ví dụ `http://localhost:5076` với Docker mặc định |
 | `accessToken` | Access token của tài khoản QA đang test; nhập vào biến environment local `accessToken`, đánh dấu sensitive, không share/sync/export |
 | `conversationId` | Để trống lúc đầu; lấy từ response ở bước 3 |
 | `expectedRevision` | Để trống lúc đầu; lấy revision mới nhất ở bước 3 |
@@ -435,7 +470,7 @@ Chạy `setup.ps1 -AssistantCheck`, rồi runner tương ứng ở 2.2/2.3. Đă
 ```powershell
 $knowledgeApprover = Read-Host 'Tên hoặc ID Admin đã duyệt bản nội dung này'
 $knowledgeApproval = Read-Host 'Link hoặc mã biên bản duyệt của Admin'
-./scripts/publish-assistant-knowledge.ps1 -ApprovedBy $knowledgeApprover -ApprovalReference $knowledgeApproval
+./scripts/setup-assistant-docker.ps1 -PublishKnowledge -ApprovedBy $knowledgeApprover -ApprovalReference $knowledgeApproval
 ```
 
 Script tạo **bản triển khai riêng** và manifest với SHA-256, version, thời gian UTC đồng nhất, UTF-8 không BOM. Script không sửa bản nháp trong repo, không sửa `.env`, không thay thế quyết định phê duyệt. Nếu chưa có Admin duyệt thì dừng ở mốc A; trạng thái bàn giao là **chưa đủ điều kiện test chat**. Đây là đầu vào người bàn giao phải cung cấp, không phải lỗi thao tác của tester.
@@ -925,42 +960,93 @@ Thiếu nguồn positive availability hiện là hạn chế đã biết. Owner 
 
 ## 7. Bộ kiểm tra tự động và bằng chứng đã có
 
-### Nghiệm thu backend trên PostgreSQL cách ly
+### 7.1. Chọn bộ kiểm tra Assistant
 
-Các harness dùng dữ liệu và tài nguyên test riêng. Lệnh Docker dùng một lần cần quyền quản lý Docker local. Chạy restore trước. PostgreSQL harness dùng image local `postgres:16-alpine` với `--pull never`, nên chạy `docker pull postgres:16-alpine` một lần nếu setup chưa tải image. Docker setup harness có thể build image Assistant local và kéo base image. Không dùng harness để kiểm DB shared bằng cách thay chuỗi kết nối.
+Chạy từ root repo. Các bộ kiểm thử dùng fixture tổng hợp. Để kiểm thử với tài khoản QA, corpus đã duyệt và provider của nhóm, làm smoke thủ công ở mục 4 và kiểm tích hợp ở mục 6.
+
+| Bộ kiểm tra | Điều kiện chạy và phạm vi |
+| --- | --- |
+| `Offline` | Mặc định. Dùng .NET SDK 10 cho cầu nối signing. Kiểm báo cáo tĩnh, host runner giả lập, thứ tự migration, xuất bản knowledge và luồng khởi tạo → kiểm → xuất đúng khóa. PowerShell 7 chạy thêm các ca RSA chi tiết về tái sử dụng nguồn FILE/PEM/Base64, xung đột, JWKS giả lập và chống ghi đè. Windows PowerShell 5.1 báo `SKIP` cho ba nhóm chi tiết này. |
+| `DockerPreflight` | Cần Docker CLI và context local. Dùng cấu hình fixture để kiểm chặn HTTPS loopback và chấp nhận origin HTTPS hợp lệ. Không build image hay khởi động container. |
+| `Docker` | Cần Docker engine local. Tạo project, DB và volume test riêng rồi dọn sau lượt chạy. Kiểm schema init/replay, Admin JWT, Guest FAQ, phân quyền và lịch sử/reset của Driver. Mặc định build và cập nhật tag `smartpark/assistant:local`. Dùng `-NoBuild` khi đã có đúng image cần test. |
+| `Postgres` | Cần Docker engine local và image `postgres:16-alpine` đã tải. Harness tự cấp DB/cổng loopback riêng. Kiểm nâng cấp S05 có dữ liệu, hồi quy PostgreSQL, chạy lại migration và backup/restore. |
+
+```powershell
+pwsh -NoProfile -File scripts/test-assistant.ps1 -Suite Offline
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant.ps1 -Suite Offline
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant.ps1 -Suite DockerPreflight
+```
+
+Lần đầu hoặc khi cần build image từ checkout hiện tại:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant.ps1 -Suite Docker
+```
+
+Khi đã có đúng image local, chạy lại smoke trên từng phiên bản PowerShell:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant.ps1 -Suite Docker -NoBuild
+pwsh -NoProfile -File scripts/test-assistant.ps1 -Suite Docker -NoBuild
+```
+
+Chạy bộ `Offline` bằng PowerShell 7 để lấy đủ ca. Các lệnh `Docker` chạy cả harness lẫn script setup con bằng cùng phiên bản PowerShell. Điểm `PASS` của preflight áp dụng cho fixture. Gọi Assistant qua trình duyệt cần smoke trên môi trường đích.
+
+#### Nghiệm thu backend trên PostgreSQL cách ly
+
+Restore trước khi chạy test .NET và PostgreSQL. Nếu chưa có image PostgreSQL local thì chạy `docker pull postgres:16-alpine` trước harness.
 
 ```powershell
 dotnet restore SmartParking.slnx
 dotnet build SmartParking.slnx -c Release --no-restore --nologo -m:1
 dotnet test tests/Services/SmartParking.IoTService.Tests/SmartParking.IoTService.Tests.csproj -c Release --no-build --nologo
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-postgres.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-docker-setup.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant.ps1 -Suite Postgres
 ```
+
+Các test tích hợp PostgreSQL opt-in sẽ skip khi chạy `dotnet test` thông thường. Dùng `-Suite Postgres` để chạy chúng trên DB do harness tạo. Khi thay UI hoặc setup dùng chung, chạy thêm:
+
+```powershell
+node --test tests/frontend/*.test.cjs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-setup.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-owner-listeners.ps1
+```
+
+### 7.2. Đọc inventory schema khi cần chẩn đoán
+
+```powershell
+./scripts/check-assistant-setup.ps1 -SchemaSql
+```
+
+Chế độ này in truy vấn kiểm cột, index và constraint của schema `public`. Chỉ chạy SQL sau khi xác nhận datasource IoT và được duyệt kiểm tra. Dùng `./setup.ps1 -AssistantCheck` để kiểm cấu hình trước khi dựng Assistant.
+
+### 7.3. Các lượt kiểm tra đã ghi nhận
+
+**19/11/2026 — kiểm chứng sau khi gộp script**
+
+| Bộ kiểm tra | Kết quả |
+| --- | --- |
+| `Offline` | PASS trên PowerShell 7.6.9. Windows PowerShell 5.1.26100.9818 đạt các nhóm được hỗ trợ và bỏ qua ba nhóm RSA chi tiết như mô tả ở mục 7.1. Cả hai lượt dùng `.env.example` ở fixture, kiểm hoàn tác khi `.env` bị khóa và xác nhận giữ đúng khóa khi export từ alias `FILE`. |
+| `DockerPreflight` | PASS trên fixture local. Các chế độ `DockerPreflight` và `Postgres` đều từ chối Docker endpoint TCP trước khi tạo tài nguyên test. |
+| `Docker -NoBuild` | PASS trên cả Windows PowerShell 5.1.26100.9818 và PowerShell 7.6.9, dùng cùng image local. Cả hai lượt kiểm khởi tạo DB, chạy lại setup, Admin JWT, Guest FAQ, phân quyền và lịch sử/reset của Driver. Container, network và volume của fixture đã được dọn. |
+| `test-setup.ps1` và `-SchemaSql` | Fixture setup dùng chung đạt. SQL do `-SchemaSql` in ra khớp truy vấn chẩn đoán trước khi gộp. |
+| Build solution và test .NET IoT | Build đạt với 0 lỗi và 15 cảnh báo. Bộ test IoT loại lớp `AssistantPostgresTests` có 624 pass, 0 fail và 3 skip. |
+| `Postgres` | Chưa chạy lại bộ riêng sau khi gộp. Docker smoke đã kiểm PostgreSQL trong fixture của nó. |
+
+Kết quả dưới đây ghi nhận lượt chạy trên working tree ngày 13/11/2026. Khi QA chạy bản hiện tại, ghi kết quả mới kèm commit và bộ kiểm tra đã chọn.
 
 | Bộ test / lượt 13/11/2026 | Kết quả đã chạy trên working tree |
 | --- | --- |
 | `dotnet build SmartParking.slnx --nologo -m:1` | PASS, 0 error; warning NU1510/NU1900 và dependency NU1902/NU1903 còn tồn tại |
 | `dotnet test SmartParking.slnx --no-build --no-restore --nologo -m:1` | **1.607 pass, 0 fail, 109 skip**. Gồm IoT 518 pass / 7 skip. VSTest phải chạy ngoài sandbox; không gọi skipped integration là pass |
 | FE build + Node tests | PASS build; **67/67** targeted chatbot tests và **298/298** toàn bộ `tests/frontend/*.test.cjs` |
-| `test-assistant-docker-setup.ps1` | PASS container/PG thật cách ly: schema init/replay, Admin JWT, Guest FAQ fallback, role isolation, Driver history/reset sau rerun |
-| `test-assistant-postgres.ps1` | PASS **6/6** integration trên PostgreSQL cách ly: upgrade S05 có dữ liệu, concurrency/recovery/retention, migration replay và backup/restore. Worker con không là test standalone |
+| Docker smoke trước khi gộp | PASS container/PG thật cách ly: schema init/replay, Admin JWT, Guest FAQ fallback, role isolation, Driver history/reset sau rerun |
+| PostgreSQL trước khi gộp | PASS **6/6** integration trên PostgreSQL cách ly: upgrade S05 có dữ liệu, concurrency/recovery/retention, migration replay và backup/restore. Worker con không là test standalone |
 | Fresh Facility PostgreSQL fixture | PASS: init có hai bảng discovery, 0 publication, không tự publish dữ liệu |
-| `test-setup`, `test-assistant-docker-initializer`, `test-discovery-docker`, `test-owner-listeners`, `test-assistant-check`, `test-assistant-migration-plan`, `test-assistant-runner` | PASS fixtures (gồm giữ nguyên JWT FILE/PEM/Base64 khi thêm Assistant và chặn nguồn lệch/placeholder trước khi ghi); scripts PowerShell parse và Compose app/schema config quiet PASS |
+| Fixture setup, discovery, owner listener, khởi tạo Assistant, readiness, migration plan và host runner | PASS fixtures (gồm giữ nguyên JWT FILE/PEM/Base64 khi thêm Assistant và chặn nguồn lệch/placeholder trước khi ghi); scripts PowerShell parse và Compose app/schema config quiet PASS |
 | Live UserService → browser → provider thật trên máy tester | **UNVERIFIED** trong lượt này; QA chạy checklist theo tài khoản và corpus đích |
 | Fresh top-level toàn hệ thống + flow onboarding/reservation/payment trên máy trắng | **UNVERIFIED**; harness cách ly không thay thế bài nghiệm thu này |
 
 Build còn cảnh báo package MessagePack 2.5.302 và SignalR.StackExchangeRedis 10.0.12 từ NuGet; chưa nâng dependency trong lượt sửa chatbot/setup. Đây là phần cần xử lý trước production, không suy từ build PASS rằng đã đạt security release. Kết quả cũ ngày 08/11 giữ trong [nhật ký backend](../../ai/tasks/active/chatbot-development-progress.md), không trộn vào số liệu trên. Trong bảy ca IoT skip mặc định, sáu ca PostgreSQL đã chạy riêng đạt ở harness trên; một entry point dành worker con không chạy standalone.
-
-Chạy thêm khi thay UI hoặc setup tương ứng.
-
-```powershell
-node --test tests/frontend/*.test.cjs
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-setup.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-check.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-runner.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-owner-listeners.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-assistant-migration-plan.ps1
-```
 
 ### Baseline S09 · fixture offline
 
@@ -1027,7 +1113,7 @@ Luồng thực tế: FE → IoT Assistant API → kiểm JWT/role + lưu hội t
 | `compose.discovery.yml`, `compose.assistant-discovery-trust.yml` | HTTPS giữa các service phục vụ tìm bãi |
 | `src/Services/IoTService/SmartParking.IoTService.*` | API/Application/Infrastructure/Persistence của chatbot |
 | `FE/src/components/chat`, `FE/src/roles/admin/setting/AssistantSettings.tsx` | Widget và quản trị provider |
-| `tests/Services/SmartParking.IoTService.Tests`, `tests/frontend`, `scripts/test-*` | Regression và harness cách ly |
+| `tests/Services/SmartParking.IoTService.Tests`, `tests/frontend`, `scripts/test-assistant.ps1` | Regression và harness Assistant cách ly |
 
 
 Cấu hình trong hướng dẫn dùng Docker local. Khi triển khai server cần cấu hình DNS/HTTPS, secret store và volume bền vững riêng; không dùng nguyên account demo và Development/Vite cho production.

@@ -5,7 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
-// Invoked by initialize-assistant-docker.ps1. Never place secret inputs in arguments.
+// Invoked by setup-assistant-docker.ps1 -Initialize. Never place secret inputs in arguments.
 try
 {
     Console.InputEncoding = new UTF8Encoding(false);
