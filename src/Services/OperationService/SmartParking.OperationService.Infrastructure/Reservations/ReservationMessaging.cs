@@ -19,6 +19,7 @@ public static class ReservationMessaging
 {
     public static IServiceCollection AddReservationMessaging(this IServiceCollection services, IConfiguration configuration)
     {
+        services.TryAddScoped<IReservationQuoteOwner, UnavailableReservationQuoteOwner>();
         services.TryAddScoped<IQuoteAdmissionStarter, UnavailableQuoteAdmissionStarter>();
         var admissionEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var sagaEnabled = admissionEnabled && configuration.GetValue<bool>("ReservationAdmission:SagaConsumersEnabled");
@@ -60,6 +61,7 @@ public static class ReservationMessaging
         {
             if (sagaEnabled)
             {
+                registration.AddConsumer<QuoteEvaluationConsumer>();
                 registration.AddConsumer<PlateDecisionConsumer>();
                 registration.AddConsumer<SlotDecisionConsumer>();
                 registration.AddSagaStateMachine<ReservationAdmissionMachine, Persistence.Entities.ReservationAdmissionState>()
@@ -166,6 +168,12 @@ public static class ReservationMessaging
                         endpoint.ConfigureConsumeTopology = false;
                         endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
                         endpoint.ConfigureConsumer<SlotDecisionConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint(AdmissionMessages.EvaluationQueue, endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(1)));
+                        endpoint.ConfigureConsumer<QuoteEvaluationConsumer>(context);
                     });
                     bus.ReceiveEndpoint(AdmissionMessages.SagaQueue, endpoint =>
                     {

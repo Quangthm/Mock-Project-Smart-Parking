@@ -6,7 +6,7 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class ReviewReservationQuoteHandler(ICurrentActor actor, IReservationFacilityOwner facility,
     IReservationCommercialOwner payment, IReservationSubscriptionEligibility subscriptions,
-    TimeProvider clock, ISender sender)
+    TimeProvider clock, IMediator mediator)
     : IRequestHandler<ReviewReservationQuoteCommand, ReviewedReservationQuote>
 {
     public async Task<ReviewedReservationQuote> Handle(ReviewReservationQuoteCommand command, CancellationToken ct)
@@ -23,7 +23,7 @@ public sealed class ReviewReservationQuoteHandler(ICurrentActor actor, IReservat
             throw new ReservationGateException(409, "SLOT_INELIGIBLE", "The slot is ineligible for CAR reservations.");
 
         var now = clock.GetUtcNow();
-        var policy = await sender.Send(new ResolveReservationPoliciesQuery(facts.TenantId, facts.SiteId, now), ct);
+        var policy = await mediator.Send(new ResolveReservationPoliciesQuery(facts.TenantId, facts.SiteId, now), ct);
         if (!policy.AllowsWindow(interval, now))
             throw new ReservationGateException(400, "BOOKING_WINDOW_INVALID", "The interval is outside the effective booking policy.");
 

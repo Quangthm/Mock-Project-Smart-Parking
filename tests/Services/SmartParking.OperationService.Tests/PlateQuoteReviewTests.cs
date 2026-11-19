@@ -101,7 +101,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
         using var provider = services.BuildServiceProvider();
         var handler = new ReviewReservationQuoteHandler(this, new ReservationFacilityClient(facilityClient, settings),
             new ReservationCommercialClient(paymentClient, new HttpContextAccessor(), settings),
-            new ReservationSubscriptionEligibility(), TimeProvider.System, provider.GetRequiredService<ISender>());
+            new ReservationSubscriptionEligibility(), TimeProvider.System, provider.GetRequiredService<IMediator>());
         var input = new ReviewReservationQuoteCommand("51a-123.45", slot, start, start.AddHours(1), "PAYOS");
         if (errorCode is null)
         {

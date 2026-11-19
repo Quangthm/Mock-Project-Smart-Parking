@@ -106,6 +106,16 @@ public sealed class ReservationRequest
         SlotCheck = eligible ? "SUCCEEDED" : "REJECTED";
     }
 
+    public void AttachQuoteHold(Guid reservationId)
+    {
+        if (reservationId != Id || State != "EVALUATING" || AccountCheck != "SUCCEEDED" ||
+            PlateCheck != "SUCCEEDED" || SlotCheck != "SUCCEEDED" || DecisionId is null)
+            throw new InvalidOperationException("All owner checks are required for a quote hold.");
+        ReservationId = reservationId;
+        State = "HOLD_CREATED";
+        Code = null;
+    }
+
     public void AttachBooking(Guid reservationId)
     {
         if (State != "PREPARING" || VehicleBindingState != "ACTIVE" || reservationId == Guid.Empty)

@@ -28,7 +28,7 @@ public sealed record ReservationProgress(Guid RequestId, long Version, string Ad
         });
         var slot = request.SlotCheck ?? (booking is null ? remaining : "SUCCEEDED");
         var evaluation = booking is not null ? "SUCCEEDED" :
-            request.Code == "PAYMENT_QUOTE_PROOF_UNAVAILABLE" ? "FAILED_DEPENDENCY" :
+            request.State == "FAILED_DEPENDENCY" && plate == "SUCCEEDED" && slot == "SUCCEEDED" ? "FAILED_DEPENDENCY" :
             request.State == "REJECTED" && plate == "SUCCEEDED" && slot == "SUCCEEDED" ? "REJECTED" : remaining;
         var readiness = booking?.OrderProvisioningState switch
         {

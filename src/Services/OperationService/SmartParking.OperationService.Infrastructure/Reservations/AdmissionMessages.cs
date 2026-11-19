@@ -7,6 +7,9 @@ namespace SmartParking.OperationService.Infrastructure.Reservations;
 public sealed class AdmissionMessages(ISendEndpointProvider endpoints) : IAdmissionMessages, IQuoteAdmissionStarter
 {
     internal const string SagaQueue = "operations-reservation-admission-v1";
+    internal const string EvaluationQueue = "operations-reservation-evaluate-v1";
+    public Task RequestEvaluationAsync(Guid id, CancellationToken ct) =>
+        SendAsync(EvaluationQueue, new EvaluateQuoteBooking(id), id, ct);
     public Task StartAsync(Guid id, CancellationToken ct) => SendAsync(SagaQueue, new StartQuoteAdmission(id), id, ct);
     public Task WakeAsync(Guid id, CancellationToken ct) => SendAsync(SagaQueue, new CheckAdmissionDeadline(id), id, ct);
     public Task EvaluateAsync(Guid id, CancellationToken ct) => SendAsync(SagaQueue, new EvaluateQuoteBooking(id), id, ct);

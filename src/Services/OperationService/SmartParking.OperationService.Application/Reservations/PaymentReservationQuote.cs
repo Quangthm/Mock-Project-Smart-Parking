@@ -13,9 +13,10 @@ public sealed record PaymentReservationQuote(
     {
         if (ValidUntil == default || QuoteId == Guid.Empty || string.IsNullOrWhiteSpace(QuoteVersion) || Binding != expected ||
             string.IsNullOrWhiteSpace(TariffVersion) || string.IsNullOrWhiteSpace(Disclosure) ||
-            expected.Coverage.IsCovered || CoveredAmount != 0 || Currency != "VND" ||
+            expected.Coverage is null || string.IsNullOrWhiteSpace(expected.Coverage.Version) ||
+            CoveredAmount != (expected.Coverage.IsCovered ? BookedAmount : 0m) || Currency != "VND" ||
             BookedAmount < 0 || decimal.Truncate(BookedAmount) != BookedAmount ||
-            PrepaymentMode != "FULL" || DepositAmount != BookedAmount)
+            PrepaymentMode != "FULL" || DepositAmount != BookedAmount - CoveredAmount)
             throw BookingContracts.InvalidOwner();
         if (Status is not ("ISSUED" or "ACCEPTED" or "EXPIRED")) throw BookingContracts.InvalidOwner();
         if (Status != "ISSUED" || ValidUntil <= now)

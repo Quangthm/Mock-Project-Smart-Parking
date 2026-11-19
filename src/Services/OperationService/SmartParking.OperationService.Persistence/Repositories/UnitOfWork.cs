@@ -55,6 +55,16 @@ public sealed class UnitOfWork(
                 if (reservation.RequestId is not null && reservation.Status is ("CONFIRMED" or "ALLOCATED" or "PARKING" or "COMPLETED") &&
                     (reservation.ConfirmationEvaluatedAt is null || reservation.ConfirmedAt is null || reservation.ConfirmedAt >= reservation.ExpectedStartTime || reservation.ConfirmedAt != reservation.ConfirmationEvaluatedAt || reservation.ConfirmationEffectId is null))
                     throw new InvalidOperationException("A pre-start eligibility checkpoint is required.");
+                if (entry.State == EntityState.Modified &&
+                    (entry.Property(nameof(reservation.QuoteId)).IsModified ||
+                     reservation.QuoteId.HasValue && entry.Properties.Any(p => p.IsModified && p.Metadata.Name is
+                         nameof(reservation.AccountId) or nameof(reservation.RequestId) or nameof(reservation.TargetSlotId) or
+                         nameof(reservation.ExpectedStartTime) or nameof(reservation.ExpectedEndTime) or nameof(reservation.ClaimEndTime) or
+                         nameof(reservation.CreatedAt) or nameof(reservation.HoldExpiresAt) or nameof(reservation.QuoteVersion) or
+                         nameof(reservation.QuoteValidUntil) or nameof(reservation.TariffVersion) or nameof(reservation.CoverageVersion) or
+                         nameof(reservation.IsCovered) or nameof(reservation.CoveredAmount) or nameof(reservation.SelectedPaymentMethod) or
+                         nameof(reservation.BookedAmount) or nameof(reservation.DepositAmount) or nameof(reservation.Currency))))
+                    throw new InvalidOperationException("Accepted quote binding is immutable.");
                 if (entry.State == EntityState.Modified && entry.Property("NormalizedPlate").OriginalValue is string priorPlate && reservation.NormalizedPlate != priorPlate)
                     throw new InvalidOperationException("Accepted plate identity is immutable.");
                 if (entry.State == EntityState.Modified && entry.Property("AcceptedPricingSnapshot").OriginalValue is string pricing && reservation.AcceptedPricingSnapshot != pricing)

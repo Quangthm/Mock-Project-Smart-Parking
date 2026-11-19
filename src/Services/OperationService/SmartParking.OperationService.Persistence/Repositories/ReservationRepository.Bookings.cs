@@ -8,6 +8,9 @@ namespace SmartParking.OperationService.Persistence.Repositories;
 
 public sealed partial class ReservationRepository
 {
+    public Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct) =>
+        db.Reservations.AnyAsync(row => row.QuoteId == quoteId, ct);
+
     public async Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is null || string.IsNullOrWhiteSpace(proposed.NormalizedPlate))
@@ -116,14 +119,14 @@ public sealed partial class ReservationRepository
 
     public async Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) =>
         await db.Reservations.AsNoTracking().Where(r =>
-                r.DepositAmount == 0 && r.ConfirmationState == "PENDING" &&
+                r.DepositAmount == 0 && (r.ConfirmationState == "PENDING" || r.ConfirmationState == "RECONCILIATION_REQUIRED") &&
                 r.ConfirmationNextActionAt <= now && r.ConfirmationEvaluatedAt == null)
             .OrderBy(r => r.ConfirmationNextActionAt).ThenBy(r => r.Id)
             .Select(r => r.Id).Take(take).ToListAsync(ct);
 
     public async Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) =>
         await db.Reservations.AsNoTracking().Where(r =>
-                r.DepositAmount > 0 && r.CollectionId != null && r.ConfirmationState == "PENDING" &&
+                r.DepositAmount > 0 && r.CollectionId != null && (r.ConfirmationState == "PENDING" || r.ConfirmationState == "RECONCILIATION_REQUIRED") &&
                 r.ConfirmationNextActionAt <= now && r.ConfirmationEvaluatedAt == null)
             .OrderBy(r => r.ConfirmationNextActionAt).ThenBy(r => r.Id)
             .Select(r => r.Id).Take(take).ToListAsync(ct);

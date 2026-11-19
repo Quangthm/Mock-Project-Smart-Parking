@@ -35,8 +35,15 @@ public sealed class ReservationAuthorizationWorker(IServiceScopeFactory scopes, 
                     try
                     {
                         var mediator = requestScope.ServiceProvider.GetRequiredService<IMediator>();
-                        await mediator.Send(new AdvanceReservationAuthorizationCommand(id), stoppingToken);
-                        await mediator.Send(new ProgressReservationCommand(id), stoppingToken);
+                        var request = await requestScope.ServiceProvider.GetRequiredService<IReservationRequestRepository>()
+                            .FindForWorkerAsync(id, stoppingToken);
+                        if (request?.State == "EVALUATING")
+                            await mediator.Send(new CommitQuoteHoldCommand(id), stoppingToken);
+                        else
+                        {
+                            await mediator.Send(new AdvanceReservationAuthorizationCommand(id), stoppingToken);
+                            await mediator.Send(new ProgressReservationCommand(id), stoppingToken);
+                        }
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
                     catch (Exception error)

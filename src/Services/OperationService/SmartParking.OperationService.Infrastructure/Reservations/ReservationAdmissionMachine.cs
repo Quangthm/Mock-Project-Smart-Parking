@@ -32,7 +32,7 @@ public sealed class ReservationAdmissionMachine : MassTransitStateMachine<Reserv
             next => next.TransitionTo(Checking), next => next.Finalize()));
         During(Checking, Ignore(Started), Branch(Account), Branch(Plate), Branch(Slot), Branch(Deadline));
         During(Evaluating, Ignore(Started), Ignore(Account), Ignore(Plate), Ignore(Slot), Ignore(Deadline),
-            Apply(When(Evaluate)).Finalize());
+            Apply(When(Evaluate)).If(c => c.Saga.Outcome != "EVALUATING", next => next.Finalize()));
         During(Final, Ignore(Started), Ignore(Account), Ignore(Plate), Ignore(Slot), Ignore(Deadline), Ignore(Evaluate));
     }
 

@@ -496,3 +496,7 @@ The branch remains at `960aaef8742740f567008a8bf97a0133be6d950f`. See the [Slice
 Operations has 74 distinct passing cases across the final suite and its one targeted restart-test rerun. Facility passed 71, UserService passed 12 and frontend passed 20. Fresh PostgreSQL, RabbitMQ and an authenticated test WebSocket exercised the Operations path. Owner replies were controlled. Hard-crash boundaries, deployed ACLs and a real provider transaction remain unverified.
 
 Production quote submission remains gated. Payment proof and consumption semantics, guarded quote-based hold creation, and the historical terms/data transition keep the branch open. The existing frontend review/create pair and post-hold recovery remain available. No staging, commit, push or deployment.
+
+## 19 November 2026 — post-merge quote holds and guarded confirmation
+
+Baseline `f06ff1a9662d301e313f4846cc257814d3f87b22` on the SPARK-273 feature branch. The receipt and protected local hold now commit with the Operations EF outbox. Normal confirmation requires a checkpoint strictly before H. Verified paid money can compete again before T. Late zero-value acceptance goes to reconciliation. Production quote ingress and commercial evidence adapters remain gated. The [Slices 2 and 4 handoff](../../../docs/05-project-management/handoffs/2026-11-19-SPARK-273-slices-2-and-4.md) owns the current file inventory, checks, compatibility requirements and open owner decisions.

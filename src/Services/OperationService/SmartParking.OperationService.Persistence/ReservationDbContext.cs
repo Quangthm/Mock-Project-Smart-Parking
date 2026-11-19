@@ -48,6 +48,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationRequest>().Property(x => x.IntentJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRequest>().HasIndex(x => new { x.AccountId, x.Operation, x.IdempotencyKey }).IsUnique();
         Map<ReservationRow>(modelBuilder, "reservations");
+        modelBuilder.Entity<ReservationRow>().HasIndex(x => x.QuoteId).IsUnique();
         modelBuilder.Entity<ReservationRow>().Property(x => x.Version).IsConcurrencyToken();
         Map<ParkingSessionRow>(modelBuilder, "parking_sessions");
         modelBuilder.Entity<ParkingSessionRow>().Property(x => x.Version).IsConcurrencyToken();

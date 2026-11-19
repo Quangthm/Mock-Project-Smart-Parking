@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MediatR;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
@@ -8,7 +7,7 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class AcceptZeroPriceTermsHandler(IReservationBookingRepository bookings,
     IReservationWorkflowConcurrency workers, IOperationsConcurrency guards, IUnitOfWork work,
-    IReservationCommercialOwner commercial, IReservationFactsPublisher publisher)
+    IReservationCommercialOwner commercial, IReservationFactsPublisher publisher, IReservationQuoteOwner quoteOwner)
     : IRequestHandler<AcceptZeroPriceTermsCommand>
 {
     private static readonly TimeSpan AttemptLease = TimeSpan.FromSeconds(30);
@@ -22,6 +21,8 @@ public sealed class AcceptZeroPriceTermsHandler(IReservationBookingRepository bo
         if (lease is null) return;
 
         ZeroPriceAcceptanceRequest? acceptanceRequest = null;
+        var retryState = "PENDING";
+        ZeroOrderBinding? zeroBinding = null;
         await using (var transaction = await work.BeginTransactionAsync(ct))
         {
             await guards.LockVehicleAsync(observed.NormalizedPlate!, ct);
@@ -32,11 +33,14 @@ public sealed class AcceptZeroPriceTermsHandler(IReservationBookingRepository bo
                 return;
 
             var now = await bookings.DatabaseNowAsync(ct);
-            var terms = BookingContracts.AcceptedTerms(booking);
+            var terms = booking.QuoteId is null ? BookingContracts.AcceptedTerms(booking) : null;
+            var validUntil = booking.QuoteValidUntil ?? terms!.ValidUntil;
             if (booking.ZeroPriceAcceptanceState == "PENDING" &&
-                (now >= booking.HoldExpiresAt || now >= terms.ValidUntil))
+                (booking.Status != "PENDING_PAYMENT" || booking.ActiveClaimSlotId != booking.TargetSlotId ||
+                 now >= booking.HoldExpiresAt || now >= validUntil))
             {
-                var code = now >= booking.HoldExpiresAt ? "PAYMENT_HOLD_EXPIRED" : "TERMS_CHANGED_OR_EXPIRED";
+                var code = booking.Status != "PENDING_PAYMENT" || now >= booking.HoldExpiresAt ||
+                    booking.ActiveClaimSlotId != booking.TargetSlotId ? "PAYMENT_HOLD_EXPIRED" : "TERMS_CHANGED_OR_EXPIRED";
                 var wasPending = booking.Status == "PENDING_PAYMENT";
                 booking.RejectZeroPriceTerms(code);
                 if (wasPending) await PublishHoldAsync(booking, now, "EXPIRED", checked(booking.Version + 1), ct);
@@ -45,24 +49,27 @@ public sealed class AcceptZeroPriceTermsHandler(IReservationBookingRepository bo
                 return;
             }
 
+            if (booking.ZeroPriceAcceptanceState != "PENDING") retryState = "UNKNOWN";
             if (!booking.BeginZeroPriceAcceptance(now, AttemptLease)) return;
-            acceptanceRequest = new ZeroPriceAcceptanceRequest(booking.RequestId!.Value, booking.Id,
+            if (booking.QuoteId.HasValue) zeroBinding = BookingContracts.ZeroBinding(booking);
+            else acceptanceRequest = new ZeroPriceAcceptanceRequest(booking.RequestId!.Value, booking.Id,
                 booking.AccountId, booking.TenantId, booking.SiteId, booking.VehicleId!.Value,
                 booking.TargetSlotId!.Value, booking.ExpectedStartTime, booking.ExpectedEndTime,
-                terms, booking.HoldExpiresAt!.Value);
+                terms!, booking.HoldExpiresAt!.Value);
             await work.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
 
-        if (acceptanceRequest is null) return;
-        ZeroPriceAcceptanceResult result;
+        ZeroPriceAcceptanceResult? result = null;
+        ZeroOrderDecision? decision = null;
         try
         {
-            result = await commercial.AcceptZeroPriceAsync(acceptanceRequest, ct);
+            if (zeroBinding is not null) decision = await quoteOwner.AcceptZeroAsync(zeroBinding, ct);
+            else result = await commercial.AcceptZeroPriceAsync(acceptanceRequest!, ct);
         }
-        catch (ReservationGateException error) when (error.Code == "OWNER_UNAVAILABLE")
+        catch (ReservationGateException error) when (error.Code is "OWNER_UNAVAILABLE" or "PAYMENT_QUOTE_PROOF_UNAVAILABLE")
         {
-            await RecordDeferredAsync(command.ReservationId, "PENDING", "ZERO_PRICE_ACCEPTANCE_UNAVAILABLE", ct);
+            await RecordDeferredAsync(command.ReservationId, retryState, "ZERO_PRICE_ACCEPTANCE_UNAVAILABLE", ct);
             return;
         }
         catch (ReservationGateException error) when (error.Code == "ZERO_PRICE_ACCEPTANCE_OUTCOME_UNKNOWN")
@@ -79,7 +86,27 @@ public sealed class AcceptZeroPriceTermsHandler(IReservationBookingRepository bo
         var locked = await bookings.FindForUpdateAsync(observedResult.TenantId, observedResult.SiteId, observedResult.Id, ct)
             ?? throw new InvalidOperationException("Reservation disappeared during zero-price acceptance.");
         var evaluatedNow = await bookings.DatabaseNowAsync(ct);
-        if (result.AcceptedRequest != acceptanceRequest)
+        if (zeroBinding is not null)
+        {
+            if (decision is { State: "REJECTED", OrderId: null, ReceiptId: null } && decision.Binding == zeroBinding &&
+                !string.IsNullOrWhiteSpace(decision.Code))
+            {
+                var held = locked.Status == "PENDING_PAYMENT";
+                locked.RejectZeroPriceTerms(decision.Code);
+                if (held) await PublishHoldAsync(locked, evaluatedNow, "EXPIRED", checked(locked.Version + 1), ct);
+            }
+            else if (decision is not { State: "ACCEPTED", OrderId: Guid orderId, ReceiptId: Guid receiptId } ||
+                decision.Binding != zeroBinding || orderId == Guid.Empty || receiptId == Guid.Empty)
+                locked.DeferZeroPriceAcceptance(evaluatedNow.Add(RetryDelay), "UNKNOWN", "ZERO_PRICE_ACCEPTANCE_RESPONSE_INVALID");
+            else
+            {
+                locked.RecordZeroOrder(orderId, receiptId, evaluatedNow);
+                await ReleaseExpiredHoldAsync(locked, evaluatedNow, ct);
+                if (locked.Status != "PENDING_PAYMENT")
+                    locked.RequireReconciliation("PAYMENT_HOLD_EXPIRED", evaluatedNow);
+            }
+        }
+        else if (result is null || result.AcceptedRequest != acceptanceRequest)
         {
             locked.DeferZeroPriceAcceptance(evaluatedNow.Add(RetryDelay), "UNKNOWN", "ZERO_PRICE_ACCEPTANCE_RESPONSE_INVALID");
         }

@@ -92,16 +92,16 @@ public sealed class ReservationCreationLifecycleTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddApplicationServices();
+        services.AddSingleton<IReservationBookingRepository>(repo);
         services.AddSingleton<IRequestHandler<ProvisionReservationOrderCommand>>(positive);
         services.AddSingleton<IRequestHandler<AcceptZeroPriceTermsCommand>>(zero);
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await ReservationHoldChangedConsumer.DispatchAsync(repo, mediator,
+        await mediator.Send(new ProcessReservationHold(
             new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, booking.RequestId!.Value, booking.Id,
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1),
-                DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1),
-            CancellationToken.None);
+                DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1)), CancellationToken.None);
 
         Assert.Single(positive.Calls);
         Assert.Empty(zero.Calls);
@@ -117,16 +117,16 @@ public sealed class ReservationCreationLifecycleTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddApplicationServices();
+        services.AddSingleton<IReservationBookingRepository>(repo);
         services.AddSingleton<IRequestHandler<ProvisionReservationOrderCommand>>(positive);
         services.AddSingleton<IRequestHandler<AcceptZeroPriceTermsCommand>>(zero);
         using var provider = services.BuildServiceProvider();
         var mediator = provider.GetRequiredService<IMediator>();
 
-        await ReservationHoldChangedConsumer.DispatchAsync(repo, mediator,
+        await mediator.Send(new ProcessReservationHold(
             new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, booking.RequestId!.Value, booking.Id,
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1),
-                DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1),
-            CancellationToken.None);
+                DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1)), CancellationToken.None);
 
         Assert.Empty(positive.Calls);
         Assert.Single(zero.Calls);

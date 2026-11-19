@@ -22,7 +22,7 @@ public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository 
         else if (request.State == "EVALUATING")
         {
             if (command.Signal is EvaluateQuoteBooking)
-                request.FailQuoteAdmission("PAYMENT_QUOTE_PROOF_UNAVAILABLE");
+                await messages.RequestEvaluationAsync(request.Id, ct);
         }
         else
         {
@@ -66,7 +66,7 @@ public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository 
                         ? "FACILITY_UNAVAILABLE" : "FACILITY_RESPONSE_INVALID");
                     break;
             }
-            if (request.State == "EVALUATING") await messages.EvaluateAsync(request.Id, ct);
+            if (request.State == "EVALUATING") await messages.RequestEvaluationAsync(request.Id, ct);
         }
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);

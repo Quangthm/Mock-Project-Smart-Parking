@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MediatR;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
@@ -8,7 +7,7 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class ProvisionReservationOrderHandler(IReservationBookingRepository bookings,
     IReservationWorkflowConcurrency workers, IOperationsConcurrency guards, IUnitOfWork work,
-    IReservationCommercialOwner commercial, IReservationFactsPublisher publisher)
+    IReservationCommercialOwner commercial, IReservationFactsPublisher publisher, IReservationQuoteOwner quoteOwner)
     : IRequestHandler<ProvisionReservationOrderCommand>
 {
     private static readonly TimeSpan AttemptLease = TimeSpan.FromSeconds(30);
@@ -21,6 +20,7 @@ public sealed class ProvisionReservationOrderHandler(IReservationBookingReposito
         await using var lease = await workers.TryEnterAsync(workflowId, ct);
         if (lease is null) return;
 
+        var retryState = "PENDING";
         DepositOrderRequest? orderRequest = null;
         await using (var transaction = await work.BeginTransactionAsync(ct))
         {
@@ -34,9 +34,10 @@ public sealed class ProvisionReservationOrderHandler(IReservationBookingReposito
             var now = await bookings.DatabaseNowAsync(ct);
             await ReleaseExpiredHoldAsync(booking, now, ct);
 
-            var quote = BookingContracts.AcceptedTerms(booking);
+            var legacy = booking.QuoteId is null ? BookingContracts.AcceptedTerms(booking) : null;
+            var validUntil = booking.QuoteValidUntil ?? legacy!.ValidUntil;
             if (booking.OrderProvisioningState == "PENDING" &&
-                (now >= booking.HoldExpiresAt || now >= quote.ValidUntil))
+                (now >= booking.HoldExpiresAt || now >= validUntil))
             {
                 var code = now >= booking.HoldExpiresAt ? "PAYMENT_HOLD_EXPIRED" : "TERMS_CHANGED_OR_EXPIRED";
                 booking.CloseOrderProvisioning(code);
@@ -46,10 +47,11 @@ public sealed class ProvisionReservationOrderHandler(IReservationBookingReposito
                 return;
             }
 
+            if (booking.OrderProvisioningState != "PENDING") retryState = "UNKNOWN";
             if (!booking.BeginOrderProvisioning(now, AttemptLease)) return;
             orderRequest = new DepositOrderRequest(booking.RequestId!.Value, booking.Id, booking.AccountId,
-                booking.TenantId, booking.SiteId, quote.QuoteId, quote.Version, quote.DepositAmount,
-                quote.Currency, quote.Selection.PaymentMethod, booking.HoldExpiresAt!.Value);
+                booking.TenantId, booking.SiteId, booking.QuoteId ?? legacy!.QuoteId, booking.QuoteVersion ?? legacy!.Version,
+                booking.DepositAmount.Value, booking.Currency!, booking.SelectedPaymentMethod!, booking.HoldExpiresAt!.Value);
             await work.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
@@ -58,11 +60,12 @@ public sealed class ProvisionReservationOrderHandler(IReservationBookingReposito
         DepositOrderResult result;
         try
         {
-            result = await commercial.EnsureOrderAsync(orderRequest, ct);
+            result = observed.QuoteId.HasValue ? await quoteOwner.EnsureOrderAsync(orderRequest, ct) :
+                await commercial.EnsureOrderAsync(orderRequest, ct);
         }
-        catch (ReservationGateException error) when (error.Code == "OWNER_UNAVAILABLE")
+        catch (ReservationGateException error) when (error.Code is "OWNER_UNAVAILABLE" or "PAYMENT_QUOTE_PROOF_UNAVAILABLE")
         {
-            await RecordDeferredAsync(command.ReservationId, "PENDING", "PAYMENT_ORDER_PROVISIONING_UNAVAILABLE", ct);
+            await RecordDeferredAsync(command.ReservationId, retryState, "PAYMENT_ORDER_PROVISIONING_UNAVAILABLE", ct);
             return;
         }
         catch (ReservationGateException error) when (error.Code == "PAYMENT_ORDER_OUTCOME_UNKNOWN")
