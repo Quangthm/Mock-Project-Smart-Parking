@@ -210,7 +210,7 @@ function AppContent() {
           ? <DriverChatbot key={`${user.id}:${user.role}`} />
           : <GuestChatbot key={user.id} role={user.role} />
       )}
-      {authReady && !user && view === "landing" && <GuestChatbot onSignIn={question => {
+      {authReady && !user && view === "landing" && <GuestChatbot keepVisible onSignIn={question => {
         setGuestQuestion(question)
         setView("sign-in")
       }} />}

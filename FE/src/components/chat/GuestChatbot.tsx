@@ -31,7 +31,7 @@ async function sendGuest(message: string, signal: AbortSignal, signedIn: boolean
   return { reply, mode, loginRequired: loginRequired && !signedIn }
 }
 
-export function GuestChatbot({ role = "driver", onSignIn }: { role?: Role; onSignIn?: (question: string) => void }) {
+export function GuestChatbot({ role = "driver", onSignIn, keepVisible = false }: { role?: Role; onSignIn?: (question: string) => void; keepVisible?: boolean }) {
   const [ready, setReady] = useState(false)
   const [open, setOpen] = useState(false)
   useEffect(() => {
@@ -63,8 +63,23 @@ export function GuestChatbot({ role = "driver", onSignIn }: { role?: Role; onSig
       document.removeEventListener("visibilitychange", refresh)
     }
   }, [open])
-  return ready ? <FloatingChatbot role={role} onOpenChange={setOpen} guest={{
-    send: (message, signal) => sendGuest(message, signal, !onSignIn),
+  return ready || keepVisible ? <FloatingChatbot role={role} onOpenChange={setOpen} guest={{
+    send: async (message, signal) => {
+      if (!assistantConfigured) throw new Error("SmartParking AI is not configured yet. Please try again later.")
+      if (!ready) {
+        let status
+        try {
+          status = await assistantApi.status(signal)
+        } catch {
+          throw new Error("SmartParking AI is temporarily unavailable. Please try again later.")
+        }
+        if (!status.enabled || !status.guestFaq) {
+          throw new Error("SmartParking AI is not ready to answer questions yet. Please try again later.")
+        }
+        setReady(true)
+      }
+      return sendGuest(message, signal, !onSignIn)
+    },
     onSignIn,
   }} /> : null
 }
