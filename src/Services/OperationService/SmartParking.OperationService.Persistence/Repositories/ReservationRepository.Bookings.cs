@@ -37,9 +37,11 @@ public sealed partial class ReservationRepository
     }
 
     public async Task<IReadOnlyList<BookingReadResult>> ListOwnBookingsAsync(Guid accountId, int take,
-        DateTimeOffset? before, Guid? beforeId, CancellationToken ct)
+        DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null)
     {
         var query = db.Reservations.AsNoTracking().Where(r => r.AccountId == accountId && r.RequestId != null);
+        if (from is { } rangeStart && to is { } rangeEnd)
+            query = query.Where(r => r.ExpectedStartTime < rangeEnd && r.ExpectedEndTime > rangeStart);
         if (before is { } cursorTime && beforeId is { } cursorId)
         {
             query = query.Where(r => r.CreatedAt < cursorTime ||

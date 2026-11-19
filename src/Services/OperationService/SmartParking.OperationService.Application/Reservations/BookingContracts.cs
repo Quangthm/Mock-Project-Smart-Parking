@@ -67,6 +67,7 @@ internal static class BookingContracts
         row.ZeroPriceAcceptanceState,
         row.BookedAmount, row.DepositAmount, row.Currency, row.ConfirmedAt, row.CreatedAt)
     {
+        Vehicle = string.IsNullOrWhiteSpace(row.VehicleType) ? null : new(row.VehicleType, row.OriginalPlate ?? row.NormalizedPlate),
         LicensePlate = row.OriginalPlate ?? row.NormalizedPlate
     };
 

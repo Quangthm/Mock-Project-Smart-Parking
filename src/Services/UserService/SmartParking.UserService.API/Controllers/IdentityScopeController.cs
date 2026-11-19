@@ -13,4 +13,8 @@ public sealed class IdentityScopeController(IMediator mediator) : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct, string permission = "PARKING_MANAGE") =>
         Ok(await mediator.Send(new GetOwnerScopeQuery(permission), ct));
+
+    [HttpPost("publication-evidence")]
+    public async Task<IActionResult> PublicationEvidence(PublicationEvidenceQuery request, CancellationToken ct) =>
+        Ok(await mediator.Send(request, ct));
 }

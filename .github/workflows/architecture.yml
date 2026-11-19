@@ -14,6 +14,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet restore SmartParking.slnx
-      - run: dotnet test SmartParking.slnx --no-restore --verbosity normal
+      - run: dotnet test SmartParking.slnx --no-restore --verbosity normal --logger trx --results-directory TestResults
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-and-unit-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: warn
 # PostgreSQL integration tests require the separate DB fixture environment.
 # Passing this job does not certify the deferred admission/payment invariants.

@@ -203,7 +203,7 @@ HTTP tests cho exact expiry/concurrency dùng test clock/fixture harness; không
 
 ## 9. AI scaffold và kết quả bàn giao
 
-AI task chỉ setup cấu trúc: application ports/context/options, infrastructure adapters, read allowlist FAQ/PARKING_SEARCH, disabled mặc định, unit tests. **Chưa có live chat public endpoint**; không gửi `/chat` và ghi bug thiếu business chatbot. Xem [scaffold contract](../03-design/ai/chatbot-scaffold.md).
+AI task chỉ setup cấu trúc: application ports/context/options, infrastructure adapters, read allowlist FAQ/PARKING_SEARCH, disabled mặc định, unit tests. **Chưa có live chat public endpoint**; không gửi `/chat` và ghi bug thiếu business chatbot. Xem [scaffold contract](../03-design/ai/chatbot-design.md#chatbot-scaffold).
 
 Evidence lượt sửa ngày 08/10: [91 backend test results](reports/cross-task-2026-10-08.csv), 30 frontend regression tests và FE build đã pass tại lượt review. Đây là evidence developer, chưa thay thế tester UAT/provider test và remote CI. PostgreSQL tests chạy DB cô lập; không migrate DB dự án. Báo cáo review rời của đợt này được giữ trong lịch sử Git.
 

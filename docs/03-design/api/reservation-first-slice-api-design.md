@@ -1,4 +1,4 @@
-# Reservation first slice — API and owner contracts
+# Reservation first slice â€” API and owner contracts
 
 > **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
 
@@ -11,7 +11,7 @@
 | Task | [SPARK-273 / US-D01, US-D05, US-D10](../../../ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md); Driver history P0 [SPARK-286](https://mangamanagement.atlassian.net/browse/SPARK-286) and [SPARK-302](https://mangamanagement.atlassian.net/browse/SPARK-302) |
 | Reviewed checkout | 7c47755d83cbe4eea2d2e887a2abc49e6decd203; old handoff SHA is historical |
 | Requirements | [Reservation SRS](../../01-requirements/srs/modules/04-reservations-allocation.md), [BR-RES](../../01-requirements/business-rules/04-reservations-allocation.md), [UC-RES-01](../../01-requirements/use-cases/uc-res-01.md), [UC-RES-02](../../01-requirements/use-cases/uc-res-02.md), [UC-RES-03](../../01-requirements/use-cases/uc-res-03.md) |
-| Approval | [D1–D4c](../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md); [authorization matrix](../../01-requirements/srs/authorization-operation-classification.md), [ADR §9](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#9-global-saga-retry-redelivery-timeout-and-unknown-outcome-policy) |
+| Approval | [D1â€“D4c](../../05-project-management/decision-log/2026-11-05-reservation-first-slice.md); [authorization matrix](../../01-requirements/srs/authorization-operation-classification.md), [ADR Â§9](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#9-global-saga-retry-redelivery-timeout-and-unknown-outcome-policy) |
 | Implementation gate | [Reviewable architecture choices](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md) |
 
 ## API Specification
@@ -24,7 +24,7 @@ The table distinguishes current source routes from proposed cancellation work. A
 | POST `/api/reservation-terms` | TOKEN / validated Driver JWT | Review own vehicle, requested slot/interval and authoritative versioned terms; no claim/order/booking. Missing commercial config is an error, never zero price. |
 | POST `/api/reservation-requests` | REQUEST / validated Driver JWT | Admit own normalized create intent and return durable receipt. Required `Idempotency-Key`. |
 | GET `/api/reservation-requests/{requestId}` | TOKEN / validated Driver JWT | Observe only own receipt, including pending work without a booking/session. No body. |
-| GET `/api/me/reservations` | TOKEN / validated Driver JWT | Current source: own list, pageSize 20 (1–100), optional `before` + `beforeId` together; descending createdAt then ID. Use last item's createdAt/ID for next page. |
+| GET `/api/me/reservations` | TOKEN / validated Driver JWT | Current source: own list, pageSize 20 (1â€“100), optional `before` + `beforeId` together; descending createdAt then ID. Use last item's createdAt/ID for next page. |
 | GET `/api/me/reservations/{reservationId}` | TOKEN / validated Driver JWT | Own booking detail using the same response fields as each item in the Driver list. |
 | POST `/api/me/reservations/{reservationId}/cancellation-requests` | REQUEST / validated Driver JWT | PROPOSED future phase only: separate receipt, required Idempotency-Key; no cancellation route implemented here. |
 
@@ -86,7 +86,7 @@ Driver history P0 adds the following fields to both reads.
 
 The reservation lifecycle values are `PENDING_PAYMENT`, `CONFIRMED`, `ALLOCATED`, `PARKING`, `COMPLETED`, `EXPIRED`, `NO_SHOW`, `CANCELLED` and `UNFULFILLABLE`. Each read observes the data available at request time. Repeating a request can show a newly committed state. Accepted terms presentation, cancellation and refund details, full visit data and the transition timeline are later scope.
 
-The list returns **200 OK** with a booking array in `data`, including `{"success":true,"data":[]}` when empty. Results sort by `createdAt DESC, reservationId DESC`. Request a page after the last item by sending its `createdAt` as `before` and its `reservationId` as `beforeId`. Omit both on the first request. A lone cursor parameter, an empty cursor UUID, or a page size outside 1–100 yields `400 INVALID_REQUEST`. `pageSize` defaults to 20.
+The list returns **200 OK** with a booking array in `data`, including `{"success":true,"data":[]}` when empty. Results sort by `createdAt DESC, reservationId DESC`. Request a page after the last item by sending its `createdAt` as `before` and its `reservationId` as `beforeId`. Omit both on the first request. A lone cursor parameter, an empty cursor UUID, or a page size outside 1â€“100 yields `400 INVALID_REQUEST`. `pageSize` defaults to 20.
 
 ### Validation and error responses
 
@@ -136,7 +136,7 @@ Account and Facility contracts are implemented drafts; Payment contracts below r
 | Boundary / owner | Required request and response | Unresolved dependency |
 |---|---|---|
 | Account-current / UserService | CREATE_RESERVATION request/decision with workflow and delivery attempt identity, actor and deadlines; one durable workflow evaluation replayed in later envelopes. | Service-local DTOs and restricted broker queues are approved and implemented in the foundation; deployment proof remains required. Cancellation is future work. |
-| Vehicle binding / UserService | Reuse [exact binding API](vehicle-registration-api-design.md): Account, stable vehicle and expected revision → ACTIVE CAR + revision or ineligible/stale; no raw JWT persisted. | Existing shared service-key exception covers this lookup only. No removal/transfer handshake is inferred; scope new writes if a binding writer cannot participate. |
+| Vehicle binding / UserService | Reuse [exact binding API](vehicle-registration-api-design.md): Account, stable vehicle and expected revision â†’ ACTIVE CAR + revision or ineligible/stale; no raw JWT persisted. | Existing shared service-key exception covers this lookup only. No removal/transfer handshake is inferred; scope new writes if a binding writer cannot participate. |
 | Structure / Facility and Operations | Tenant/site/slot, active/readiness, vehicle compatibility, resource/config version, zone/fallback/backup and coordinates; absent distinct from unavailable. | The reverse [durable dependency v1](reservation-facility-dependency-api-design.md) and dedicated Operations JWT are implemented. Verify all participating writers and recovery in deployment; a remote read alone does not fence later changes. |
 | Quote/coverage / Payment and Operations | Quote ID/version, bound Account/vehicle/site/slot/interval, validity, currency, booked/deposit values, FULL/PERCENTAGE/FIXED, rounding, coverage references/version, immutable terms. | Current parking-fee calculation is not an accepted reservation quote. Define issuance/consumption and coverage-cancellation handshake before sale. |
 | Deposit order / Payment | Stable operation ID, reservation/tenant/site/Account, RESERVATION_FEE, exact H, money/currency, accepted terms version. Identical replay returns same order; mismatched payload conflicts. | Provider deadline support cannot extend Operations eligibility; Payment owner must supply actual order/status adapter. |
@@ -146,13 +146,13 @@ Account and Facility contracts are implemented drafts; Payment contracts below r
 
 ## Review checks and deferred items
 
-- [x] D1–D4c mapped to input, time, retry and ownership behavior; old cap removed.
+- [x] D1â€“D4c mapped to input, time, retry and ownership behavior; old cap removed.
 - [x] Proposed routes and fields distinguished from implemented ones.
 - [x] Current authentication and owner dependencies inspected; missing producer behavior disclosed.
 - [x] Authentication cache parameters and message trust/ownership approved; later amendment requires service-local code and once-per-workflow authorization.
 - [x] D4c evaluation-checkpoint cutoff approved on 10 November; deployment verification remains pending.
 - [ ] Deliver versioned commercial/resource producers and complete local capacity/reconciliation.
-- [ ] Implement host → mediator → validation → handler → repositories/UoW → outbox and all competing writers.
+- [ ] Implement host â†’ mediator â†’ validation â†’ handler â†’ repositories/UoW â†’ outbox and all competing writers.
 - [ ] Run focused PostgreSQL, broker and live owner checks; no such results claimed here.
 - [ ] Driver switching/rescheduling, pooled/motorcycle booking and new monthly/yearly workflows remain deferred.
 
@@ -170,7 +170,7 @@ Gate entry/departure emits `OperationsGateAuditV1` through the same scoped Postg
 
 Operations owns its authentication implementation and local Account-current/audit wire DTOs. UserService has independently compiled compatible Account-current DTOs. No src/Shared project or cross-service assembly reference is required. Existing message namespace/type identity is retained for transport compatibility; the wire contract, not a shared source file, is the service boundary.
 
-## 11 November 2026 addendum — short creation receipt and event-driven confirmation
+## 11 November 2026 addendum â€” short creation receipt and event-driven confirmation
 
 **Source and precedence:** [approved architectural decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md), [team integration contract](../../05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md). The short creation receipt, Operations hold consumer, order/zero-price provisioning, real Payment preview/quote/order adapter, reservation payment-success consumer and guarded paid/zero-price confirmation are present in local source and registered. Zero-price acceptance, targeted collection recovery/reconciliation, production machine authentication and runtime cross-service verification remain incomplete. Existing November 10 single guarded `evaluatedAt < T` confirmation cutoff stays in force.
 
@@ -183,7 +183,7 @@ Operations owns its authentication implementation and local Account-current/audi
 ### Cross-owner financial contracts (proposed wire signatures)
 
 - **Preview/review:** retain server-calculated amount and a versioned immutable reviewed commercial snapshot, bound to Account/vehicle/site/slot/start/end/method, total/deposit/currency, tariff version, prepayment mode, accepted coverage/version and quote/review expiry. Payment owns tariff/prepayment policies and rounding. `FULL` is documented default; no invented percent/fixed rates. Missing/invalid pricing/coverage fails closed, not zero. A distinct Payment quote entity is optional but accepted-version semantics are required.
-- **Order preparation/combined acceptance:** `PUT /internal/reservation-deposit-orders/{operationId}` is a *proposed* protected S2S endpoint after hold commit. It must atomically validate/accept reviewed price/coverage and create or return exactly one `RESERVATION_FEE` order; no separate `AcceptQuote` HTTP endpoint. Request binds actor/scope IDs, reservation/workflow/order operation, accepted terms identity/version and immutable amounts, payment method and **exact `H` as `expiresAt`**. Same key/payload → same `CREATED(orderId)`; mismatch → `409`; unknown network result → `UNKNOWN` and same-ID recovery; definitive absence after H → durably fenced `CLOSED_NO_ORDER`. No new order or checkout at/after H.
+- **Order preparation/combined acceptance:** `PUT /internal/reservation-deposit-orders/{operationId}` is a *proposed* protected S2S endpoint after hold commit. It must atomically validate/accept reviewed price/coverage and create or return exactly one `RESERVATION_FEE` order; no separate `AcceptQuote` HTTP endpoint. Request binds actor/scope IDs, reservation/workflow/order operation, accepted terms identity/version and immutable amounts, payment method and **exact `H` as `expiresAt`**. Same key/payload â†’ same `CREATED(orderId)`; mismatch â†’ `409`; unknown network result â†’ `UNKNOWN` and same-ID recovery; definitive absence after H â†’ durably fenced `CLOSED_NO_ORDER`. No new order or checkout at/after H.
 - **Checkout:** authenticated Driver uses the existing Payment `POST /api/v1/payments/orders/{orderId}/checkout`. Verify order Account ownership and real provider-backed QR/URL; a booking ID is never an order ID. A wrong-order/foreign-account request must fail without leaking existence or charging.
 - **Verified collection message:** Operations source defines the proposed `SmartParking.OperationService.Application.Reservations.ReservationDepositCollectedV1` with `EventId`, `CollectionId`, `PaymentOrderId`, `PaymentTransactionId`, `OperationId`, `ReservationId`, `AccountId`, `TenantId`, `SiteId`, `QuoteId`/version, Operations `TermsId`/version, amount/currency and provider reference/verification/occurrence timestamps. It configures exchange `smartpark.payment.reservation-deposit-collected.v1` and receive queue `smartpark-operation-reservation-deposit-collected-v1`, but **no Payment producer is wired to it**. The active path instead consumes generic `PaymentSucceededV1` on reservation-specific queue `smartpark-operation-reservation-payment-succeeded-v1`, filters `ReferenceType=RESERVATION`, and maps it to `ReservationPaymentEvidence`; the local event URN matches Payment's default `MessageUrn`. Operations validates the event against the persisted reservation/order/account/tenant/site/accepted-order terms/amount/currency snapshot before guarded MediatR confirmation. The generic event lacks event-level quote/terms/collection identity, so this is an open deviation from the approved dedicated-event contract. Business idempotency is based on locked reservation state plus Payment order/transaction identity; this endpoint does **not** configure MassTransit EF inbox middleware or persist a general event-ID inbox. Payment's publisher ACL/topology and delivery guarantees still require owner agreement and live verification.
 - **Targeted recovery:** restricted `GET` lookup for all distinct collections and a keyed reconciliation/refund-acceptance operation for `UNKNOWN`, missed events, late/additional money and terminal receipts; no default per-second Payment collection sweep. An accepted refund request is not payout.
@@ -194,9 +194,42 @@ The still-live hold may **eventually** use only a locked Operations aggregate/do
 
 **Implementation status:** Payment now exposes preview, quote and internal reservation-deposit-order routes used by the Operations adapter, but these remain integration details rather than public API commitments. The dedicated `ReservationDepositCollectedV1` source contract has no producer; the live reservation consumer uses generic `PaymentSucceededV1` with compensating persisted-order validation. Confirm the event-contract deviation, exact cross-service DTO compatibility, message identity, production authorization/publisher ACL, durable outcome semantics and inbox/reconciliation requirements before enabling end-to-end sales. Preserve existing owner port isolation, MediatR, Domain aggregate, repository/UoW and transactional outbox conventions.
 
-### Operations integration baseline — 12 November 2026
+### Operations integration baseline â€” 12 November 2026
 
 - Operations owns `IReservationCommercialOwner` (`PreviewAsync`, `QuoteAsync`, `EnsureOrderAsync`, `AcceptZeroPriceAsync`, `CollectionsAsync`, `ReconcileAsync`), reservation commands/handlers and the `ReservationRow` lifecycle. `EnsureOrderAsync` returns `CREATED` with the authoritative `OrderId`, `UNKNOWN`, or `CLOSED_NO_ORDER`; the order result must echo the exact accepted request. Operations persists that order ID without substituting the reservation ID.
 - Operations owns `ReservationHoldChangedV1` and its `HOLD_CREATED` receipt boundary. The transactional Bus Outbox is registered against the same `ReservationDbContext`; the hold consumer is registered with admission and dispatches positive-price order provisioning or genuine zero-price acceptance. Generic `PaymentSucceededV1` (`ReferenceType=RESERVATION`) dispatches `RecordReservationPaymentCommand`, which builds immutable payment evidence and then `RecordReservationDepositCollectedCommand`; `ReservationDepositCollectedV1` remains registered but has no producer. `ConfirmPaidReservationCommand` / `ConfirmZeroPriceReservationCommand` preserve the Facility dependency, plate/capacity guards and authoritative pre-T evaluation.
 - Real adapters: `ReservationFactsPublisher` is the MassTransit publisher when reservation messaging is enabled; `ReservationFacilityClient` supplies read/acquire/complete/abort with the existing service identity; `ReservationVehicleClient` resolves the User-owned binding; `ReservationCommercialClient` calls Payment preview/quote/order using `Services:Payment`, the caller bearer/actor headers and `Services:Key`. Zero-price acceptance and reconciliation stay fail-closed. Payment's reserved route names/authentication remain integration details, not public API commitments.
 - **Integration-ready at source boundary, not end-to-end ready:** the Operations ports, real preview/quote/order adapter, commands, payment-evidence consumer and guarded confirmation exist, and the solution builds. Zero-price acceptance, production machine authentication, targeted collection lookup/reconciliation, dedicated event contract review, publisher topology/identity agreement, reliable outcome delivery and all live verification remain pending. Do not treat these source contracts or the successful build as proof that cross-service delivery works.
+
+## Assistant read reconciliation â€” 13 November 2026
+
+| Metadata | Value |
+|---|---|
+| Status / approval | Approved in CI repair chat: retain develop booking API and migrate Assistant consumer |
+| Contract / owner | Additive booking-read extension, 2026-11-13; Parking Operations |
+| Traceability | TOKEN own reads in authorization matrix; S06 minimal read delegation; existing US-D05 booking scope |
+| Implementation | Working tree; no new route, auth scheme, schema or admission bypass |
+
+### API specification
+
+`GET /api/me/reservations` keeps its Driver JWT, Account ownership, `ReservationAdmission:Enabled` gate and `success/data` array response. It reads booking rows (`RequestId != null`), not the older all-reservations projection. `pageSize` remains 20 by default, range 1â€“100; `before` and `beforeId` must be supplied together. Order remains `createdAt DESC, reservationId DESC`. Unknown query fields confer no identity authority and follow existing MVC binding behavior.
+
+Optional `from` and `to` are ISO date-time query values (clients send explicit UTC offsets), must be paired and satisfy `to > from`. Operations applies strict overlap `start < to && end > from` **before** pagination. Touching an interval boundary does not overlap. Invalid pairs/order return 400 `INVALID_REQUEST`; no new statuses are excluded.
+
+Example (synthetic): `GET /api/me/reservations?pageSize=20&from=2032-02-28T00:00:00Z&to=2032-02-29T00:00:00Z`. No body; validated Driver Bearer required. Response is HTTP 200 with `Cache-Control` prohibiting storage:
+
+```json
+{"success":true,"data":[{"reservationId":"11111111-1111-4111-8111-111111111111","state":"CONFIRMED","siteId":"22222222-2222-4222-8222-222222222222","requestedSlotId":null,"start":"2032-02-28T01:00:00Z","end":"2032-02-28T02:00:00Z","holdExpiresAt":null,"orderId":null,"bookedAmount":null,"depositAmount":null,"currency":null,"confirmedAt":null,"createdAt":"2032-02-27T00:00:00Z","vehicle":{"vehicleType":"CAR","displayLabel":"SYNTHETIC"}}]}
+```
+
+Both list rows and `GET /api/me/reservations/{id}` (single booking object in `data`) add nullable `vehicle: {vehicleType, displayLabel}` from the owning reservation row. Missing vehicle evidence remains null; displayLabel uses stored original/normalized plate and can be null. No cross-service enrichment or invented plate. 401/403 remain JWT/role failures, foreign/missing detail remains 404, admission disabled remains 503. A dependency error never becomes an empty 200; existing error middleware determines the specific safe code.
+
+### Assistant mapping, continuation and retry
+
+Assistant requests `pageSize=20`, displays at most 19 rows and uses the twentieth solely as lookahead. Its protected cursor carries Account, interval, and the nineteenth row's `createdAt/reservationId`; the next request translates those into `before/beforeId`. Tampering, other Accounts, and changed filters fail before owner I/O. Cursor protection uses the existing Assistant Data Protection key ring. Old cursors require a fresh search after deployment. No frozen snapshot is promised.
+
+Assistant maps `reservationId/state/start/end` into its existing card fields. Card/page `asOf` means the Assistant's observation time after the successful owner response, never booking creation time or a transactional DB snapshot. Created time is used only for pagination. Missing vehicle evidence remains null. Detail always re-reads the owner and verifies the returned ID. Canonical arrays/objects are required; the old `{items,nextCursor,asOf}` and `{reservation,asOf}` wire forms are no longer accepted. Existing errors, cancellation, bounded response/deadline and no-retry behavior are retained.
+
+### Review and rollout
+
+Deploy Operations' additive filter/vehicle extension together with the Assistant adapter. Keep admission and JWT trust requirements; do not enable legacy endpoints or alter production configuration to satisfy tests. Tests exercise the production controller/JWT/actor/handler path with synthetic external dependencies, plus consumer pagination, protected cursor, malformed payload, detail and observation-time regressions. Live PostgreSQL/broker acceptance is separate from these offline CI checks.

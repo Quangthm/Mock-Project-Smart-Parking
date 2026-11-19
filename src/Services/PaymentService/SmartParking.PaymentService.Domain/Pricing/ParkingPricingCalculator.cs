@@ -198,6 +198,12 @@ public sealed class ParkingPricingCalculator : IParkingPricingCalculator
 
     private sealed record NormalizedSlice(TimeSpan StartSpan, TimeSpan EndSpan, TimeBlockRule Rule);
 
+    public static void ValidateTimeBlocks(IReadOnlyList<TimeBlockRule> blocks)
+    {
+        if (blocks.Count == 0) throw new PricingDomainException("INVALID_PRICING_POLICY", "Time blocks are required.");
+        NormalizeAndValidateTimeBlocks(blocks);
+    }
+
     private static List<NormalizedSlice> NormalizeAndValidateTimeBlocks(IReadOnlyList<TimeBlockRule> timeBlocks)
     {
         var slices = new List<NormalizedSlice>();
