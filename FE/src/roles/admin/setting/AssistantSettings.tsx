@@ -3,6 +3,7 @@ import { useApp } from "../../../context/AppContext"
 import { assistantAdminApi as api, assistantAdminConfigured, type AiManagement, type AiProvider } from "../../../lib/assistantAdminApi"
 import { ConfigurationEditor, type Editor } from "./ConfigurationEditor"
 import { ConnectionTest } from "./ConnectionTest"
+import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import "./assistant-settings.css"
 
 const name = (id: string) => id === "gemini" ? "Gemini" : "OpenAI"
@@ -105,9 +106,10 @@ function Management() {
       <span aria-hidden="true" title="Drag to reorder" draggable={!blocked && !busy}
         onDragStart={e => { drag.current = { scope, id }; e.dataTransfer.setData("text/plain", id); e.dataTransfer.effectAllowed = "move" }}
         onDragEnd={() => { drag.current = null }}>⠿</span>
-      {([-1, 1] as const).map(offset => <button key={offset} type="button" className="btn-secondary"
+      {([-1, 1] as const).map(offset => <button key={offset} type="button" className="assistant-order-button" data-direction={offset < 0 ? "up" : "down"}
+        title={`Move ${label} ${offset < 0 ? "up" : "down"}`}
         aria-label={`Move ${label} ${offset < 0 ? "up" : "down"}`} disabled={!ids[index + offset]}
-        onClick={() => move(scope, ids, id, ids[index + offset])}>{offset < 0 ? "↑" : "↓"}</button>)}
+        onClick={() => move(scope, ids, id, ids[index + offset])}><UntitledIcon name="arrow-right" size={18} /></button>)}
     </div>
   }
   function drop(scope: string, ids: string[], id: string) {
@@ -120,35 +122,41 @@ function Management() {
   function open(next: Editor) { setError(""); setEditor(next) }
   const providerIds = providers.map(p => p.id)
   return <section className="assistant-settings" aria-labelledby="assistant-settings-title">
-    <header className="assistant-settings-row"><div><h3 id="assistant-settings-title">AI Chatbot</h3>
-      <p>Manage availability and the order used for provider fallback.</p></div>
-      {assistantAdminConfigured && <button className="btn-secondary" disabled={busy} onClick={() => void load()}>Reload settings</button>}
+    <header className="assistant-settings-row assistant-page-header"><div>
+      <span className="assistant-eyebrow">SYSTEM / AI WORKSPACE</span>
+      <h1 id="assistant-settings-title"><UntitledIcon name="sparkles" size={28} />AI Chatbot</h1>
+      <p>One place to manage SmartParking AI, its providers and connection settings.</p></div>
+      {assistantAdminConfigured && <button className="btn-secondary assistant-reload" disabled={busy} onClick={() => void load()}><UntitledIcon name="activity" size={16} />{busy ? "Loading…" : "Reload settings"}</button>}
     </header>
-    {!assistantAdminConfigured && <p role="status">Management service is not connected.</p>}
-    {error && !editor && <p className="assistant-settings-error" role="alert">{error}</p>}
-    <div role="status">{busy ? "Updating settings…" : message}</div>
+    {!assistantAdminConfigured && <div className="assistant-notice" role="status"><strong>Connect your Assistant service</strong><p>Management service is not connected. Configure the Assistant connection before managing providers.</p></div>}
+    {error && !editor && <div key={error} className="assistant-error-notice" role="alert"><UntitledIcon name="alert" size={20} /><p>{error}</p></div>}
+    <div className="assistant-feedback" role="status">{busy ? "Updating settings…" : message}</div>
     {view && settings && <fieldset className="assistant-settings-fields" disabled={busy || blocked}>
-      <div className="assistant-settings-row"><div><h4>System availability</h4>
-        <p>Revision {settings.revision} · Runtime connection {view.runtimeReleaseApproved ? "configured" : "not configured"}</p></div>
-        <Switch label="System chatbot" checked={settings.enabled} change={() => void save({ action: "set-enabled", enabled: !settings.enabled })} /></div>
-      {!view.secretsConfigured && <p role="status">Credential store unavailable.</p>}
-      <details><summary>Maintenance message</summary><form onSubmit={e => { e.preventDefault(); saveProviders(providers, maintenance) }}>
-        <label>Message<input className="input" required maxLength={500} value={maintenance} onChange={e => setMaintenance(e.target.value)} /></label>
-        <button className="btn-secondary" disabled={!maintenance.trim() || maintenance === settings.maintenanceMessage}>Save message</button>
-      </form></details>
+      <section className="assistant-availability" aria-labelledby="assistant-availability-title">
+        <div className="assistant-settings-row"><div><span className="assistant-eyebrow">AVAILABILITY</span><h2 id="assistant-availability-title">SmartParking assistant</h2>
+          <p>Control whether the system accepts new AI conversations.</p></div>
+          <Switch label="System chatbot" checked={settings.enabled} change={() => void save({ action: "set-enabled", enabled: !settings.enabled })} /></div>
+        <dl className="assistant-readiness">
+          <div><dt>Runtime connection</dt><dd data-ready={view.runtimeReleaseApproved}>{view.runtimeReleaseApproved ? "Configured" : "Not configured"}</dd></div>
+          <div><dt>Credential store</dt><dd data-ready={view.secretsConfigured}>{view.secretsConfigured ? "Available" : "Unavailable"}</dd></div>
+          <div><dt>Settings version</dt><dd>Revision {settings.revision}</dd></div>
+        </dl>
+      </section>
+      <div className="assistant-provider-heading"><h2>AI providers</h2><p>Priority determines the fallback order. Add a configuration, test its connection, then enable it.</p></div>
+      <div className="assistant-provider-grid">
       {providers.map(provider => {
         const rows = settings.configurations.filter(r => r.provider === provider.id)
           .sort((a, b) => Number(!!a.revokedAt) - Number(!!b.revokedAt) || byPriority(a, b))
         const ids = rows.filter(r => !r.revokedAt).map(r => r.id)
         return <section key={provider.id} className="assistant-settings-provider" aria-label={name(provider.id)}
           {...drop("providers", providerIds, provider.id)}>
-          <header className="assistant-settings-row"><div><h4>{name(provider.id)}</h4><p>Provider priority {provider.priority}</p></div>
+          <header className="assistant-settings-row"><div><span className="assistant-provider-priority">Priority {provider.priority}</span><h3>{name(provider.id)}</h3><p>{ids.length} {ids.length === 1 ? "configuration" : "configurations"}</p></div>
             <div className="assistant-settings-actions">
               <Switch label={name(provider.id)} checked={provider.enabled} change={() => saveProviders(
                 providers.map(p => p.id === provider.id ? { ...p, enabled: !p.enabled } : p), settings.maintenanceMessage)} />
               {ordering("providers", providerIds, provider.id, name(provider.id))}
             </div></header>
-          {!rows.length && <p>No configurations for {name(provider.id)}.</p>}
+          {!rows.length && <div className="assistant-provider-empty"><UntitledIcon name="sparkles" size={22} /><strong>Set up {name(provider.id)}</strong><p>Add a model and API key to start testing this provider.</p></div>}
           {rows.map(row => <article className="assistant-settings-key" key={row.id} aria-label={row.label}
             {...(!row.revokedAt && drop(provider.id, ids, row.id))}>
             <div className="assistant-settings-row"><div><strong>{row.label}</strong><p>{row.model} · Priority {row.priority} · {row.revokedAt ? "Revoked" : row.enabled ? "Enabled" : "Disabled"}</p></div>
@@ -158,7 +166,7 @@ function Management() {
                 label: row.label, model: row.model, enabled: !row.enabled, priority: ids.indexOf(row.id) + 1 })}>{row.enabled ? "Disable" : "Enable"}</button>
               <button className="btn-secondary" onClick={() => open({ mode: "edit", row })}>Edit</button>
               <button className="btn-secondary" disabled={!view.secretsConfigured} onClick={() => open({ mode: "rotate", row })}>Replace key</button>
-              <button className="btn-secondary" onClick={() => { if (window.confirm(`Revoke “${row.label}”? New requests will no longer use it.`))
+              <button className="btn-secondary assistant-revoke" onClick={() => { if (window.confirm(`Revoke “${row.label}”? New requests will no longer use it.`))
                 void save({ action: "revoke-key", keyId: row.id }) }}>Revoke</button>
             </div>}
             <ConnectionTest row={row} revision={settings.revision} disabled={busy || blocked || !view.secretsConfigured} conflict={() => {
@@ -167,9 +175,14 @@ function Management() {
               else void load(true)
             }} />
           </article>)}
-          <button className="btn-secondary" disabled={!view.secretsConfigured} onClick={() => open({ mode: "add", provider: provider.id })}>Add configuration</button>
+          <button className="btn-secondary assistant-add" disabled={!view.secretsConfigured} onClick={() => open({ mode: "add", provider: provider.id })}>+ Add configuration</button>
         </section>
       })}
+      </div>
+      <details className="assistant-maintenance"><summary>Maintenance message<span>Shown when the assistant is unavailable</span></summary><form onSubmit={e => { e.preventDefault(); saveProviders(providers, maintenance) }}>
+        <label>Message<input className="input" required maxLength={500} value={maintenance} onChange={e => setMaintenance(e.target.value)} /></label>
+        <button className="btn-secondary" disabled={!maintenance.trim() || maintenance === settings.maintenanceMessage}>Save message</button>
+      </form></details>
     </fieldset>}
     {editor && settings && <ConfigurationEditor editor={editor} settings={settings} busy={busy} error={error} close={() => setEditor(null)}
       save={save} conflict={() => void load(true)} />}

@@ -30,7 +30,7 @@ function fixture(data = {}, response) {
     },
     fetch: async (url, init) => {
       calls.push({ url, init });
-      if (response) return response;
+      if (response) return typeof response === 'function' ? response(url, init) : response;
       return {
         ok: true,
         json: async () => ({ success: true, data: {
@@ -50,6 +50,39 @@ function fixture(data = {}, response) {
   vm.runInNewContext(javascript, context);
   return { api: context.exports, storage, calls };
 }
+
+test('booking invoice resolves by session before fetching the authenticated official PDF', async () => {
+  const pdf = new Blob(['%PDF'], { type: 'application/pdf' });
+  const f = fixture({}, url => url.includes('/download')
+    ? { ok: true, headers: new Headers({ 'content-type': 'application/pdf' }), blob: async () => pdf }
+    : { ok: true, json: async () => ({ success: true, data: { invoiceIdentity: { invoiceId: transactionId } } }) });
+  assert.equal(await f.api.paymentApi.reservationInvoicePdf({ sessionId: transactionId, orderId }), pdf);
+  assert.deepEqual(f.calls.map(call => call.url), [
+    `/payment-api/api/v1/payments/invoices?sessionId=${transactionId}`,
+    `/payment-api/api/v1/payments/invoices/${transactionId}/download`,
+  ]);
+  assert.ok(f.calls.every(call => call.init.headers.Authorization === 'Bearer test-token'));
+  const missing = fixture({}, { ok: false, status: 404 });
+  await assert.rejects(missing.api.paymentApi.reservationInvoicePdf({ orderId }), /could not be found/);
+  assert.equal(missing.calls[0].url, `/payment-api/api/v1/payments/orders/${orderId}/invoice`);
+  assert.equal(missing.calls.length, 1);
+});
+
+test('booking invoice falls back to the order only when the session invoice is missing', async () => {
+  const pdf = new Blob(['%PDF'], { type: 'application/pdf' });
+  const f = fixture({}, url => {
+    if (url.includes('?sessionId=')) return { ok: false, status: 404 };
+    if (url.includes('/download')) return { ok: true, headers: new Headers({ 'content-type': 'application/pdf' }), blob: async () => pdf };
+    return { ok: true, json: async () => ({ success: true, data: { invoiceIdentity: { invoiceId: transactionId } } }) };
+  });
+  assert.equal(await f.api.paymentApi.reservationInvoicePdf({ sessionId: transactionId, orderId }), pdf);
+  assert.equal(f.calls[1].url, `/payment-api/api/v1/payments/orders/${orderId}/invoice`);
+  for (const status of [403, 422]) {
+    const denied = fixture({}, { ok: false, status });
+    await assert.rejects(denied.api.paymentApi.reservationInvoicePdf({ sessionId: transactionId, orderId }));
+    assert.equal(denied.calls.length, 1);
+  }
+});
 
 test('invoice history uses the raw paged response and authenticated date/status filters', async () => {
   const page = { items: [], totalCount: 21, pageNumber: 2, totalPages: 3 };

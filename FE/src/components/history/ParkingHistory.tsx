@@ -1,5 +1,5 @@
 import { RoundedSelect } from "../ui/RoundedSelect"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { UntitledIcon } from "../icon/UntitledIcon"
 import "./ParkingHistory.css"
@@ -33,6 +33,7 @@ interface ParkingHistoryProps {
   onRetry?: () => void
   showVehicleFilter?: boolean
   onViewDetails?: (id: string) => void
+  renderCardAction?: (id: string) => ReactNode
   pagination?: { page: number; hasNext: boolean; onPrevious: () => void; onNext: () => void }
 }
 
@@ -84,7 +85,7 @@ function normalizePlate(value: string) {
   return value.replace(/[^a-z0-9]/gi, "").toUpperCase()
 }
 
-export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emptyMessage, loading = false, quietLoading = false, error, onRetry, showVehicleFilter = false, onViewDetails, pagination }: ParkingHistoryProps) {
+export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emptyMessage, loading = false, quietLoading = false, error, onRetry, showVehicleFilter = false, onViewDetails, renderCardAction, pagination }: ParkingHistoryProps) {
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [vehicle, setVehicle] = useState("all")
@@ -188,7 +189,11 @@ export function ParkingHistory({ title, scope, scopeKey, records, dateLabel, emp
       <div className="parking-history-cards">{visible.map(record => <article className="parking-history-card" key={record.id}>
         <div className="parking-history-card-top"><div><strong className="parking-history-plate" translate="no">{record.plate || "—"}</strong><span>{record.title}</span></div><Status status={record.status} /></div>
         <dl><div><dt>Space</dt><dd>{record.slot || "—"}</dd></div><div><dt>{dateLabel}</dt><dd>{formatDate(record.startedAt)}</dd></div></dl>
-        <button type="button" className="parking-history-details" onClick={() => openDetails(record.id)}>View details <UntitledIcon name="arrow-right" size={16} /></button>
+        {(() => {
+          const details = <button type="button" className="parking-history-details" onClick={() => openDetails(record.id)}>View details <UntitledIcon name="arrow-right" size={16} /></button>
+          const action = renderCardAction?.(record.id)
+          return action ? <div className="parking-history-card-actions">{details}{action}</div> : details
+        })()}
       </article>)}</div>
     </>}
 
