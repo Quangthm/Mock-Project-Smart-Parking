@@ -32,7 +32,6 @@ This image migration does not implement Partner PDF versions, terms replacement,
 | `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy, subscription financial terms and closure compensations (`SPARK-331`) |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
-| `migrations/` | standalone idempotent upgrade SQL scripts for existing initialized databases (e.g., `20261117_spark331_operations.sql`, `20261117_spark331_payment.sql` — apply manually with explicit DB authorization; `DB28-PASS-EXT` on `monthly_passes` remains deferred to `SPARK-332`) |
 | `seeds/` | demo data plus explicitly approved reservation policy defaults; never schema |
 
 The database is created by `compose.schema-integration.yml` (six databases, one per
