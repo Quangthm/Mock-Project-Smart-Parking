@@ -39,12 +39,14 @@ public sealed class GuestHandlers(IAssistantManagementStore store, IPublicKnowle
             var knowledge = await corpus.ReadAsync(token).WaitAsync(token) ?? throw new GuestFailure(503, "DEPENDENCY_UNAVAILABLE");
             string intent;
             using (metrics?.Start("faq_retrieval"))
-                intent = GuestIntents.Classify(request.Message, knowledge.Articles);
+                intent = GuestIntents.Resolve(request.Message, knowledge.Articles);
             var locale = AnswerLanguage.Requested(request.Message) ??
                 (request.Locale == "auto" ? AnswerLanguage.Detect(request.Message) : request.Locale);
             var en = locale == "en";
             GuestReply reply;
-            if (ConversationSummary.Matches(request.Message))
+            if (GuestIntents.LocalReply(intent, request.RequestId, en) is { } local)
+                reply = local;
+            else if (ConversationSummary.Matches(request.Message))
                 reply = new(request.RequestId, "system", "clarification", en
                     ? "Guest chat does not keep a conversation history I can summarize. Sign in to start a conversation whose recent questions I can summarize."
                     : "Chat khách không lưu lịch sử để mình tóm tắt. Bạn có thể đăng nhập và bắt đầu một hội thoại để mình tóm tắt các câu hỏi gần đây trong đó.",
@@ -73,7 +75,7 @@ public sealed class GuestHandlers(IAssistantManagementStore store, IPublicKnowle
                 var canonicalQuestion = GuestIntents.CanonicalQuestion(intent);
                 var question = canonicalQuestion ?? (en ? article.TitleEn : article.TitleVi);
                 var screenedQuestion = canonicalQuestion is null ? PublicFaqQuestion.Screen(AnswerLanguage.Question(request.Message), article) : null;
-                var answer = (article.Id == "vehicle-guide" && (article.SourceLocale is null || article.SourceLocale == locale)) || ManagementRules.Candidates(state).Count == 0
+                var answer = GuestIntents.UsePublishedAnswer(intent, article, locale) || ManagementRules.Candidates(state).Count == 0
                     ? await adapter.KnowledgeAsync(question, token).WaitAsync(token)
                     : await generator.GenerateAsync(question,
                         new PublicFaqQuestion(adapter, screenedQuestion), token).WaitAsync(token);
@@ -84,7 +86,8 @@ public sealed class GuestHandlers(IAssistantManagementStore store, IPublicKnowle
                     en ? article.TitleEn : article.TitleVi, en ? article.En : article.Vi);
                 reply = answer.Sources.Count == 0
                     ? new(request.RequestId, "system", "clarification", en ? "No supported answer is available." : "Chưa có câu trả lời đủ căn cứ.", [], [], [])
-                    : new(request.RequestId, answer.Mode == "knowledge" ? "knowledge" : "ai", "answered", answer.Reply, [source], [], []);
+                    : new(request.RequestId, answer.Mode == "knowledge" ? "knowledge" : "ai", "answered",
+                        answer.Mode == "knowledge" ? GuestIntents.KnowledgeContent(intent, answer.Reply, en) : answer.Reply, [source], [], []);
             }
             var current = await State(token);
             if (!current.Enabled) throw new GuestFailure(503, "ASSISTANT_DISABLED");

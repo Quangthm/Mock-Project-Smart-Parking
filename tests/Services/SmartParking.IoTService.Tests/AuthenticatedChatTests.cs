@@ -32,6 +32,7 @@ public sealed partial class AuthenticatedChatTests
     [InlineData("Xe tôi đã đăng ký")]
     [InlineData("Những xe tôi đã đăng ký")]
     [InlineData("  Toi da dang ky nhung xe nao?  ")]
+    [InlineData("Show my saved vehicles.")]
     public async Task RegisteredVehicleQuestionsUseTheScopedOwnerRead(string question)
     {
         var owner = new ReadOwner();
@@ -897,17 +898,17 @@ public sealed partial class AuthenticatedChatTests
         public Meter Meter => app.Services.GetRequiredService<IMeterFactory>().Create("SmartPark.Assistant");
         private Fixture(){Store=new(Clock);}
         public static async Task<Fixture> Create(int generation=20000, int overall=25000, ReadOwner? owner=null,
-            bool search=false, bool measure=false, IChatStore? chatStore=null, IHttpClientFactory? providerTransport=null)
+            bool search=false, bool measure=false, IChatStore? chatStore=null, IHttpClientFactory? providerTransport=null, bool publicFaq=false)
         {
             var f=new Fixture();var fallback=new GuestFaqTests.Answers();
             var generator=new ManagedDemoGenerator(f.Settings,new GuestFaqTests.Protector(),fallback,f.Clock,NullLogger<ManagedDemoGenerator>.Instance);
             f.app=AssistantGuestHost.Build(["--environment","Production"],b=>
             {
                 b.Configuration.Sources.Clear();b.WebHost.UseTestServer();b.Services.AddSingleton<TimeProvider>(f.Clock);
+                if (measure || publicFaq) b.Services.AddSingleton(new GuestOptions(true));
                 if (measure)
                 {
                     b.Logging.ClearProviders();
-                    b.Services.AddSingleton(new GuestOptions(true));
                     if (providerTransport is null) b.Services.AddSingleton<IGuestAnswerFactory, GuestAnswerFactory>();
                     else b.Services.AddSingleton<IGuestAnswerFactory>(new GuestAnswerFactory(providerTransport));
                 }

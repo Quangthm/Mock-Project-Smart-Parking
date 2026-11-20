@@ -9,7 +9,7 @@ public sealed partial class ReadTools
         Func<CancellationToken, Task> dispatch, CancellationToken ct)
     {
         Require(account);
-        var english = conversation.Locale == "en" && !ParkingSearch.IsVietnameseRequest(text);
+        var english = conversation.Locale == "en";
         if (!options.Search)
             return Reply("unavailable", english ? "Live parking search is unavailable." : "Tra cứu bãi đỗ hiện chưa khả dụng.");
         string? cursor = null;
@@ -19,8 +19,13 @@ public sealed partial class ReadTools
             var remaining = 12000;
             var context = (await store.Context(new ChatScope(account, "driver"), conversation.Id, ct)).Take(6)
                 .TakeWhile(t => (remaining -= t.Question.Length + t.Answer.Content.Length) >= 0).ToArray();
-            var last = context.FirstOrDefault(t => ParkingSearch.IsRequest(Normalize(t.Question)) ||
-                Normalize(t.Question) is "more parking" or "tim bai tiep theo");
+            var last = context.FirstOrDefault(turn =>
+            {
+                if (turn.Answer.Cards.Any(card => SearchMetadata(card) is not null)) return true;
+                if (turn.Answer.Sources.Length != 0 || turn.Answer.Outcome == "answered") return false;
+                var question = Normalize(turn.Question);
+                return ParkingSearch.IsRequest(question) || question is "more parking" or "tim bai tiep theo";
+            });
             var metadata = last?.Answer.Cards.Select(SearchMetadata).FirstOrDefault(m => m is not null);
             var initial = context.FirstOrDefault(t => t.Answer.ClientMessageId == metadata?.SearchMessageId);
             if (metadata?.NextCursor is null || initial is null)

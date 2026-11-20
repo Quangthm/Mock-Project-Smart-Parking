@@ -426,7 +426,7 @@ public sealed class AssistantPostgresTests
         var password = Environment.GetEnvironmentVariable("SMARTPARK_TEST_ASSISTANT_PASSWORD");
         if (!Guid.TryParseExact(nonce, "N", out _) || !Guid.TryParseExact(password, "N", out _) ||
             !int.TryParse(Environment.GetEnvironmentVariable("SMARTPARK_TEST_ASSISTANT_PORT"), out var port) || port is <= 0 or > 65535)
-            throw new InvalidOperationException("Use scripts/test-assistant-postgres.ps1 to create the disposable database.");
+            throw new InvalidOperationException("Use scripts/test-assistant.ps1 -Suite Postgres to create the disposable database.");
         return new NpgsqlConnectionStringBuilder
         {
             Host = "127.0.0.1", Port = port, Database = $"assistant_test_{nonce}", Username = "postgres", Password = password,
@@ -440,6 +440,6 @@ internal sealed class AssistantPostgresFactAttribute : FactAttribute
     public AssistantPostgresFactAttribute()
     {
         if (Environment.GetEnvironmentVariable("SMARTPARK_TEST_ASSISTANT_NONCE") is null)
-            Skip = "Run scripts/test-assistant-postgres.ps1 to provision disposable PostgreSQL.";
+            Skip = "Run scripts/test-assistant.ps1 -Suite Postgres to provision disposable PostgreSQL.";
     }
 }

@@ -46,25 +46,38 @@ test('reservation adapter propagates failed requests without fabricating a booki
 // A small hook harness exercises client transitions with mocked services; it is not browser/E2E evidence.
 function checkout(api = {}, storage = new Map()) {
   const hooks = []; let index = 0; let refresh; let generation = 1;
+  const effects = [];
   const jsx = (type, props) => ({ type, props });
   const component = load('roles/driver/booking/ReservationCheckout.tsx', {
     react: {
       useState: initial => { const i = index++; if (!(i in hooks)) hooks[i] = typeof initial === 'function' ? initial() : initial; return [hooks[i], value => { hooks[i] = typeof value === 'function' ? value(hooks[i]) : value; }]; },
       useRef: initial => { const i = index++; return hooks[i] ?? (hooks[i] = { current: initial }); },
-      useEffect() {},
+      useEffect: (effect, deps) => {
+        const i = index++;
+        const previous = hooks[i];
+        if (!previous || deps.some((value, j) => !Object.is(value, previous[j]))) effects.push(effect);
+        hooks[i] = deps;
+      },
     },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '../../../lib/authApi': { getSessionGeneration: () => generation },
+    '../../../lib/driverReservationApi': { driverReservationApi: { create: api.submit } },
+    '../../../lib/formatStatus': { formatStatus: status => status },
     '../../../lib/reservationsApi': { reservationsApi: { review: async () => terms, ...api } },
     '../../../lib/serverRefresh': { useServerRefresh: (_scope, callback) => { refresh = callback; } },
     '../payments/PaymentCheckout': { PaymentCheckout: 'PaymentCheckout' },
   }, {
     sessionStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     crypto: { randomUUID: () => 'stable-key' },
-    window: { dispatchEvent() {} }, Event: class {},
+    window: { dispatchEvent() {}, setInterval: () => 1, clearInterval() {} }, Event: class {},
   }).ReservationCheckout;
   let tree;
-  function render() { index = 0; tree = component({ selection, accountScope: 'driver-account', onDone() {} }); return tree; }
+  function render() {
+    index = 0;
+    tree = component({ selection, storageKey: 'driver-account:site', onDone() {}, onBack() {} });
+    for (const effect of effects.splice(0)) effect();
+    return tree;
+  }
   function walk(node) {
     if (Array.isArray(node)) return node.flatMap(walk);
     if (!node || typeof node !== 'object') return [];
@@ -73,7 +86,7 @@ function checkout(api = {}, storage = new Map()) {
   function nodes() { return walk(tree); }
   function button(label) { return nodes().find(node => node.type === 'button' && node.props.children === label); }
   async function click(label) { button(label).props.onClick(); await new Promise(resolve => setImmediate(resolve)); render(); }
-  async function accept() { await click('Review price and terms'); nodes().find(node => node.type === 'input').props.onChange({ target: { checked: true } }); render(); await click('Accept and reserve'); }
+  async function accept() { await click('Review price and terms'); nodes().find(node => node.type === 'input').props.onChange({ target: { checked: true } }); render(); await click('Accept terms and reserve'); }
   render();
   return { render, nodes, button, click, accept, storage, refresh: async () => { await refresh(() => true); render(); }, switchAccount: () => { generation++; } };
 }
@@ -87,7 +100,7 @@ test('happy path waits for a real order and never treats HOLD_CREATED as CONFIRM
   assert.equal(f.button('Done'), undefined);
   booking = { ...booking, orderId: 'payment-order' };
   await f.refresh();
-  assert.equal(f.nodes().find(node => node.type === 'PaymentCheckout').props.reservationOrderId, 'payment-order');
+  assert.equal(f.nodes().find(node => node.type === 'PaymentCheckout').props.bookingOrderId, 'payment-order');
   assert.equal(f.button('Done'), undefined);
   booking = { ...booking, state: 'CONFIRMED' };
   await f.refresh();

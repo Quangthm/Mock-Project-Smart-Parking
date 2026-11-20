@@ -25,13 +25,13 @@ async function sendGuest(message: string, signal: AbortSignal, signedIn: boolean
   let reply = data.content
   if (loginRequired && signedIn) {
     reply = data.replyLocale === "en"
-      ? "Use the assistant on the Driver dashboard to view a Driver account’s vehicles and reservations."
-      : "Dùng trợ lý trong dashboard Driver để xem xe và lịch đặt của tài khoản Driver."
+      ? "Use your assigned workspace to access records or perform parking operations. For your own parking reservations, use a Driver account and select Current booking."
+      : "Dùng màn hình nghiệp vụ được phân công để tra cứu hoặc thao tác tại bãi. Với lịch đặt cá nhân, hãy dùng tài khoản Driver và chọn Current booking."
   }
   return { reply, mode, loginRequired: loginRequired && !signedIn }
 }
 
-export function GuestChatbot({ role = "driver", onSignIn, keepVisible = false }: { role?: Role; onSignIn?: (question: string) => void; keepVisible?: boolean }) {
+export function GuestChatbot({ role = "driver", onSignIn }: { role?: Role; onSignIn?: (question: string) => void }) {
   const [ready, setReady] = useState(false)
   const [open, setOpen] = useState(false)
   useEffect(() => {
@@ -63,23 +63,8 @@ export function GuestChatbot({ role = "driver", onSignIn, keepVisible = false }:
       document.removeEventListener("visibilitychange", refresh)
     }
   }, [open])
-  return ready || keepVisible ? <FloatingChatbot role={role} onOpenChange={setOpen} guest={{
-    send: async (message, signal) => {
-      if (!assistantConfigured) throw new Error("SmartParking AI is not configured yet. Please try again later.")
-      if (!ready) {
-        let status
-        try {
-          status = await assistantApi.status(signal)
-        } catch {
-          throw new Error("SmartParking AI is temporarily unavailable. Please try again later.")
-        }
-        if (!status.enabled || !status.guestFaq) {
-          throw new Error("SmartParking AI is not ready to answer questions yet. Please try again later.")
-        }
-        setReady(true)
-      }
-      return sendGuest(message, signal, !onSignIn)
-    },
+  return ready ? <FloatingChatbot role={role} onOpenChange={setOpen} guest={{
+    send: (message, signal) => sendGuest(message, signal, !onSignIn),
     onSignIn,
   }} /> : null
 }

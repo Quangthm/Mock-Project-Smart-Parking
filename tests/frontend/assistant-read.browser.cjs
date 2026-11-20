@@ -11,6 +11,7 @@ const conversations = '/api/assistant/conversations';
 const messages = `${conversations}/${conversationId}/messages`;
 const result = `${conversations}/${conversationId}/requests/${requestId}`;
 const question = 'Lịch đặt của tôi';
+const guidanceQuestions = ['đặt chỗ ở đâu', 'đặt chỗ xe máy sao', 'đặt chỗ tại rạp phim'];
 const now = '2026-11-08T02:00:00Z';
 const reservationId = '90000000-0000-4000-8000-000000000003';
 const reservationWithoutAction = '90000000-0000-4000-8000-000000000004';
@@ -40,12 +41,15 @@ async function scenario(browser, viewport, dist) {
   page.setDefaultTimeout(8000);
   let enabled = false, recovered = false, hold = false, reset = false;
   let paginate = false, latestAvailable = false, detailAvailable = false;
+  const guidanceReplies = [];
   let sentRevision;
   let releaseHistory;
   const historyReleased = new Promise(resolve => { releaseHistory = resolve; });
   const account = id => ({ userId: id, role: 'driver', email: `${id}@example.test`,
-    fullName: `Fixture ${id}`, onboardingComplete: true });
+    fullName: `Fixture ${id}`, onboardingComplete: true,
+    ...(id === 'operator' ? { role: 'operator', operatorRole: 'operation' } : {}) });
   const requests = [];
+  const operatorPrivateRequests = [];
   const posts = [];
   await page.route('**/*', async route => {
     const request = route.request();
@@ -57,19 +61,25 @@ async function scenario(browser, viewport, dist) {
     const ok = data => route.fulfill({ json: { success: true, data } });
     if (url.origin !== origin) return route.abort();
     if (routePath.startsWith('/api/assistant/')) requests.push([request.method(), routePath]);
-    const isA = request.headers().authorization === 'Bearer token-a';
+    const bearer = request.headers().authorization;
+    const isA = bearer === 'Bearer token-a';
+    if (bearer === 'Bearer token-operator' && routePath.startsWith('/api/assistant/'))
+      operatorPrivateRequests.push(routePath);
     if (routePath === '/api/auth/login') {
-      const id = request.postDataJSON().email.startsWith('a@') ? 'a' : 'b';
+      const id = request.postDataJSON().email.split('@')[0];
       return ok({ accessToken: `token-${id}`, refreshToken: `refresh-${id}`, expiresIn: 3600, user: account(id) });
     }
-    if (routePath === '/api/auth/me') return ok(account(isA ? 'a' : 'b'));
+    if (routePath === '/api/auth/me') return ok(account(bearer === 'Bearer token-operator' ? 'operator' : isA ? 'a' : 'b'));
     if (routePath === '/api/auth/logout') return ok({});
     if (routePath === '/api/assistant/status') return ok({ enabled, guestFaq: enabled });
     if (routePath === '/api/assistant/capabilities') return ok({ enabled });
     if (routePath === '/api/assistant/guest/messages') {
+      assert.equal(bearer, undefined);
+      if (request.postDataJSON().message === 'Đặt chỗ sao?')
+        return ok({ content: 'Kiểm tra điều khoản rồi xác nhận trên form.', mode: 'knowledge', outcome: 'answered' });
       assert.equal(request.postDataJSON().message, question);
       return ok({ content: 'Sign in to view your reservations.', mode: 'system',
-        outcome: 'handoff', actions: [{ type: 'login' }] });
+        outcome: 'handoff', replyLocale: 'vi', actions: [{ type: 'login' }] });
     }
     if (routePath === conversations) return ok({ items: isA && !reset ? [conversation] : [], nextCursor: null });
     if (routePath === `${conversations}/${conversationId}/reset` && isA) {
@@ -85,6 +95,13 @@ async function scenario(browser, viewport, dist) {
           detailAvailable = true;
           return ok({ requestId: clientMessageId, conversationId, clientMessageId, state: 'completed', answer: detail, revision: 10 });
         }
+        if (guidanceQuestions.includes(message)) {
+          assert.equal(expectedRevision, detail.sequence + guidanceReplies.length * 2);
+          const reply = { ...empty, id: clientMessageId, clientMessageId, sequence: expectedRevision + 2,
+            content: `Assistant API nhận: ${message}`, outcome: 'answered' };
+          guidanceReplies.push(reply);
+          return ok({ requestId: clientMessageId, conversationId, clientMessageId, state: 'completed', answer: reply, revision: reply.sequence });
+        }
         sentRevision = expectedRevision;
         latestAvailable = true;
         return route.fulfill({ status: 409, json: { success: false, code: 'REVISION_CONFLICT' } });
@@ -94,7 +111,7 @@ async function scenario(browser, viewport, dist) {
           activeRequestClientMessageId: null });
       }
       if (latestAvailable) {
-        const items = [answer, latest, empty, failure, ...(detailAvailable ? [detail] : [])];
+        const items = [answer, latest, empty, failure, ...(detailAvailable ? [detail] : []), ...guidanceReplies];
         return ok({ conversation: { ...conversation, revision: items.at(-1).sequence }, items, nextCursor: null,
           activeRequestClientMessageId: null });
       }
@@ -120,6 +137,11 @@ async function scenario(browser, viewport, dist) {
     await panel.getByRole('textbox').fill(text);
     await button('Gửi', panel).click();
   };
+  const updateDraft = async text => {
+    await panel.getByRole('textbox', { name: 'Thông tin bản nháp' }).fill(text);
+    await button('Cập nhật bản nháp', panel).click();
+  };
+  const startDraft = () => button('Tạo bản nháp', panel).click();
   const login = async id => {
     await page.getByPlaceholder('you@example.com or phone number').fill(`${id}@example.test`);
     await page.getByPlaceholder('Enter your password').fill('fixture-password');
@@ -164,30 +186,36 @@ async function scenario(browser, viewport, dist) {
     assert.equal(await panel.getByRole('textbox').inputValue(), question);
     await button('Xem chi tiết mới nhất', panel).first().click();
     await panel.getByText(detail.content, { exact: true }).waitFor();
+    for (const message of guidanceQuestions) {
+      await send(message);
+      await panel.getByText(`Assistant API nhận: ${message}`, { exact: true }).waitFor();
+      assert.equal(await booking.count(), 0);
+    }
     const postsBeforeDraft = posts.length;
-    await send('đặt cho tôi chỗ ô tô từ 14h đến 16h mai');
+    await startDraft();
+    await updateDraft('đặt cho tôi chỗ ô tô từ 14h đến 16h mai');
     await booking.getByText(/xe nào.*bãi nào/).waitFor();
-    await send('51A-123.45');
+    await updateDraft('51A-123.45');
     await booking.getByText(/bãi nào/).waitFor();
-    await send('bãi FPT');
+    await updateDraft('bãi FPT');
     await booking.getByText('FPT', { exact: true }).waitFor();
     await booking.getByText(/14:00.*16:00/).waitFor();
-    await send('đổi xe sang xe máy');
+    await updateDraft('đổi xe sang xe máy');
     await booking.getByText('Xe máy', { exact: true }).waitFor();
     assert.equal(await booking.getByText('51A-123.45', { exact: true }).count(), 0);
-    await send('xe 59A1-123.45 nhé?');
+    await updateDraft('xe 59A1-123.45 nhé?');
     await booking.getByText('59A1-123.45', { exact: true }).waitFor();
-    await send('đổi bãi sang bãi Vincom và đổi giờ sang 15h đến 17h');
+    await updateDraft('đổi bãi sang bãi Vincom và đổi giờ sang 15h đến 17h');
     await booking.getByText(/từng thay đổi/).waitFor();
     await booking.getByText('FPT', { exact: true }).waitFor();
-    await send('đổi bãi sang bãi Trung Tâm');
+    await updateDraft('đổi bãi sang bãi Trung Tâm');
     await booking.getByText('Trung Tâm', { exact: true }).waitFor();
-    await send('đổi giờ sang chiều mai');
+    await updateDraft('đổi giờ sang chiều mai');
     await booking.getByText(/giờ bắt đầu và giờ kết thúc/).waitFor();
     assert.equal(await booking.getByText(/14:00.*16:00/).count(), 0);
-    await send('đổi giờ sang 15h đến 17h');
+    await updateDraft('đổi giờ sang 15h đến 17h');
     await booking.getByText(/15:00.*17:00/).waitFor();
-    await send('đồng ý');
+    await updateDraft('đồng ý');
     await booking.getByText(/xem lại thông tin bên dưới/).waitFor();
     assert.deepEqual(posts.slice(postsBeforeDraft), []);
     assert.equal(await booking.evaluate(element => element.scrollWidth > element.clientWidth), false);
@@ -207,7 +235,8 @@ async function scenario(browser, viewport, dist) {
     await booking.waitFor({ state: 'hidden' });
     enabled = true;
     await afterResponse('/api/assistant/capabilities', focus);
-    await send('đặt chỗ ô tô từ 14h đến 16h mai tại bãi Riêng Của A');
+    await startDraft();
+    await updateDraft('đặt chỗ ô tô từ 14h đến 16h mai tại bãi Riêng Của A');
     await booking.getByText('Riêng Của A', { exact: true }).waitFor();
     await button('Đóng', panel).click();
     hold = true;
@@ -229,7 +258,8 @@ async function scenario(browser, viewport, dist) {
     await panel.getByRole('textbox').waitFor();
     assert.equal(await panel.getByText(answer.content, { exact: true }).count(), 0);
     assert.equal(await booking.count(), 0);
-    await send('đặt chỗ ô tô từ 14h đến 16h mai');
+    await startDraft();
+    await updateDraft('đặt chỗ ô tô từ 14h đến 16h mai');
     await booking.getByText(/xe nào.*bãi nào/).waitFor();
     assert.equal(await booking.getByText('Riêng Của A', { exact: true }).count(), 0);
     assert.equal(await panel.getByRole('combobox').count(), 0);
@@ -244,13 +274,30 @@ async function scenario(browser, viewport, dist) {
     await driver.click();
     await panel.getByText(answer.content, { exact: true }).waitFor();
     assert.equal(await booking.count(), 0);
-    await send('đặt chỗ ô tô từ 14h đến 16h mai tại bãi Mới');
+    await startDraft();
+    await updateDraft('đặt chỗ ô tô từ 14h đến 16h mai tại bãi Mới');
     await booking.getByText('Mới', { exact: true }).waitFor();
     await button('Mới', panel).click();
     await afterResponse(`${conversations}/${conversationId}/reset`, () => button('Tạo chat mới', confirm).click());
     await panel.getByText(answer.content, { exact: true }).waitFor({ state: 'hidden' });
     await booking.waitFor({ state: 'hidden' });
     assert.equal(reset, true);
+    if (viewport.width === 1440) {
+      await button('Đóng', panel).click();
+      await page.locator('.profile-trigger').filter({ hasText: 'Fixture a' }).click();
+      await button('Sign Out').click();
+      if (!(await page.getByPlaceholder('you@example.com or phone number').isVisible())) await button('Sign In').first().click();
+      await login('operator');
+      await page.waitForURL('**/dashboard/operation');
+      await guest.click();
+      await page.locator('#smartparking-ai-input').fill('Đặt chỗ sao?');
+      await button('Send message').click();
+      await page.getByText('Kiểm tra điều khoản rồi xác nhận trên form.', { exact: true }).waitFor();
+      await page.locator('#smartparking-ai-input').fill(question);
+      await button('Send message').click();
+      await page.getByText(/Dùng màn hình nghiệp vụ được phân công/).waitFor();
+      assert.deepEqual(operatorPrivateRequests, []);
+    }
     console.log(`${viewport.width}x${viewport.height}: FAQ, history/recovery, S06 reads, S07 booking preview and edits, logout/relogin PASS`);
   } finally {
     releaseHistory();

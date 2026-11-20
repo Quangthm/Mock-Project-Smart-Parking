@@ -143,9 +143,13 @@ function review(fields: BookingFields, now: Date, today: string, requestedReview
     ? (missingFields.includes("vehicle") && missingFields.includes("site") && missingFields[0] === "vehicle"
       ? `${prompt.vehicle} ${prompt.site}` : prompt[missingFields[0]])
     : requestedReview
-      ? "Bạn có thể xem lại thông tin bên dưới. Việc xác nhận sẽ thực hiện trên form đặt chỗ khi form được kết nối."
+      ? "Bạn có thể xem lại thông tin bên dưới. Để đặt chỗ, mở Search Parking rồi nhập và xác nhận trên form."
       : "Bạn xem lại bản nháp bên dưới. Có thể nhắn “đổi xe sang xe máy”, “đổi bãi sang bãi FPT” hoặc “đổi giờ sang 15h đến 17h”."
   return { fields, preview, reply }
+}
+
+export function beginBookingPreview(now = new Date()): BookingTurn {
+  return review(emptyFields, now, calendar.format(now), false)
 }
 
 export function interpretBookingTurn(

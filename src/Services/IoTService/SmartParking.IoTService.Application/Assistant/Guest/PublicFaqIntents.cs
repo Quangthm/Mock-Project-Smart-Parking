@@ -24,15 +24,50 @@ internal static partial class PublicFaqIntents
         "Gói đỗ xe và khoản hoàn được xử lý thế nào khi bãi đóng cửa tạm thời hoặc vĩnh viễn? Nêu điều kiện phần thời gian không phục vụ hoặc giá trị chưa sử dụng đủ điều kiện.");
     private static readonly PublicFaqRoute StartBooking = new("booking-start", "booking-guide",
         "Hãy hướng dẫn từng bước có đánh số để người lái chuẩn bị và xác nhận đặt chỗ trên form SmartPark, chỉ dùng các bước trong nguồn. Nêu điều kiện cần kiểm tra và không khẳng định chatbot đã tạo đặt chỗ hoặc thanh toán.");
+    private static readonly PublicFaqRoute BookingNavigation = new("booking-navigation", "booking-guide",
+        "Người lái bắt đầu đặt chỗ từ đâu? Nêu bước đầu tiên trước rồi hướng dẫn từng bước có đánh số để kiểm tra điều kiện và xác nhận trên form SmartPark theo nguồn.");
+    private static readonly PublicFaqRoute EntryConfirmation = new("parking-entry-confirmation", "walk-in-and-entry-guide",
+        "Cổng mở đã xác nhận xe vào bãi chưa? Nêu sự khác nhau giữa mở cổng và ghi nhận xe đã vào thực tế.");
+    private static readonly PublicFaqRoute SiteSupport = new("parking-site-support", "support-guide",
+        "Người lái gặp sự cố ở bãi thì dùng kênh hỗ trợ nào? Nêu vai trò Operator và điều kiện tiếp nhận, không khẳng định đã gửi yêu cầu.");
+    private static readonly PublicFaqRoute CancellationSteps = new("booking-cancellation-steps", "cancellation-refund-guide",
+        "Người lái yêu cầu hủy đặt chỗ qua đâu và cần kiểm tra những gì trước khi hủy? Giải thích quy trình chung, không khẳng định đã hủy hoặc đã hoàn tiền.");
+    private static readonly PublicFaqRoute RefundStatus = new("refund-status-guidance", "cancellation-refund-guide",
+        "Thông báo đã chấp thuận hoàn có xác nhận tiền đã được thực trả không? Hướng dẫn cách kiểm tra trạng thái thực tế, không xác nhận một giao dịch cụ thể.");
+    private static readonly PublicFaqRoute DiscoveryNavigation = new("discovery-navigation", "discovery-guide",
+        "Hướng dẫn người lái tìm bãi và đọc thông tin trên bản đồ SmartPark. Nêu cách chọn điểm xuất phát và loại phương tiện; không xác nhận chỗ trống hiện tại.");
+    private static readonly PublicFaqRoute LostTicket = new("lost-parking-ticket", "checkout-and-departure-guide",
+        "Người lái cần làm gì khi mất vé gửi xe? Nêu việc đối chiếu bằng chứng lúc vào và điều kiện áp dụng phí mất vé.");
+    private static readonly PublicFaqRoute IncorrectCharge = new("parking-charge-dispute", "incident-and-appeal-guide",
+        "Người lái báo phí gửi xe bị tính sai bằng cách nào? Nêu kênh xử lý, bằng chứng cần đối chiếu và phân biệt quyết định hoàn với thực trả.");
     private static readonly PublicFaqRoute VehicleSupport = new("vehicle-support", "vehicle-guide",
         "SmartPark hỗ trợ những loại xe nào? Giải thích ô tô, xe máy và điều kiện theo cấu hình từng bãi; không xác nhận chỗ trống hiện tại.");
     private static readonly PublicFaqRoute Exit = new("parking-exit-blocked", "checkout-and-departure-guide",
         "Khi cổng ra chưa mở, người lái cần làm gì? Nếu đã thanh toán, cần xác minh gì trước khi trả thêm?");
     private static readonly PublicFaqRoute Notice = new("parking-notice-missing", "notification-guide",
         "Nếu không nhận được thông báo, làm sao kiểm tra hệ thống đã ghi nhận đặt chỗ hoặc giao dịch?");
+    private static readonly PublicFaqRoute Overview = new("smartpark-overview", "smartpark-overview",
+        "Giới thiệu SmartPark là hệ thống gì cho người lái. Phân biệt hệ thống SmartPark với trợ lý AI trong hệ thống.");
+    private static readonly PublicFaqRoute AssistantIdentity = new("assistant-identity", "smartpark-overview",
+        "Giới thiệu bạn là trợ lý AI của SmartPark. Giải thích việc bạn có thể hỗ trợ và giới hạn tra cứu theo nguồn.");
+    private static readonly PublicFaqRoute Invoice = new("invoice-navigation", "invoice-guide",
+        "Người lái xem hóa đơn hoặc chứng từ ở đâu nếu giao dịch có tính năng này? Không khẳng định chứng từ đã được phát hành.");
+    private static readonly PublicFaqRoute Departure = new("parking-departure", "checkout-and-departure-guide",
+        "Người lái cần làm gì khi lấy xe và ra bãi, bao gồm sau khi thanh toán? Phân biệt xác nhận thanh toán với xác nhận xe đã ra.");
+    private static readonly PublicFaqRoute Recovery = new("account-recovery", "account-security-guide",
+        "Nếu không nhớ mật khẩu, người dùng nên dùng quy trình bảo mật hoặc hỗ trợ nào? Nhắc giữ bí mật và yêu cầu xác thực còn hiệu lực.");
+    private static readonly PublicFaqRoute OwnerOnboarding = new("owner-onboarding", "roles-and-partner-guide",
+        "Giải thích trình tự đăng ký đối tác bãi đỗ, từ xác minh đến cấp phát bãi đầu tiên, theo hướng dẫn công khai.");
+    private static readonly PublicFaqRoute SiteApproval = new("site-approval", "roles-and-partner-guide",
+        "Giải thích điều kiện trước bước Admin xét duyệt và phân biệt xét duyệt, cấp phát với mở bãi phục vụ.");
+    private static readonly PublicFaqRoute OperatorScope = new("operator-scope", "roles-and-partner-guide",
+        "Operator có nhiệm vụ nào tại bãi được phân công? Chỉ giải thích phạm vi công việc trong tài liệu.");
 
     private static readonly PublicFaqRoute[] PublicFaqRoutes =
-        [Advance, MinimumDuration, MaximumDuration, Refund, Overstay, WalkIn, Arrival, PassRefund, PassClosure, StartBooking, VehicleSupport, Exit, Notice];
+        [Advance, MinimumDuration, MaximumDuration, Refund, Overstay, WalkIn, Arrival, PassRefund, PassClosure,
+         StartBooking, BookingNavigation, EntryConfirmation, SiteSupport, CancellationSteps, RefundStatus, DiscoveryNavigation, LostTicket, IncorrectCharge,
+         VehicleSupport, Exit, Notice, Overview, AssistantIdentity, Invoice, Departure,
+         Recovery, OwnerOnboarding, SiteApproval, OperatorScope];
 
     internal static PublicFaqRoute? Find(string intent) => PublicFaqRoutes.FirstOrDefault(route => route.Id == intent);
 
