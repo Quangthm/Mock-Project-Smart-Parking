@@ -11,13 +11,14 @@ import { AuditLogView } from "../audit-log/AuditLogView"
 import { SystemConfig } from "../system/SystemConfig"
 
 import { AdminSettings } from "../setting/AdminSettings"
+import { AssistantSettings } from "../setting/AssistantSettings"
 
 import { Users } from "../users/Users"
 
 import { DashboardSidebar } from "../../../components/layout/DashboardSidebar"
 import { useLocation } from "react-router-dom"
 
-type Tab = "overview" | "applications" | "drivers" | "audit" | "system" | "settings"
+type Tab = "overview" | "applications" | "drivers" | "audit" | "system" | "settings" | "assistant"
 
 export function AdminDashboard() {
   const { user } = useApp()
@@ -51,6 +52,7 @@ export function AdminDashboard() {
     { id: "audit" as Tab, label: "Audit Log", icon: "🔍" },
 
     { id: "system" as Tab, label: "System Config", icon: "sliders" },
+    { id: "assistant" as Tab, label: "AI Chatbot", icon: "sparkles" },
 
     { id: "settings" as Tab, label: "Settings", icon: "🔧" },
   ]
@@ -109,6 +111,13 @@ export function AdminDashboard() {
               active: tab === "system",
               onClick: () => setTab("system"),
             },
+            {
+              id: "assistant",
+              label: "AI Chatbot",
+              icon: "sparkles",
+              active: tab === "assistant",
+              onClick: () => setTab("assistant"),
+            },
           ],
         },
       ]}
@@ -120,6 +129,7 @@ export function AdminDashboard() {
           {tab === "drivers" && <Users />}
           {tab === "audit" && <AuditLogView />}
           {tab === "system" && <SystemConfig />}
+          {tab === "assistant" && <AssistantSettings />}
           {tab === "settings" && <AdminSettings />}
         </div>
       </div>

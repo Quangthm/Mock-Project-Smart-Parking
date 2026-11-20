@@ -117,7 +117,7 @@ Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bả
 | `Assistant__Guest__KnowledgeDirectory` | Docker mặc định dùng cặp 0.4.1 dưới `docs/03-design/ai/smartparkdocker/knowledge/0.4.1/`. Đặt đường dẫn nếu cần dùng một bộ đã duyệt khác. [Cách lưu và xuất bản knowledge](docs/03-design/ai/chatbot-design.md#knowledge-and-faq) |
 | `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
 
-Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`; Admin nhập trong Settings sau khi container đã chạy.
+Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`. Sau khi container chạy, Admin nhập key tại **AI Chatbot** trên thanh điều hướng Admin.
 
 Nếu chưa có bộ khóa dev, có thể tạo bằng PowerShell 7 trong **một thư mục mới ngoài repo**. Cặp JWT này dành riêng cho UserService local. PFX dùng một khóa RSA khác. Nạp PEM riêng vào cấu hình UserService theo mục 5.5.
 
@@ -165,7 +165,7 @@ Assistant nằm trong project Docker `smartpark-app`, cổng mặc định `http
 
 Đường dẫn public PEM, PFX, keyring và knowledge có thể ghi tương đối so với thư mục chứa file `.env` khi dùng Docker. Mỗi thành viên giữ file cấu hình và vật liệu khóa của mình ngoài Git.
 
-`/health/live` kiểm container sống. Admin vào Settings để nhập provider key, chọn model, bật provider và cấu hình, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-app-assistant-1`.
+`/health/live` kiểm container sống. Từ thanh điều hướng Admin, mở **AI Chatbot** để nhập provider key, chọn model, bật cấu hình và provider, rồi bật chatbot. Để kiểm FAQ, dùng `/api/assistant/status` và xác nhận `data.guestFaq=true`. Xem log local bằng `docker logs smartpark-app-assistant-1`.
 
 Để kiểm tìm bãi và tra lịch với API thật, bật từng cờ `Assistant__Reads__*__Enabled` sau khi nhận HTTPS origin mà container truy cập và tin cậy được. Dùng [hướng dẫn QA owner reads](docs/04-testing/assistant-handoff-testing.md#6-test-tích-hợp-owner-sau-khi-môi-trường-sẵn-sàng) để cấu hình và đối chiếu dữ liệu test.
 

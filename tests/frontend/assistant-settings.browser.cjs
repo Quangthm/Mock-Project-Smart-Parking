@@ -94,26 +94,30 @@ async function run() {
     });
     await page.goto('https://s03.test/');
     const button = (label, area = page) => area.getByRole('button', { name: label, exact: true });
-    await button('Open profile menu').click(); await button('Settings').click(); await button('AI Chatbot').click();
-    const group = label => page.getByRole('region', { name: label, exact: true });
+    const navigation = page.getByRole('complementary', { name: 'admin navigation' });
+    await button('AI Chatbot', navigation).click();
+    const settingsPage = page.getByRole('region', { name: 'AI Chatbot', exact: true });
+    const group = label => settingsPage.getByRole('region', { name: label, exact: true });
     const row = label => page.getByRole('article', { name: label, exact: true });
+    const addOpenAIConfiguration = button('+ Add configuration', group('OpenAI'));
     const reload = async () => { await button('Reload settings').click(); await button('Reload settings').waitFor();
       await page.waitForFunction(() => !document.querySelector('.assistant-settings-fields').disabled); };
     await group('Gemini').waitFor();
     for (const [width, height] of [[1440,900], [768,1024], [390,844]]) {
       await page.setViewportSize({ width, height });
-      assert(await page.locator('.settings-dialog-content').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      assert(await settingsPage.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
       await page.screenshot({ path: path.join(evidence, 'settings-' + width + '.png') });
     }
     await button('Move OpenAI up').focus(); await page.keyboard.press('Enter'); await reload();
-    assert.equal(await page.locator('.assistant-settings-provider h4').first().innerText(), 'OpenAI');
+    const providerRegions = settingsPage.getByRole('region', { name: /^(Gemini|OpenAI)$/ });
+    assert.equal(await providerRegions.first().getAttribute('aria-label'), 'OpenAI');
     await page.setViewportSize({ width: 1440, height: 900 });
     await row('Reserve').locator('[draggable]').dragTo(row('Primary'));
     await reload(); assert.equal(await group('Gemini').getByRole('article').first().getAttribute('aria-label'), 'Reserve');
     conflict = true; const before = mutations.length;
     await page.getByRole('switch', { name: 'System chatbot' }).click();
     await page.getByText(/Review the reloaded values/).waitFor(); assert.equal(mutations.length, before + 1);
-    await button('Add configuration', group('OpenAI')).click();
+    await addOpenAIConfiguration.click();
     const editor = page.locator('dialog[open]');
     await editor.getByLabel('New API key').fill('discard-on-close');
     await button('Cancel', editor).focus();
@@ -130,7 +134,7 @@ async function run() {
     await page.evaluate(() => document.documentElement.classList.remove('dark'));
     await page.keyboard.press('Escape');
     await editor.waitFor({ state: 'hidden' }); await group('OpenAI').waitFor();
-    await button('Add configuration', group('OpenAI')).click();
+    await addOpenAIConfiguration.click();
     assert.equal(await editor.getByLabel('New API key').inputValue(), '');
     await editor.getByLabel('Configuration name').fill('Trial');
     await editor.getByLabel('New API key').fill('synthetic-only');
@@ -181,7 +185,7 @@ async function run() {
     await page.waitForTimeout(100);
     releaseRead();
     await page.getByText(/Review the reloaded values/).waitFor();
-    await page.getByText(new RegExp('Revision ' + settings.revision + ' ·')).waitFor();
+    await settingsPage.getByText(`Revision ${settings.revision}`, { exact: true }).waitFor();
     // Simulate a suspended tab: automatic polling cannot reuse an expired receipt.
     testOutcome = 'running';
     await button('Test connection', row('Trial')).click();
@@ -203,7 +207,7 @@ async function run() {
     await button('Replace key', row('Renamed')).click(); assert.equal(await editor.getByLabel('New API key').inputValue(), '');
     await editor.getByLabel('New API key').fill('replacement-only'); await button('Replace key', editor).click();
     await button('Revoke', row('Renamed')).click(); await row('Renamed').getByText(/Revoked/).waitFor();
-    await button('Add configuration', group('OpenAI')).click();
+    await addOpenAIConfiguration.click();
     await editor.getByLabel('Configuration name').fill('Outage draft');
     await editor.getByLabel('New API key').fill('synthetic-only');
     discovery = 'error';
@@ -212,7 +216,7 @@ async function run() {
     await button('Save disabled configuration', editor).click();
     await row('Outage draft').waitFor();
     assert.equal(settings.configurations.at(-1).enabled, false);
-    console.log('PASS offline Settings entry, three viewport widths, keyboard/drag order and reload, conflict, editor lifecycle, discovery states, saved tests and credential actions.');
+    console.log('PASS offline Admin sidebar entry, three viewport widths, keyboard/drag order and reload, conflict, editor lifecycle, discovery states, saved tests and credential actions.');
   } finally { await browser.close(); }
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

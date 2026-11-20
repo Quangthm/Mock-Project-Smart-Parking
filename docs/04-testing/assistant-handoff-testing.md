@@ -16,7 +16,7 @@ Các khối `.env` bên dưới đã điền giá trị cho Docker local. Mật 
 | --- | --- | --- |
 | Guest / landing page | FAQ công khai Việt/Anh; câu riêng tư dẫn đăng nhập | Không lịch sử bền vững, xe/lịch riêng, tạo đơn |
 | Driver / dashboard | FAQ + lịch sử theo Account; xe, lịch đặt, tìm bãi khi từng nguồn đã bật và dùng được; bản nháp nhập trong phiên | Không xác nhận giữ chỗ, tạo booking, tính giá hay trả tiền bằng hội thoại |
-| Admin / dashboard | FAQ + lịch sử riêng theo Account và role; Settings → AI Chatbot quản lý provider/model/key | Chat không đọc xe/lịch Driver hay danh sách người dùng; không sửa Settings bằng câu lệnh chat |
+| Admin / dashboard | FAQ và lịch sử riêng theo Account và role. Mục **AI Chatbot** trên thanh điều hướng Admin quản lý provider, model và key | Chat không đọc xe/lịch Driver hay danh sách người dùng; không sửa Settings bằng câu lệnh chat |
 | Business Owner / dashboard | FAQ + lịch sử riêng theo Account và role | Không báo cáo doanh thu, điều hành bãi, công bố knowledge, hoặc đọc dữ liệu Driver qua chat |
 | Site Operator / dashboard | Widget FAQ công khai; không hiện nút đăng nhập khi đã đăng nhập | Không lịch sử chat đăng nhập, tra biển số khách, mở barrier, thu tiền hay sửa phiên đỗ qua chat; API chat bảo vệ trả 403 |
 
@@ -359,8 +359,8 @@ Các URL dưới đây dùng cổng Docker mặc định. Nếu đã đổi cấ
 
 ### 2.5. Admin bật AI Chatbot từng bước
 
-1. Admin dashboard → **Settings** → **AI Chatbot** → **Reload settings**. Phải tải revision, các nhóm Gemini/OpenAI. `Management service is not connected` thường là FE thiếu URL; `Credential store unavailable` cần kiểm PFX/keyring.
-2. Trong provider được phép dùng, bấm **Add configuration**; điền **Configuration name** (`QA Gemini 01`) và **New API key** qua kênh riêng.
+1. Từ thanh điều hướng Admin, mở **AI Chatbot** rồi bấm **Reload settings**. Kiểm tra revision và các nhóm Gemini/OpenAI. Nếu thấy **Management service is not connected**, kiểm tra URL Assistant của FE. Nếu **Credential store** hiện **Unavailable**, kiểm tra PFX và keyring.
+2. Trong provider được phép dùng, bấm **+ Add configuration**. Điền **Configuration name** (`QA Gemini 01`) và **New API key** qua kênh riêng.
 3. Bấm **Load models**, chọn model từ catalogue → **Save disabled configuration**. Không ghi model cố định từ một tài liệu cũ nếu catalogue đã thay đổi.
 4. Bấm **Test connection** và ghi kết quả. Nếu chỉ kiểm provider theo **2.7 mốc A**, dừng tại đây.
 5. Khi Test connection passed **và** đã có knowledge hợp lệ, **Enable** cấu hình, bật provider và **System chatbot**; chờ **Settings saved.**
@@ -578,8 +578,8 @@ Cần ADMIN và key test của provider đang kiểm. Trước ca thay đổi, g
 
 | ID / mức | Thao tác | Kết quả mong đợi |
 | --- | --- | --- |
-| TC-ADM-01 / P0 | Admin mở Settings. Driver gọi `GET /api/assistant/admin/settings` bằng chính phiên Driver | Admin 200, Driver 403. Người chưa đăng nhập gọi route này nhận 401 |
-| TC-ADM-02 / P1 | Add configuration cho mỗi provider có key, Load models, chọn model và Save disabled configuration, reload | Giữ provider/nhãn/model, cấu hình mới disabled. Key không được trả plaintext trong Settings |
+| TC-ADM-01 / P0 | Admin mở **AI Chatbot** từ thanh điều hướng. Driver gọi `GET /api/assistant/admin/settings` bằng chính phiên Driver | Admin 200, Driver 403. Người chưa đăng nhập gọi route này nhận 401 |
+| TC-ADM-02 / P1 | Bấm **+ Add configuration** cho mỗi provider có key, tải và chọn model, lưu ở trạng thái disabled rồi tải lại | Giữ provider/nhãn/model, cấu hình mới disabled. Key không được trả plaintext trong Settings |
 | TC-ADM-03 / P0 | Cô lập cấu hình QA đang kiểm như hướng dẫn trên, bấm Test connection rồi gửi một FAQ bằng Guest | Test connection passed và FAQ có nguồn đúng với `data.mode=ai` thì provider generation PASS. Nếu `knowledge`, ghi fallback riêng và FAIL/BLOCKED cho provider theo nguyên nhân thực tế |
 | TC-ADM-04 / P1 | Edit đổi nhãn/model hợp lệ, bật/tắt, thêm cấu hình thứ hai và đổi thứ tự, reload | Giá trị và thứ tự giữ đúng, các cấu hình khác không bị đổi key |
 | TC-ADM-05 / P1 | Hai tab Admin tải cùng revision. Tab 1 lưu nhãn, tab 2 lưu từ dữ liệu cũ | Tab 2 báo conflict/yêu cầu tải lại, không ghi đè bản mới |
@@ -1085,7 +1085,7 @@ Người QA ghi biên bản smoke Settings/FAQ/Driver trên UserService và prov
 1. Guest hỏi FAQ, rồi câu dữ liệu riêng dẫn đăng nhập; nói rõ response đang là `ai` hay `knowledge`.
 2. Driver hỏi FAQ, đóng/mở rồi reload lịch sử; đọc xe nếu positive card đã PASS.
 3. Thử ba câu bản nháp ở DRAFT-01–03, chỉ ra chưa có booking/payment.
-4. Admin mở Settings đã cấu hình, reload để chứng minh persistence; không rotate key giữa demo.
+4. Admin mở **AI Chatbot** từ thanh điều hướng rồi tải lại để kiểm tra cấu hình đã lưu. Không rotate key giữa demo.
 5. Owner/Operator hỏi FAQ và một câu ngoài quyền để chứng minh giới hạn đúng role.
 6. Chỉ demo search/reservations khi ca tương ứng có fixture và bằng chứng PASS; không lấy empty/unknown làm kết quả dương.
 
