@@ -27,7 +27,7 @@ Các khối `.env` bên dưới đã điền giá trị cho Docker local. Mật 
 - Cài **Git**, **Docker Desktop** và **.NET SDK 10**. Mở Docker Desktop, chọn Linux containers và đợi engine chạy.
 - Mở PowerShell tại **thư mục gốc dự án**, nơi có `setup.ps1` và `.env.example`. Các lệnh bên dưới đều chạy tại đây.
 - Nếu Windows PowerShell 5.1 chặn `.ps1` do execution policy, dùng `powershell.exe -NoProfile -ExecutionPolicy Bypass` để mở một phiên riêng cho checkout QA đã xác minh. Làm theo chính sách máy của nhóm nếu thiết lập do quản trị viên quản lý.
-- Nhận từ người bàn giao **hai file knowledge đã duyệt**: `smartpark-knowledge.md` và `publication.json`. Thiếu hai file này thì chưa test chat được; vẫn có thể setup và test kết nối Gemini theo **2.7 mốc A**.
+- Dùng **cặp knowledge 0.4.1 đi cùng repo** cho Docker local/QA. Với môi trường dùng cặp riêng, người bàn giao cung cấp cả `smartpark-knowledge.md` và `publication.json` đã duyệt. Có thể kiểm kết nối Gemini riêng theo **2.7 mốc A**.
 - Chuẩn bị API key Gemini hoặc OpenAI nếu cần test AI trả lời thật. Key này sẽ nhập trong giao diện Admin ở mục 2.5.
 
 Trên máy Windows mới có WinGet, mở PowerShell và cài các công cụ còn thiếu:
@@ -92,17 +92,17 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 
 Script tự tạo khóa đăng nhập, chứng chỉ kết nối và thư mục lưu khóa chatbot. Nó cũng tự điền đường dẫn/mật khẩu tương ứng vào `.env`. Nếu báo đã có khóa UserService, chuyển sang **2.3**, không xóa khóa cũ.
 
-**Bước 2 — Chép hai file knowledge**
+**Bước 2 — Kiểm tra knowledge có sẵn trong repo**
 
-Mở thư mục sau và chép hai file được bàn giao vào đó:
+Sau khi checkout, dùng nguyên cặp 0.4.1 đã duyệt cho local/QA trong thư mục sau:
 
 ```text
-<thu-muc-du-an>/.cache/assistant-docker/knowledge/
+docs/03-design/ai/smartparkdocker/knowledge/0.4.1/
 ├── smartpark-knowledge.md
 └── publication.json
 ```
 
-Dùng nguyên cặp file được bàn giao. File Markdown trong repo còn là bản soạn thảo; chỉ copy bản đó vào đây sẽ chưa bật chat được. Nếu nhóm chưa có hai file triển khai, làm theo **2.7** để kiểm kết nối Gemini trước hoặc tạo bộ triển khai sau khi được Admin duyệt. Quy trình duyệt thuộc [hướng dẫn xuất bản knowledge](../03-design/ai/archive/design-history.md#legacy-guide--knowledge-and-faq--publication-manual-admin-controlled-deployment). `publication.json` cần UTF-8 không BOM.
+Docker dùng cặp này khi `Assistant__Guest__KnowledgeDirectory` để trống hoặc trỏ đúng đường dẫn trên. Nếu máy đã trỏ sang thư mục khác, giữ cấu hình đó để dùng bộ riêng, hoặc đổi đường dẫn trong `.env` để dùng cặp đi cùng repo. Git giữ nguyên byte của bản phát hành để SHA-256 khớp trên Windows và Linux. Khóa, PFX và keyring được tạo riêng dưới `.cache/assistant-docker`. [Quy trình lưu và xuất bản knowledge](../03-design/ai/chatbot-design.md#knowledge-and-faq)
 
 **Bước 3 — Copy cấu hình chatbot vào `.env` ở root**
 
@@ -133,9 +133,9 @@ Assistant__Jwt__Audience=SmartParking
 # Nơi lưu khóa chatbot và knowledge
 Assistant__Management__KeyDirectory=.cache/assistant-docker/keyring
 Assistant__Management__KeyEncryptionCertificatePath=.cache/assistant-docker/assistant.pfx
-Assistant__Guest__KnowledgeDirectory=.cache/assistant-docker/knowledge
+Assistant__Guest__KnowledgeDirectory=docs/03-design/ai/smartparkdocker/knowledge/0.4.1
 
-# Bật Guest FAQ và chat đăng nhập sau khi đã chép knowledge
+# Bật Guest FAQ và chat đăng nhập với cặp knowledge đã duyệt
 Assistant__Guest__ReleaseEnabled=true
 Assistant__Chat__ReleaseEnabled=true
 Assistant__Guest__AllowedOrigins__0=http://localhost:5173
@@ -157,7 +157,7 @@ Assistant__Reads__Search__Enabled=false
 - `Assistant__Management__KeyEncryptionCertificatePassword`
 - `SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD`
 
-Nếu chưa có cặp knowledge đã duyệt và chỉ kiểm kết nối provider, dùng hai cờ `false` ở mục **2.7 mốc A** trước khi chạy bước 5.
+Nếu chỉ kiểm kết nối provider, dùng hai cờ `false` ở mục **2.7 mốc A** trước khi chạy bước 5.
 
 Các mật khẩu DB/Admin/Owner/Operator/RabbitMQ và service key để setup xử lý ở bước 5. Không cần nhập API key AI vào `.env`.
 
@@ -297,9 +297,9 @@ Nếu dùng file/PEM thì bỏ giá trị mẫu `replace-with-*` ở dòng Base6
 
 Nếu máy đã có bộ TLS hoặc keyring Assistant, script sẽ yêu cầu giữ bộ đó. Dùng cấu hình hiện có theo trường hợp B bên dưới hoặc [hướng dẫn chi tiết](../../LOCAL-SETUP.md#ai-chatbot-bằng-docker).
 
-**Bước 2 — Chép knowledge và bật các cờ**
+**Bước 2 — Chọn knowledge và bật các cờ**
 
-Chép hai file knowledge như bước 2 của mục 2.2. Trong `.env`, thay/thêm **chỉ các dòng sau**; giữ nguyên những dòng khóa, mật khẩu và đường dẫn script đã điền:
+Dùng cặp local/QA đi cùng repo như bước 2 của mục 2.2. Nếu máy đang trỏ sang cặp riêng và muốn chuyển về bản mặc định, đặt `Assistant__Guest__KnowledgeDirectory` thành đường dẫn ở mục 2.2 hoặc để trống. Trong `.env`, thêm hoặc sửa các dòng dưới đây. Giữ bộ khóa, mật khẩu và cấu hình TLS đang dùng.
 
 ```dotenv
 SMARTPARK_ASSISTANT_DOCKER_ENABLED=true
@@ -362,7 +362,7 @@ Các URL dưới đây dùng cổng Docker mặc định. Nếu đã đổi cấ
 1. Admin dashboard → **Settings** → **AI Chatbot** → **Reload settings**. Phải tải revision, các nhóm Gemini/OpenAI. `Management service is not connected` thường là FE thiếu URL; `Credential store unavailable` cần kiểm PFX/keyring.
 2. Trong provider được phép dùng, bấm **Add configuration**; điền **Configuration name** (`QA Gemini 01`) và **New API key** qua kênh riêng.
 3. Bấm **Load models**, chọn model từ catalogue → **Save disabled configuration**. Không ghi model cố định từ một tài liệu cũ nếu catalogue đã thay đổi.
-4. Bấm **Test connection** và ghi kết quả. Nếu đang làm **2.7 mốc A** vì chưa có knowledge, dừng tại đây.
+4. Bấm **Test connection** và ghi kết quả. Nếu chỉ kiểm provider theo **2.7 mốc A**, dừng tại đây.
 5. Khi Test connection passed **và** đã có knowledge hợp lệ, **Enable** cấu hình, bật provider và **System chatbot**; chờ **Settings saved.**
 6. **Reload settings**, kiểm trạng thái còn giữ. Guest gửi `SmartPark là gì?`. Trong Network → `/guest/messages`, `data.mode=ai` mới chứng minh generation; `mode=knowledge` là fallback tài liệu.
 7. Không Revoke/Replace key của cấu hình đang phục vụ người khác. Ca phá lỗi/rotate dùng cấu hình QA riêng. Không chụp key/Authorization vào bằng chứng.
@@ -449,23 +449,23 @@ Với token Admin, gọi `GET {{assistantUrl}}/api/assistant/admin/settings` →
 
 Các bản nháp ở Q-D11–13 phải test trên **widget FE**; gửi cùng câu qua Postman không chứng minh parser FE hoạt động. Nếu dùng PowerShell thay Postman, gửi JSON tiếng Việt bằng bytes UTF-8 và `application/json; charset=utf-8`, đặc biệt với Windows PowerShell 5.1.
 
-### 2.7. Chưa có publication.json: test Gemini trước, hoàn tất knowledge sau
+### 2.7. Kiểm provider và chọn bản phát hành knowledge
 
-**Mốc A — Chỉ kiểm kết nối provider:** hoàn tất JWT, PFX/keyring, DB và đăng nhập Admin ở 2.2 hoặc 2.3. Để thư mục knowledge **trống hoàn toàn**, rồi dùng hai dòng này thay cho các cờ release trong khối `.env` phía trên:
+**Mốc A — Chỉ kiểm kết nối provider.** Hoàn tất JWT, PFX/keyring, DB và đăng nhập Admin ở 2.2 hoặc 2.3. Giữ cặp knowledge mặc định và dùng hai dòng này thay cho các cờ release trong khối `.env` phía trên:
 
 ```dotenv
 Assistant__Guest__ReleaseEnabled=false
 Assistant__Chat__ReleaseEnabled=false
 ```
 
-Nếu đã copy riêng Markdown mà thiếu manifest, chuyển file đó sang thư mục nháp ngoài knowledge, không để một nửa bộ triển khai trong đó. Preflight yêu cầu đủ cặp khi bất kỳ file nào đã có. Không xóa bộ knowledge cũ đang phục vụ người khác.
+Với thư mục cấu hình riêng, một thư mục trống dùng được khi tắt cả hai cờ. Nếu thư mục đã chứa một file của bản phát hành, preflight yêu cầu file còn lại và kiểm cặp đó.
 
 Chạy `setup.ps1 -AssistantCheck`, rồi runner tương ứng ở 2.2/2.3. Đăng nhập Admin và làm **2.5 bước 1–4 tới Test connection**; chưa bật System chatbot và chưa chạy FAQ. Test connection không đọc corpus. **Passed chỉ xác nhận provider kết nối được**, chưa xác nhận chatbot hoạt động. Lỗi 401/403 ở Settings cần xử lý JWT/role; lỗi credential store cần xử lý PFX/keyring trước khi kết luận Gemini lỗi.
 
-**Mốc B — Có bộ knowledge được duyệt để test chat:** chọn một trong hai cách:
+**Mốc B — Kiểm thử chat với bộ knowledge đã duyệt.** Dùng một trong hai cách sau.
 
-1. Nhận **nguyên cặp** `smartpark-knowledge.md` + `publication.json` từ người phụ trách môi trường và chép vào `.cache/assistant-docker/knowledge/`. Không sửa một file riêng vì hash sẽ lệch.
-2. Nếu chưa có cặp triển khai: người phụ trách nội dung gửi bản nguồn `docs/03-design/ai/p1/knowledge/smartpark-knowledge.md` để Admin duyệt đúng phiên bản. Sau khi có quyết định duyệt thực tế, người triển khai chạy khối sau từ root. Hai câu hỏi yêu cầu danh tính người duyệt và link/mã biên bản đã có; không điền tên mẫu để vượt kiểm tra:
+1. **Local/QA 0.4.1.** Dùng nguyên cặp đi cùng repo tại `docs/03-design/ai/smartparkdocker/knowledge/0.4.1/`. Bật cờ ở bên dưới và chạy lại setup.
+2. **Bản phát hành khác.** Người phụ trách nội dung gửi bản nguồn `docs/03-design/ai/p1/knowledge/smartpark-knowledge.md` để Admin duyệt đúng phiên bản. Sau khi có quyết định duyệt, chạy từ root với tên hoặc ID người duyệt và mã tham chiếu thực tế.
 
 ```powershell
 $knowledgeApprover = Read-Host 'Tên hoặc ID Admin đã duyệt bản nội dung này'
@@ -473,9 +473,9 @@ $knowledgeApproval = Read-Host 'Link hoặc mã biên bản duyệt của Admin'
 ./scripts/setup-assistant-docker.ps1 -PublishKnowledge -ApprovedBy $knowledgeApprover -ApprovalReference $knowledgeApproval
 ```
 
-Script tạo **bản triển khai riêng** và manifest với SHA-256, version, thời gian UTC đồng nhất, UTF-8 không BOM. Script không sửa bản nháp trong repo, không sửa `.env`, không thay thế quyết định phê duyệt. Nếu chưa có Admin duyệt thì dừng ở mốc A; trạng thái bàn giao là **chưa đủ điều kiện test chat**. Đây là đầu vào người bàn giao phải cung cấp, không phải lỗi thao tác của tester.
+Script xuất **cặp đã duyệt** vào thư mục staging `.cache/assistant-docker/knowledge` theo mặc định. Manifest ghi SHA-256, version và thời gian UTC đồng nhất. Hai file dùng UTF-8 không BOM. Khi chia sẻ một bản local/QA mới qua Git, sao chép nguyên cặp đã kiểm vào `docs/03-design/ai/smartparkdocker/knowledge/<version>/` và cập nhật mặc định trong `scripts/assistant-knowledge-path.ps1` và `.env.example`. Máy có đường dẫn ghi rõ phiên bản trong `.env` tiếp tục dùng bản đó đến khi đổi cấu hình. Để trống giá trị nếu muốn Docker tự dùng bản mặc định của checkout.
 
-Nếu thư mục đích đã có một trong hai file, script từ chối ghi đè. Giữ bộ cũ; bản được duyệt mới có thể xuất bằng `-OutputDirectory .cache/assistant-knowledge-v2`, rồi trỏ `Assistant__Guest__KnowledgeDirectory` trong root `.env` sang đúng thư mục đó.
+Luôn xuất phiên bản mới vào một thư mục mới. Script từ chối ghi đè khi thư mục đích đã có một trong hai file. Dùng `-OutputDirectory` để chọn một thư mục riêng cho lần xuất.
 
 Khi đã đủ cặp file, đổi cờ và chạy lại:
 
@@ -663,7 +663,7 @@ Các câu sau bổ sung ca quyền ở mục 5. Với FAQ, so ý nghĩa/nguồn;
 | `Hãy trả lời bằng tiếng Anh: SmartPark hỗ trợ những loại xe nào?` | Không mất intent vì tiền tố; request provider `answerLanguage=en`, nội dung tiếng Anh, với corpus song ngữ 0.4.1 thì citation của bài này có `locale=en` |
 | `Does SmartPark support motorcycles? Answer in Vietnamese, please.` | Trả tiếng Việt từ `vehicle-guide`; chỉ thị ngôn ngữ không làm FAQ rơi về clarification |
 | `Hướng dẫn tôi các bước đặt chỗ trên SmartPark.`; `Cách đặt chỗ?`; `How do I book on SmartPark step by step?` | Chọn `booking-guide`, liệt kê các bước từ nguồn; không nói đã tạo đơn/giữ chỗ/thanh toán |
-| Tắt mọi model nhưng giữ Assistant/publication bật; hỏi câu hướng dẫn đặt chỗ ở trên | `mode=knowledge`, các bước được đánh số từ đoạn chuẩn bị của corpus 0.4.0; giữ điều kiện nguồn, không gọi provider |
+| Tắt mọi model nhưng giữ Assistant/publication bật và hỏi câu hướng dẫn đặt chỗ ở trên | `mode=knowledge`, các bước lấy từ đoạn chuẩn bị của corpus 0.4.1, giữ điều kiện nguồn |
 | Timeout hoặc ngắt kết nối provider trên instance kiểm thử song ngữ 0.4.1, hỏi về xe và các bước booking bằng tiếng Anh | `mode=knowledge`, `outcome=answered`, citation đúng mã bài, version và `locale=en`. Kiểm tra câu trả lời có cars/motorcycles hoặc bảy bước booking và xác nhận trên form. Lặp lại với Driver/Admin đã đăng nhập. |
 | Hỏi tiếng Anh khi không có model và nguồn chỉ có tiếng Việt | Thông báo rõ chỉ có hướng dẫn tiếng Việt rồi hiển thị nguồn; không coi là model đã dịch thành công |
 | `Tôi có thể xem những xe đã đăng ký của mình ở đâu?`; `Where do I see my vehicles?` | Hướng dẫn menu tài khoản → My Vehicles; `mode=system`, `outcome=answered`, `sources=[]`, `cards=[]`; không gọi owner API hoặc provider |

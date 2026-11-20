@@ -8,6 +8,7 @@ Tài liệu cập nhật ngày **17/11/2026**.
 | Xem đã làm, việc còn thiếu và dependency từng owner | [Lộ trình](chatbot-roadmap.md) |
 | Setup máy, tạo dữ liệu và chạy câu hỏi theo role | [Hướng dẫn tester](../../04-testing/assistant-handoff-testing.md) |
 | Sửa nội dung FAQ | [Knowledge nguồn](p1/knowledge/smartpark-knowledge.md) và [quy trình xuất bản](chatbot-design.md#knowledge-and-faq) |
+| Dùng knowledge 0.4.1 trên Docker local/QA | [Cặp file phát hành](smartparkdocker/knowledge/0.4.1/) và [hướng dẫn tester](../../04-testing/assistant-handoff-testing.md) |
 | Tìm route, DTO, quyền và mã lỗi | [API contract](../api/assistant-s01-end-to-end-api-design.md) |
 | Tra quyết định và thiết kế cũ | [Lịch sử thiết kế](archive/design-history.md) |
 | Tra quá trình triển khai và kết quả từng lần kiểm thử | [Nhật ký phát triển](../../../ai/tasks/active/chatbot-development-progress.md) |

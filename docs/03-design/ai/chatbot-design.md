@@ -43,7 +43,15 @@ Provider FAQ nhận một article public đã duyệt và câu hỏi giới hạ
 
 ## 3. Knowledge và xử lý FAQ
 
-Nguồn biên tập duy nhất là [smartpark-knowledge.md](p1/knowledge/smartpark-knowledge.md), phiên bản biên tập 0.4.1. Hai mục `vehicle-guide` và `booking-guide` có thêm bản tiếng Anh trong cùng tệp. Hash xuất bản bao phủ cả hai ngôn ngữ. Runtime đọc cặp `smartpark-knowledge.md` và `publication.json` riêng trong thư mục do `.env` cấu hình. Markdown trong Git đang là bản nháp. Admin duyệt đúng phiên bản, deployment operator xuất bản theo bản ghi duyệt bằng `scripts/setup-assistant-docker.ps1 -PublishKnowledge`.
+Nguồn biên tập duy nhất là [smartpark-knowledge.md](p1/knowledge/smartpark-knowledge.md), phiên bản biên tập 0.4.1. Hai mục `vehicle-guide` và `booking-guide` có thêm bản tiếng Anh trong cùng tệp. Hash xuất bản bao phủ cả hai ngôn ngữ.
+
+Docker local/QA mặc định dùng nguyên cặp `smartpark-knowledge.md` và [`publication.json`](smartparkdocker/knowledge/0.4.1/publication.json) trong `docs/03-design/ai/smartparkdocker/knowledge/0.4.1/`. Docker mount thư mục ở chế độ chỉ đọc. `Assistant__Guest__KnowledgeDirectory` có thể chọn một cặp được duyệt cho môi trường khác. Đường dẫn bundle mặc định tính từ root repo, đường dẫn tương đối do môi trường tự cấu hình tính từ thư mục chứa `.env`. Khóa, chứng chỉ và keyring local nằm dưới `.cache/assistant-docker`.
+
+Ngày 2026-11-20, người yêu cầu dự án duyệt đưa nguyên cặp publication 0.4.1 lên repo để team QA kiểm thử. Phạm vi chia sẻ là kiểm thử local/QA. Dùng nguyên bytes của hai tệp để giữ SHA-256 và dấu vết phê duyệt ban đầu.
+
+Mở [nguồn biên tập](p1/knowledge/smartpark-knowledge.md) khi cần theo các liên kết đối chiếu nghiệp vụ. Các liên kết tương đối trong bản phát hành được giữ nguyên cùng nội dung đã duyệt để bảo toàn hash.
+
+Khi phát hành bản mới, Admin duyệt phiên bản từ nguồn biên tập. Deployment operator dùng `scripts/setup-assistant-docker.ps1 -PublishKnowledge` với thông tin phê duyệt thực để tạo hai file trong thư mục xuất riêng. Với bản local/QA dùng chung, lưu nguyên cặp dưới `smartparkdocker/knowledge/<version>/` và cập nhật mặc định sau khi kiểm SHA-256. Git giữ nguyên byte của hai file phát hành. Bộ mặc định phục vụ setup local/QA theo phạm vi đã duyệt. [Hướng dẫn setup và bàn giao](../../04-testing/assistant-handoff-testing.md)
 
 Loader kiểm SHA-256 của bytes thực tế, version, `publication_state=published`, `review_status=approved`, audience có `public`, người duyệt, `role=admin`, thời gian công bố/hiệu lực và giới hạn cấu trúc. Manifest phải khớp version/hash/thời gian Markdown, không có timestamp tương lai hoặc hết hạn. `role` chỉ ghi metadata, quyền ghi thư mục triển khai cần được kiểm soát. Bộ file thiếu, draft, sai hash hoặc malformed làm nguồn unavailable. Việc sửa draft không tự cập nhật publication runtime.
 
@@ -51,7 +59,7 @@ Generation và citation lấy nội dung tiếng Việt dưới `### Nội dung`
 
 Luồng FAQ gồm kiểm quyền/readiness/intent → đọc snapshot hợp lệ → normalize/rank title, aliases và nội dung → chọn một article → generation hoặc fallback → kiểm output và kiểm lại Settings/publication trước giao kết quả. Retrieval hiện dùng lexical/rules, có phục hồi typo giới hạn cho alias ngắn duy nhất. Chưa dùng embeddings, vector database hoặc fine-tuning. Thiếu nguồn hay câu mơ hồ trả làm rõ/handoff.
 
-`mode=ai` chứng minh model đã diễn đạt theo nguồn. `mode=knowledge` trả hướng dẫn gốc có nhãn khi không có candidate hoặc sau lỗi recoverable phù hợp. Cấu trúc/citation hợp lệ vẫn cần QA ngữ nghĩa. Nếu bài có bản tiếng Anh trong publication, cả nội dung fallback và citation dùng bản đó khi người dùng yêu cầu tiếng Anh. Bài chỉ có tiếng Việt vẫn ghi rõ giới hạn ngôn ngữ. Các câu wrong-source/unknown đã biết nằm trong handoff mục 4.7.
+`mode=ai` cho biết model đã diễn đạt theo nguồn. `mode=knowledge` trả hướng dẫn có nhãn từ publication. Các câu hỏi vị trí bắt đầu đặt chỗ mở đầu bằng chỉ dẫn **Dashboard → Search Parking**, kèm bài đặt chỗ đã duyệt. Hệ thống cũng dùng nội dung publication khi thiếu candidate hoặc khi gặp lỗi có thể fallback. Cấu trúc và citation hợp lệ vẫn cần QA ngữ nghĩa. Nếu bài có bản tiếng Anh trong publication, cả nội dung fallback và citation dùng bản đó khi người dùng yêu cầu tiếng Anh. Bài chỉ có tiếng Việt vẫn ghi rõ giới hạn ngôn ngữ. Các câu sai nguồn hoặc chưa nhận diện được nằm trong handoff mục 4.7.
 
 **Phần A QA — 17/11/2026:** Chỉ thị trả lời Việt/Anh độc lập ở đầu/cuối tin nhắn được nhận trước retrieval, hỗ trợ Unicode NFC và cách nói lịch sự. Chỉ thị rõ ưu tiên hơn locale; nếu không có chỉ thị, Guest giữ contract locale `vi`/`en`/`auto`, chat đăng nhập nhận diện ngôn ngữ câu hỏi rồi dùng locale hội thoại khi không xác định. Không tự đổi locale bền vững. `replyLocale` của Guest vẫn chỉ có với `locale=auto` theo contract.
 

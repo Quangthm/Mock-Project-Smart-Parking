@@ -26,7 +26,7 @@ Chi tiết từng bước và cách xử lý lỗi nằm ở các mục bên dư
 
 Tester chatbot đọc [hướng dẫn setup và test theo role](docs/04-testing/assistant-handoff-testing.md): có initializer local dùng đường dẫn root-relative và hai nhánh máy mới/máy đã chạy hệ thống.
 
-Khi tạo volume mới, Docker khởi tạo sẵn schema **AI Chatbot** trong `smartpark_iot`. Để chạy Assistant cùng app stack, chuẩn bị public key JWT, certificate cho keyring và bộ knowledge đã duyệt, rồi đặt `SMARTPARK_ASSISTANT_DOCKER_ENABLED=true` trong `.env`. Chạy setup và runner `All` như trên. Nếu volume đã chạy chatbot S05, xem bước nâng cấp trong [hướng dẫn Assistant Docker](LOCAL-SETUP.md#ai-chatbot-bằng-docker).
+Khi tạo volume mới, Docker khởi tạo sẵn schema **AI Chatbot** trong `smartpark_iot`. Repo có sẵn bản knowledge 0.4.1 cho Docker local/QA. Để chạy Assistant cùng app stack, chuẩn bị public key JWT và chứng chỉ cho keyring, rồi đặt `SMARTPARK_ASSISTANT_DOCKER_ENABLED=true` trong `.env`. Chạy setup và runner `All` như trên. Nếu volume đã chạy chatbot S05, xem bước nâng cấp trong [hướng dẫn Assistant Docker](LOCAL-SETUP.md#ai-chatbot-bằng-docker).
 
 ## 1. Prerequisites
 

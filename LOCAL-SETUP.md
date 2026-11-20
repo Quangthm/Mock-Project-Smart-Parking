@@ -62,7 +62,7 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ./scripts/setup-assistant-docker.ps1 -Initialize
 ```
 
-Initializer ghi đường dẫn tương đối từ root `.env` tới `.cache/assistant-docker`, tạo JWT/PFX/TLS riêng và bảo toàn bộ cấu hình đã có. Nó không xuất bản corpus: đặt cặp Markdown + `publication.json` đã được Admin duyệt vào thư mục knowledge, sau đó bật Guest release và làm các bước setup bên dưới. Cả chat đăng nhập cũng cần corpus hợp lệ. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `./scripts/setup-assistant-docker.ps1 -Initialize -UseExistingSigningKey`: giữ nguyên private key và xuất đúng public key, tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Bộ Assistant/TLS đã có phải giữ và cấu hình thủ công; không rotate bằng initializer.
+Initializer tạo JWT/PFX/TLS riêng dưới `.cache/assistant-docker` và giữ cấu hình knowledge hiện có. Docker local/QA có sẵn cặp 0.4.1 trong repo. Bật Guest release và chat đăng nhập theo hướng dẫn bên dưới sau khi kiểm cặp đã duyệt. Máy đã có User signing key trong root `.env` nhưng chưa có Assistant/User TLS dùng `./scripts/setup-assistant-docker.ps1 -Initialize -UseExistingSigningKey` để giữ private key, xuất đúng public key và tạo PFX/keyring/TLS riêng. Nếu key chỉ ở user-secrets, chuyển đúng key sang file private và cấu hình root `.env` trước. Với máy đã có bộ Assistant/TLS, giữ bộ hiện có và cấu hình thủ công.
 
 
 #### Tìm bãi qua Docker (Discovery local)
@@ -114,7 +114,7 @@ Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bả
 | `Assistant__Jwt__PublicKeyFile`, `Assistant__Jwt__Issuer`, `Assistant__Jwt__Audience` | Public PEM tương ứng và issuer/audience đang dùng của UserService. Docker mặc định dùng `SmartParking.UserService` và `SmartParking`. |
 | `Assistant__Management__KeyDirectory` | Thư mục keyring ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
 | `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
-| `Assistant__Guest__KnowledgeDirectory` | Thư mục có Markdown đã duyệt và `publication.json`. Xem [cách xuất bản knowledge](docs/03-design/ai/archive/design-history.md#legacy-guide--knowledge-and-faq--publication-manual-admin-controlled-deployment). |
+| `Assistant__Guest__KnowledgeDirectory` | Docker mặc định dùng cặp 0.4.1 dưới `docs/03-design/ai/smartparkdocker/knowledge/0.4.1/`. Đặt đường dẫn nếu cần dùng một bộ đã duyệt khác. [Cách lưu và xuất bản knowledge](docs/03-design/ai/chatbot-design.md#knowledge-and-faq) |
 | `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
 
 Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`; Admin nhập trong Settings sau khi container đã chạy.
@@ -147,7 +147,7 @@ try {
 Write-Host "Local setup files: $devKeys"
 ```
 
-Chọn thư mục con `keyring` cho `Assistant__Management__KeyDirectory` và một thư mục knowledge riêng. Giữ khóa JWT riêng, `.env` và các file cá nhân ngoài hai thư mục này.
+Chọn thư mục con `keyring` cho `Assistant__Management__KeyDirectory`. Với bộ knowledge riêng, dùng thư mục chuyên biệt cho Markdown và manifest. Giữ khóa ký JWT, `.env` và các file cá nhân ngoài hai thư mục được mount cho Assistant.
 
 ```powershell
 # Kiểm tra cấu hình trước khi dựng stack
