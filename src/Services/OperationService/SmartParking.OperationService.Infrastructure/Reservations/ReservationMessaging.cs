@@ -20,7 +20,6 @@ public static class ReservationMessaging
     public static IServiceCollection AddReservationMessaging(this IServiceCollection services, IConfiguration configuration)
     {
         services.TryAddScoped<IReservationQuoteOwner, UnavailableReservationQuoteOwner>();
-        services.TryAddScoped<IQuoteAdmissionStarter, UnavailableQuoteAdmissionStarter>();
         var admissionEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var sagaEnabled = admissionEnabled && configuration.GetValue<bool>("ReservationAdmission:SagaConsumersEnabled");
         if (sagaEnabled)
@@ -29,8 +28,13 @@ public static class ReservationMessaging
                 string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerPassword"]) ||
                 !configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
                 throw new InvalidOperationException("Saga endpoints require restricted credentials and durable outbox delivery.");
-            services.AddScoped<IAdmissionMessages, AdmissionMessages>();
+            services.AddScoped<AdmissionMessages>();
+            services.AddScoped<IAdmissionMessages>(provider => provider.GetRequiredService<AdmissionMessages>());
+            if (configuration.GetValue<bool>("ReservationIntegration:Enabled") &&
+                configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
+                services.TryAddScoped<IQuoteAdmissionStarter>(provider => provider.GetRequiredService<AdmissionMessages>());
         }
+        services.TryAddScoped<IQuoteAdmissionStarter, UnavailableQuoteAdmissionStarter>();
         var auditEnabled = configuration.GetValue<bool>("Messaging:AuditEnabled");
         var gateCheckoutEnabled = configuration.GetValue<bool>("Messaging:Enabled");
         if (auditEnabled) services.AddScoped<IOperationsAuditPublisher, OperationsAuditPublisher>();

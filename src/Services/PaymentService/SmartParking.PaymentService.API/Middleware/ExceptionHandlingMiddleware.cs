@@ -95,6 +95,7 @@ public sealed class ExceptionHandlingMiddleware
                     "UNKNOWN_TRANSACTION_EXISTS" or
                     "TERMS_STALE" or
                     "QUOTE_EXPIRED" or
+                    "QUOTE_CONSUMED" or "QUOTE_HOLD_EXPIRED" or "QUOTE_BINDING_CONFLICT" or
                     "QUOTE_STATUS_INVALID" or
                     "TRANSACTION_NOT_SETTLED" => (int)HttpStatusCode.Conflict,
 
@@ -106,6 +107,7 @@ public sealed class ExceptionHandlingMiddleware
                     "QUOTE_ACCOUNT_MISMATCH" or
                     "QUOTE_AMOUNT_MISMATCH" => (int)HttpStatusCode.BadRequest,
 
+                    "QUOTE_PRICING_UNAVAILABLE" => (int)HttpStatusCode.ServiceUnavailable,
                     "GATEWAY_TIMEOUT" => (int)HttpStatusCode.GatewayTimeout,
                     _ => (int)HttpStatusCode.BadRequest
                 };

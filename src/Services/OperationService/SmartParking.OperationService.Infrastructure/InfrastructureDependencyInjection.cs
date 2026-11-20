@@ -45,11 +45,14 @@ public static class InfrastructureDependencyInjection
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
         });
-        services.AddHttpClient<IReservationCommercialOwner, ReservationCommercialClient>(client =>
+        services.AddHttpClient<ReservationCommercialClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
             client.Timeout = TimeSpan.FromSeconds(15);
         });
+        services.AddScoped<IReservationCommercialOwner>(p => p.GetRequiredService<ReservationCommercialClient>());
+        if (configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
+            services.AddScoped<IReservationQuoteOwner>(p => p.GetRequiredService<ReservationCommercialClient>());
         services.AddHttpClient<ReservationFacilityClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");

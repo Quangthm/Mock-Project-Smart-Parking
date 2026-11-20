@@ -18,6 +18,10 @@ public class PaymentOrder
     public Guid? QuoteId { get; set; }
     public string? TermsVersion { get; set; }
 
+    public string? ReviewedMethod { get; init; }
+    public string? ReviewedCurrency { get; init; }
+    public bool IsProvisioningFence { get; init; }
+    public string? ZeroDispositionReason { get; set; }
     public decimal Amount { get; set; }
     public decimal DiscountAmount { get; set; }
     public decimal DepositDeducted { get; set; }

@@ -1,4 +1,5 @@
 using MediatR;
+using SmartParking.PaymentService.Application.Reservations;
 using Microsoft.Extensions.Logging;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Application.DTOs.Reservations;
@@ -33,6 +34,9 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         CancellationToken cancellationToken)
     {
         var req = command.Request;
+        if (req.TermsVersion?.StartsWith("rq1-", StringComparison.Ordinal) == true)
+            return await _unitOfWork.WithLocksAsync([req.OperationId, req.ReservationId, req.QuoteId],
+                () => EnsureReviewedAsync(req, cancellationToken), cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var opKey = req.OperationId.ToString();
 
@@ -71,6 +75,9 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                 PersistedAcceptedRequest(existingOrder, req));
         }
 
+        var quote = await _quoteRepository.GetByIdAsync(req.QuoteId, cancellationToken);
+        if (quote?.ReviewedEvidence != null) throw new PaymentDomainException("QUOTE_NOT_FOUND", "Reviewed quote was not found.");
+
         // 2. Fence Check: If now >= ExpiresAt (H-Fence Tombstone)
         if (now >= req.ExpiresAt)
         {
@@ -104,7 +111,6 @@ public sealed class EnsureReservationDepositOrderCommandHandler
         }
 
         // 3. Validate Quote
-        var quote = await _quoteRepository.GetByIdAsync(req.QuoteId, cancellationToken);
         if (quote == null)
         {
             _logger.LogWarning("QuoteId '{QuoteId}' not found.", req.QuoteId);
@@ -193,6 +199,80 @@ public sealed class EnsureReservationDepositOrderCommandHandler
 
         return new EnsureReservationDepositOrderResponseDto("CREATED", order.Id,
             PersistedAcceptedRequest(order, req));
+    }
+
+    private async Task<EnsureReservationDepositOrderResponseDto> EnsureReviewedAsync(
+        EnsureReservationDepositOrderRequestDto request, CancellationToken ct)
+    {
+        var quote = await _quoteRepository.GetByIdAsync(request.QuoteId, ct);
+        if (quote?.ReviewedEvidence is null || quote.AccountId != request.AccountId || quote.TermsVersion != request.TermsVersion)
+            throw new PaymentDomainException("QUOTE_NOT_FOUND", "Reviewed quote was not found.");
+        var proof = ReviewedQuoteProof.From(quote);
+        var binding = proof.Binding;
+        var zero = proof.DepositAmount == 0;
+        var selection = zero ? ZeroQuoteSelection.From(binding) : null;
+        if (request.OperationId == Guid.Empty || request.ReservationId == Guid.Empty ||
+            request.SiteId != binding.SiteId || request.TenantId != binding.TenantId ||
+            request.PaymentMethod != binding.PaymentMethod || request.Currency != proof.Currency ||
+            request.Amount != proof.DepositAmount || request.ZeroSelection != selection ||
+            request.ExpiresAt == default || request.ExpiresAt.UtcTicks % 10 != 0 || request.ExpiresAt > binding.Start)
+            throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Order does not match the accepted binding.");
+
+        var key = request.OperationId.ToString();
+        var order = await _orderRepository.GetByIdempotencyKeyAsync(key, ct);
+        if (order is null)
+        {
+            if (quote.Status != ReservationQuoteStatus.ISSUED)
+                throw new PaymentDomainException("QUOTE_CONSUMED", "Quote is already consumed.");
+            if (await _orderRepository.HasReviewedReservationAsync(request.ReservationId, ct))
+                throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Reservation already has an order.");
+            var now = await _unitOfWork.DatabaseNowAsync(ct);
+            var closed = now >= request.ExpiresAt;
+            if (closed) quote.MarkExpired();
+            else quote.MarkAccepted();
+            order = new PaymentOrder
+            {
+                Id = Guid.NewGuid(), OrderCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 999999)
+                    .ToString() + now.ToUnixTimeMilliseconds().ToString()[^9..],
+                IdempotencyKey = key, TenantId = binding.TenantId, SiteId = binding.SiteId, AccountId = binding.AccountId,
+                OrderType = OrderType.RESERVATION_FEE, ReferenceType = ReferenceType.RESERVATION,
+                ReferenceId = request.ReservationId, PlateNumber = binding.CanonicalPlate,
+                QuoteId = proof.QuoteId, TermsVersion = proof.QuoteVersion, Amount = proof.DepositAmount,
+                FinalAmount = proof.DepositAmount, ReviewedMethod = binding.PaymentMethod, ReviewedCurrency = proof.Currency,
+                ExpiresAt = request.ExpiresAt.ToUniversalTime(), CreatedAt = now, UpdatedAt = now,
+                IsProvisioningFence = closed, Status = closed ? PaymentOrderStatus.CANCELLED : PaymentOrderStatus.PENDING
+            };
+            if (zero && !closed)
+            {
+                order.MarkPaid(now);
+                order.Invoice = new Invoice
+                {
+                    Id = Guid.NewGuid(), PaymentOrderId = order.Id, ReferenceId = order.ReferenceId,
+                    ReferenceType = ReferenceType.RESERVATION, SiteId = order.SiteId, TenantId = order.TenantId,
+                    InvoiceNumber = $"INV-R-{order.Id:N}", BaseParkingFee = proof.BookedAmount,
+                    PricingSnapshot = new InvoicePricingSnapshot
+                    {
+                        AccountId = order.AccountId, OrderCode = order.OrderCode, CustomerType = "REGISTERED_DRIVER",
+                        PlateNumber = binding.CanonicalPlate, EntryTime = binding.Start, PricingCutoffAt = binding.End,
+                        TariffId = proof.Breakdown.AppliedTariffId, TariffVersion = proof.Breakdown.AppliedPolicyVersion,
+                        PolicyName = proof.Breakdown.AppliedTariffName, Currency = proof.Currency,
+                        SubtotalParkingFee = proof.BookedAmount, DiscountAmount = proof.CoveredAmount,
+                        Status = "PAID", IsSettled = true
+                    }
+                };
+            }
+            await _orderRepository.AddAsync(order, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        if (order.ReviewedMethod is null || order.ReferenceType != ReferenceType.RESERVATION)
+            throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Operation already has another order.");
+        var persisted = new EnsureReservationDepositOrderRequestDto(Guid.Parse(order.IdempotencyKey!), order.ReferenceId,
+            order.AccountId!.Value, order.TenantId, order.SiteId, order.QuoteId!.Value, order.TermsVersion!,
+            order.FinalAmount, order.ReviewedCurrency!, order.ReviewedMethod, order.ExpiresAt!.Value, selection);
+        if (persisted != request)
+            throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Operation already has a different binding.");
+        return order.IsProvisioningFence ? new("CLOSED_NO_ORDER", null, persisted) :
+            new("CREATED", order.Id, persisted, order.Invoice?.Id);
     }
 
     private static EnsureReservationDepositOrderRequestDto PersistedAcceptedRequest(

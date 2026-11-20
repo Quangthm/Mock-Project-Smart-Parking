@@ -1,5 +1,7 @@
 # SPARK-273 — Reservation owner handoffs and cleanup
 
+> **19 November commercial decision.** The earlier expiry options and dedicated paid-event proposal below are historical. Operations checks quote expiry at hold commit. Payment uses the existing order PUT for both amounts and PaymentSucceededV1 with authoritative lookup for verified money. See [Payment authority and paired verification](2026-11-19-SPARK-273-payment-authority.md).
+
 Approved target: [decision amendment](../decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md), [architecture](../../02-architecture/architecture-decisions/reservation-workflow-target.md) and [public API](../../03-design/api/reservation-first-slice-api-design.md). Source findings were rechecked at `594ee7f10ef642467b70e9eaa6d5dd5d772499ed`. Runtime [UNVERIFIED].
 
 ## Operations and integration transport

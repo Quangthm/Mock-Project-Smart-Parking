@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 
 namespace SmartParking.PaymentService.Persistence.Repositories;
@@ -10,6 +11,20 @@ public class UnitOfWork : IUnitOfWork
     {
         _dbContext = dbContext;
     }
+
+    public async Task<T> WithLocksAsync<T>(Guid[] identities, Func<Task<T>> action, CancellationToken ct)
+    {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(ct);
+        foreach (var id in identities.Distinct().Order())
+            await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({id.ToString()}, 273))", ct);
+        var result = await action();
+        await transaction.CommitAsync(ct);
+        return result;
+    }
+
+    public Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct) =>
+        _dbContext.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").SingleAsync(ct);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

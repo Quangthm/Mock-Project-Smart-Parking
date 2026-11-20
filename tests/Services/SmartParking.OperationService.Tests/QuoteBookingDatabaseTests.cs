@@ -14,14 +14,16 @@ using SmartParking.OperationService.Persistence;
 
 namespace SmartParking.OperationService.Tests;
 
-public sealed class QuoteBookingDatabaseTests : IReservationPolicyRepository, IReservationQuoteOwner, ICurrentActor,
+public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyRepository, IReservationQuoteOwner, ICurrentActor,
     IReservationSubscriptionEligibility, IReservationCommercialOwner, IReservationFacilityDependencyOwner
 {
-    private readonly Guid site = Guid.NewGuid(), tenant = Guid.NewGuid(), slot = Guid.NewGuid(), quoteId = Guid.NewGuid();
+    private readonly Guid site = Guid.NewGuid(), tenant = Guid.NewGuid(), slot = Guid.NewGuid();
+    private Guid quoteId = Guid.NewGuid();
+    private string quoteVersion = "quote-1";
     private readonly Guid platform = Guid.NewGuid(), sitePolicy = Guid.NewGuid(), unit = Guid.NewGuid();
     private readonly Guid order = Guid.NewGuid(), receipt = Guid.NewGuid();
     private readonly string plate = $"51A{Random.Shared.Next(10000, 100000)}";
-    private readonly DateTimeOffset start = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds());
+    private DateTimeOffset start = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds());
     private readonly QuoteCommitFault fault = new();
     private int proofReads;
     private int policyVersion = 1;
@@ -33,9 +35,9 @@ public sealed class QuoteBookingDatabaseTests : IReservationPolicyRepository, IR
     public Guid? AccountId { get; } = Guid.NewGuid();
     public Guid? UserId { get; } = Guid.NewGuid();
     public string Role => "driver";
-    private QuoteReservationIntent Intent => new(plate, slot, start, start.AddHours(1), "PAYOS", quoteId, "quote-1");
+    private QuoteReservationIntent Intent => new(plate, slot, start, start.AddHours(1), "PAYOS", quoteId, quoteVersion);
 
-    private ServiceProvider Services()
+    private ServiceProvider Services(ReservationCommercialClient? payment = null, bool listenForPayments = true)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
             ["ConnectionStrings:Reservation"] = Environment.GetEnvironmentVariable("SMARTPARK_QUOTE_TEST_DB")
@@ -47,6 +49,11 @@ public sealed class QuoteBookingDatabaseTests : IReservationPolicyRepository, IR
         services.AddSingleton<IReservationPolicyRepository>(this);
         services.AddSingleton<IReservationQuoteOwner>(this);
         services.AddSingleton<IReservationCommercialOwner>(this);
+        if (payment != null)
+        {
+            services.AddSingleton<IReservationCommercialOwner>(payment);
+            services.AddSingleton<IReservationQuoteOwner>(payment);
+        }
         services.AddSingleton<IReservationFacilityDependencyOwner>(this);
         services.AddSingleton<IReservationSubscriptionEligibility>(this);
         services.AddSingleton<ICurrentActor>(this);
@@ -59,7 +66,30 @@ public sealed class QuoteBookingDatabaseTests : IReservationPolicyRepository, IR
                 o.UsePostgres();
                 o.UseBusOutbox(b => b.DisableDeliveryService());
             });
-            x.UsingInMemory((_, _) => { });
+            if (payment == null) x.UsingInMemory((_, _) => { });
+            else
+            {
+                x.AddConsumer<ReservationHoldChangedConsumer>();
+                x.AddConsumer<SmartParking.OperationService.Infrastructure.Messaging.ReservationPaymentSucceededConsumer>();
+                x.UsingRabbitMq((context, bus) =>
+                {
+                    bus.Host("127.0.0.1", ushort.Parse(SettlementSetting("PORT")), SettlementSetting("VHOST"), h =>
+                    {
+                        h.Username(SettlementSetting("OPERATIONS_USER"));
+                        h.Password(SettlementSetting("PASSWORD"));
+                    });
+                    bus.Message<ReservationHoldChangedV1>(m => m.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));
+                    bus.ReceiveEndpoint("smartpark-operation-reservation-hold-changed-v1", e =>
+                        e.ConfigureConsumer<ReservationHoldChangedConsumer>(context));
+                    bus.Message<SmartParking.OperationService.Infrastructure.Messaging.PaymentSucceededV1>(
+                        m => m.SetEntityName("smartpark.payment.payment-succeeded.v1"));
+                    if (listenForPayments) bus.ReceiveEndpoint("smartpark-operation-reservation-payment-succeeded-v1", e =>
+                    {
+                        e.UseMessageRetry(r => r.Interval(5, TimeSpan.FromMilliseconds(250)));
+                        e.ConfigureConsumer<SmartParking.OperationService.Infrastructure.Messaging.ReservationPaymentSucceededConsumer>(context);
+                    });
+                });
+            }
         });
         return services.BuildServiceProvider();
     }
@@ -89,6 +119,9 @@ public sealed class QuoteBookingDatabaseTests : IReservationPolicyRepository, IR
         return Task.FromResult(new PaymentReservationQuote(id, version, "ISSUED", expired ? start.AddDays(-1) : start,
             binding, "tariff-1", 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "FULL", "Full prepayment"));
     }
+
+    public Task<IReadOnlyList<ReservationDepositEvidence>> ReadCollectionsAsync(Guid orderId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<ReservationDepositEvidence>>([]);
 
     public Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct) =>
         Task.FromResult(new DepositOrderResult("CREATED", order, request));
@@ -291,8 +324,8 @@ public sealed class QuoteBookingDatabaseTests : IReservationPolicyRepository, IR
         await Send(services, new CommitQuoteHoldCommand(id));
         await Send(services, new ProvisionReservationOrderCommand(id));
         var evidence = Evidence(id);
-        await Send(services, new RecordReservationPaymentCommand(new(Guid.NewGuid(), order, Guid.NewGuid(), id,
-            AccountId!.Value, tenant, site, 100, "VND", "PAYOS", "generic", start)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Send(services, new RecordReservationPaymentCommand(new(Guid.NewGuid(), order, Guid.NewGuid(), id,
+            AccountId!.Value, tenant, site, 100, "VND", "PAYOS", "generic", start))));
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         Task<ReservationRow> Read() => db.Reservations.AsNoTracking().SingleAsync(x => x.Id == id);

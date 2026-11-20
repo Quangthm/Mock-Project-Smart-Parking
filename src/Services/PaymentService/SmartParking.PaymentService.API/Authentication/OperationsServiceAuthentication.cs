@@ -7,6 +7,7 @@ namespace SmartParking.PaymentService.API.Authentication;
 public static class OperationsServiceAuthentication
 {
     public const string Scheme = "OperationsService";
+    public const string QuotePolicy = "ReviewedReservationQuotes";
     public const string Policy = "ReservationDepositOrders";
     public const string Permission = "reservation:deposit-order";
 
@@ -57,10 +58,15 @@ public static class OperationsServiceAuthentication
             };
         });
 
-        services.AddAuthorization(options => options.AddPolicy(Policy, policy =>
-            policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
-                .RequireClaim("sub", "SmartParking.OperationService")
-                .RequireClaim("sender", "SmartParking.OperationService")
-                .RequireClaim("permission", Permission)));
+        services.AddAuthorization(options =>
+        {
+            void Add(string name, string permission) => options.AddPolicy(name, policy =>
+                policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
+                    .RequireClaim("sub", "SmartParking.OperationService")
+                    .RequireClaim("sender", "SmartParking.OperationService")
+                    .RequireClaim("permission", permission));
+            Add(Policy, Permission);
+            Add(QuotePolicy, "reservation:quote");
+        });
     }
 }

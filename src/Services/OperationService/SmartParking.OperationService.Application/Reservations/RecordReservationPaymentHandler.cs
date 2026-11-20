@@ -2,7 +2,7 @@ using MediatR;
 
 namespace SmartParking.OperationService.Application.Reservations;
 
-public sealed class RecordReservationPaymentHandler(IReservationBookingRepository bookings, IMediator mediator)
+public sealed class RecordReservationPaymentHandler(IReservationBookingRepository bookings, IMediator mediator, IReservationQuoteOwner owner)
     : IRequestHandler<RecordReservationPaymentCommand>
 {
     public async Task Handle(RecordReservationPaymentCommand command, CancellationToken ct)
@@ -14,8 +14,18 @@ public sealed class RecordReservationPaymentHandler(IReservationBookingRepositor
             return;
 
         var observed = await bookings.FindOrderProvisioningAsync(payment.ReservationId, ct);
-        // This legacy wire cannot independently attest quote/version, method or collection identity.
-        if (observed is null || observed.QuoteId.HasValue) return;
+        if (observed is null) return;
+        if (observed.QuoteId.HasValue)
+        {
+            // The shared success event wakes recovery. Only the authenticated Payment lookup attests the transfer.
+            var collections = await owner.ReadCollectionsAsync(payment.PaymentOrderId, ct);
+            var evidence = collections.SingleOrDefault(e => e.PaymentTransactionId == payment.PaymentTransactionId);
+            if (evidence == null || evidence.EventId != payment.EventId || evidence.ReservationId != payment.ReservationId ||
+                evidence.PaymentOrderId != payment.PaymentOrderId)
+                throw new InvalidOperationException("Payment has not attested the notified collection.");
+            await mediator.Send(new RecordReservationDepositCommand(evidence), ct);
+            return;
+        }
 
         if (observed.RequestId is not { } operationId || observed.TermsId is not { } termsId ||
             string.IsNullOrWhiteSpace(observed.TermsVersion))

@@ -35,9 +35,9 @@ public sealed class ProvisionReservationOrderHandler(IReservationBookingReposito
             await ReleaseExpiredHoldAsync(booking, now, ct);
 
             var legacy = booking.QuoteId is null ? BookingContracts.AcceptedTerms(booking) : null;
-            var validUntil = booking.QuoteValidUntil ?? legacy!.ValidUntil;
+            var legacyExpired = legacy is not null && now >= legacy.ValidUntil;
             if (booking.OrderProvisioningState == "PENDING" &&
-                (now >= booking.HoldExpiresAt || now >= validUntil))
+                (now >= booking.HoldExpiresAt || legacyExpired))
             {
                 var code = now >= booking.HoldExpiresAt ? "PAYMENT_HOLD_EXPIRED" : "TERMS_CHANGED_OR_EXPIRED";
                 booking.CloseOrderProvisioning(code);

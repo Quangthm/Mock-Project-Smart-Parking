@@ -27,6 +27,12 @@ public class PaymentOrderConfiguration : IEntityTypeConfiguration<PaymentOrder>
         builder.Property(x => x.ReferenceType).HasColumnName("reference_type").HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.ReferenceId).HasColumnName("reference_id").IsRequired();
         builder.Property(x => x.QuoteId).HasColumnName("quote_id");
+        builder.Property(x => x.ReviewedMethod).HasColumnName("reviewed_method");
+        builder.Property(x => x.ReviewedCurrency).HasColumnName("reviewed_currency");
+        builder.Property(x => x.IsProvisioningFence).HasColumnName("is_provisioning_fence");
+        builder.Property(x => x.ZeroDispositionReason).HasColumnName("zero_disposition_reason");
+        builder.HasIndex(x => x.QuoteId).IsUnique().HasFilter("reviewed_method IS NOT NULL");
+        builder.HasIndex(x => x.ReferenceId).IsUnique().HasFilter("reviewed_method IS NOT NULL");
         builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50);
 
         builder.Property(x => x.Amount).HasColumnName("amount").HasPrecision(14, 2).IsRequired();

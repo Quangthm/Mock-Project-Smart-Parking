@@ -11,6 +11,9 @@ public class PaymentTransaction
     public TransactionType TransactionType { get; set; } = TransactionType.PAYMENT;
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.PAYOS;
     public string? GatewayTransactionId { get; set; }
+    public string? ProviderCollectionReference { get; set; }
+    public Guid? CollectionEventId { get; set; }
+    public DateTimeOffset? ProviderVerifiedAt { get; set; }
     public string? IdempotencyKey { get; set; }
     public decimal Amount { get; set; }
 

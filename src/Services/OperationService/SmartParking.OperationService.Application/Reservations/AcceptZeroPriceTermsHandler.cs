@@ -34,10 +34,10 @@ public sealed class AcceptZeroPriceTermsHandler(IReservationBookingRepository bo
 
             var now = await bookings.DatabaseNowAsync(ct);
             var terms = booking.QuoteId is null ? BookingContracts.AcceptedTerms(booking) : null;
-            var validUntil = booking.QuoteValidUntil ?? terms!.ValidUntil;
+            var legacyExpired = terms is not null && now >= terms.ValidUntil;
             if (booking.ZeroPriceAcceptanceState == "PENDING" &&
                 (booking.Status != "PENDING_PAYMENT" || booking.ActiveClaimSlotId != booking.TargetSlotId ||
-                 now >= booking.HoldExpiresAt || now >= validUntil))
+                 now >= booking.HoldExpiresAt || legacyExpired))
             {
                 var code = booking.Status != "PENDING_PAYMENT" || now >= booking.HoldExpiresAt ||
                     booking.ActiveClaimSlotId != booking.TargetSlotId ? "PAYMENT_HOLD_EXPIRED" : "TERMS_CHANGED_OR_EXPIRED";

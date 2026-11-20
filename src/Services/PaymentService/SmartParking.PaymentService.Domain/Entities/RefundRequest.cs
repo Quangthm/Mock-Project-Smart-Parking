@@ -5,6 +5,7 @@ public class RefundRequest
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid TenantId { get; set; }
     public Guid PaymentOrderId { get; set; }
+    public Guid? CollectionId { get; init; }
     public decimal Amount { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string? EvidenceUrl { get; set; }

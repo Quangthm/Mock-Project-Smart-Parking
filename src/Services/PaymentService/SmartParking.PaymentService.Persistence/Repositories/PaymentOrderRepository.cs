@@ -31,6 +31,7 @@ public class PaymentOrderRepository : IPaymentOrderRepository
     {
         return await _dbContext.PaymentOrders
             .Include(x => x.Transactions)
+            .Include(x => x.Invoice)
             .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
     }
 
@@ -38,6 +39,13 @@ public class PaymentOrderRepository : IPaymentOrderRepository
     {
         await _dbContext.PaymentOrders.AddAsync(order, cancellationToken);
     }
+
+    public Task<Guid?> FindReviewedOrderIdAsync(string orderCode, CancellationToken ct) =>
+        _dbContext.PaymentOrders.Where(o => o.OrderCode == orderCode && o.ReviewedMethod != null)
+            .Select(o => (Guid?)o.Id).SingleOrDefaultAsync(ct);
+
+    public Task<bool> HasReviewedReservationAsync(Guid reservationId, CancellationToken ct) =>
+        _dbContext.PaymentOrders.AnyAsync(o => o.ReferenceId == reservationId && o.ReviewedMethod != null, ct);
 
     public void Update(PaymentOrder order)
     {

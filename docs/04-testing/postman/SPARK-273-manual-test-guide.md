@@ -1,66 +1,56 @@
-# SPARK-273 reservation flow — Postman manual verification
+# SPARK-273 Driver reservation to Payment order
 
-> **Historical handoff.** For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md).
+Use this collection manually against an approved test stack. The paid path ends when Operations shows one active `PENDING_PAYMENT` reservation and the genuine Payment order saved from its signed owner response. Start with **00.2 Driver login**. The collection has no checkout, QR, callback or payment step. The covered folder is disabled until real entitlement is available.
 
-The collection exercises the current Operations routes and uses the existing Payment checkout/status routes only when Operations has returned a real Payment order. It never creates a local or demo order to make the flow appear successful.
+- [Collection v2.1](./SPARK-273-Reservation-Flow.postman_collection.json)
+- [Blank local environment](./SPARK-273-Local.postman_environment.example.json)
+- [Activation and integration evidence](../reports/SPARK-273-reviewed-admission-integration.md)
 
-## Artifacts
+## Prepare the stack
 
-| File | Purpose |
+1. Use [local setup](../../../LOCAL-SETUP.md) for UserService, FacilityService, OperationService, PaymentService, PostgreSQL and RabbitMQ. The standard local hosts are User `http://localhost:5035`, Facility `http://localhost:5045`, Operations `http://localhost:5055` and Payment `http://localhost:5065`. Each exposes `GET /health`. Health alone does not establish owner trust or queue readiness.
+2. Provision the owning schemas for fresh databases. User uses `01-user-access-service-db.sql`, Facility uses `02-facility-service-db.sql` and `03a-parking-structure-ops-service-db.sql`, Operations uses `03b-reservation-operations-service-db.sql` and Payment uses `04-payment-pricing-service-db.sql`. Follow the existing upgrade procedure and obtain approval for the additive existing-data transition before applying these builds to an existing database.
+3. For this approved test stack, start the hosts with the following opt-ins. They default to false in the example. Configure the separate User, Facility and Operations reservation broker credentials, Payment broker identity, expected vhost, queue and exchange permissions, and durable outbox delivery before enabling them. See the [integration report](../reports/SPARK-273-reviewed-admission-integration.md#activation) for the service matrix and Account access exchanges.
+   - `SMARTPARK_RESERVATION_ADMISSION_ENABLED=true`
+   - `SMARTPARK_RESERVATION_SAGA_ENABLED=true`
+   - `SMARTPARK_RESERVATION_FACILITY_ENABLED=true`
+   - `SMARTPARK_RESERVATION_REVIEWED_SETTLEMENT_ENABLED=true`
+   - `Messaging__OutboxDeliveryEnabled=true`
+4. Verify Operations trusts User’s JWT issuer, audience and JWKS. Configure the reviewed owner endpoints and dedicated Operations signing key for Facility and Payment. Use approved TLS and key custody. The local HTTP flags are explicit opt-ins for an isolated dev network. Never place a service key in Postman.
+5. Use a test Driver with an active Account and a registered CAR. Select an actual reservable CAR slot with authoritative Facility data and an Operations capacity policy. Payment needs an effective CAR tariff revision for the same tenant and site. Pick future ISO 8601 `start` and `end`, including UTC or an explicit offset, within the site’s effective reservation window. Supply only the slot ID. Operations resolves the site.
+
+## Run the paid scenario
+
+Import both artifacts and select **SPARK-273 Reservation Flow - local**. Set `userBaseUrl` and `operationBaseUrl` if your local ports differ. Enter `driverEmail` and `driverPassword` in local secret values. Only supply `driverTurnstileToken` when the configured test login requires it, and use a genuine token. Do not export populated credentials or tokens.
+
+Send each request individually. For 02.1, check the returned plate, slot, site, interval, tariff, disclosure, VND amount, coverage and deadline. Accept the reviewed selection by setting `acceptedQuoteId` to the exact returned `quoteId`. The next request sends its saved version and selection. Changing inputs requires another review.
+
+| Request | Expected HTTP and observation |
 |---|---|
-| [SPARK-273-Reservation-Flow.postman_collection.json](./SPARK-273-Reservation-Flow.postman_collection.json) | Collection v2.1: price preview, reviewed terms, idempotent request, receipt and own-reservation reads, conditional Payment checkout/status, and negative checks |
-| [SPARK-273-Local.postman_environment.example.json](./SPARK-273-Local.postman_environment.example.json) | Blank local variables; tokens are empty and must not be committed |
+| 00.2 Driver login | 200, `success=true`, `mfaRequired=false`, valid Driver claims. Stores `driverToken`, Account and User IDs. Later requests inherit bearer auth. |
+| 00.3 Verify Driver identity | 200, role `driver`, same User as the login claims. |
+| 01.1 Resolve registered CAR | 200, select the only eligible CAR or enter a specific returned `canonicalPlate` in `licensePlate` and resend. Configure `slotId`, `start`, `end` and `paymentMethod=PAYOS`. |
+| 02.1 Review Payment quote | 200, exact selection, opaque quote version, positive whole-VND deposit, disclosure and future validity. Stores the quote and authoritative site. Explicitly accept it before proceeding. |
+| 03.1 Accept quote and submit | 202, receipt contract v3 and stable `requestId`. A UUID idempotency key and the exact body are saved before the first send. |
+| 03.2 Replay exact submission | 202, same request identity with the original key and body. |
+| 04.1 Read Saga progress | 200, four `SUCCEEDED` checks and `HOLD_CREATED`. `CHECKING` or `EVALUATING` means the scenario is still in progress. |
+| 04.2 Read durable receipt | 200, v3 and same request and hold as the progress snapshot. Saves `reservationId`. |
+| 04.3 Read own reservation and order readiness | 200 with the same accepted commercial terms, `PENDING_PAYMENT`, null confirmation and H in the future. Requires `orderProvisioningState=CREATED` and a real order ID to pass the order-readiness assertion. |
+| 05.1 Verify own Payment order association | 200, reverse association returns the original request for the same authenticated Account. Finish here. |
 
-## Prerequisites and current integration gate
+If login returns `mfaRequired=true`, the collection clears stale authentication and stops. Use the supported UserService sign-in flow, `POST /api/auth/mfa/login` with its unexpired `challengeId`, `challengeToken` and either `totp` or `recoveryCode`. After a successful MFA response, set the local `driverToken` from `data.accessToken`, `driverAccountId` from its `account_id` claim and `driverUserId` from `sub`. Then proceed to 00.3. Use the existing authentication policy for the test Account.
 
-- Start the local PostgreSQL, RabbitMQ and service dependencies using [LOCAL-SETUP.md](../../../LOCAL-SETUP.md). The Operations API defaults to `http://localhost:5055`; PaymentService defaults to `http://localhost:5065`.
-- Enable reservation admission and the Operations transactional outbox with the environment settings documented in the deployment checklist. Do not apply the changed original schema script to an existing/shared database without the deployment owner's schema inventory and rollout approval.
-- Use a real active Driver token and an Account-owned eligible CAR vehicle. Populate an active site and a compatible specific slot with the required capacity/policy rows.
-- Operations now uses a real Payment HTTP adapter for preview, quote and post-hold deposit-order provisioning. Configure Operations `Services:Payment` (default `http://localhost:5065/`) and a non-empty `Services:Key`. In Development, Payment accepts that value as `X-Internal-Service-Key`; this shortcut is not production authentication. If Payment is unreachable, preview/review correctly return `503 OWNER_UNAVAILABLE`.
-- The active paid-confirmation consumer uses generic `PaymentSucceededV1` on a reservation-specific queue with `ReferenceType=RESERVATION`, validated against Operations' persisted accepted-order snapshot. `ReservationDepositCollectedV1` remains source-only with no producer. This is an open event-contract deviation requiring owner review. Runtime broker/replay verification remains required.
-- The new hold terminal receipt is `state=HOLD_CREATED` with `contractVersion=2`. A `PENDING_PAYMENT` reservation is not a confirmed entitlement.
-- Zero-price acceptance, quote-bound collection lookup and reconciliation remain fail-closed. Do not submit a Payment status response, redirect or broker message as proof of Operations confirmation.
+### Observe progress and recover safely
 
-## Import and configure
+- Do one diagnostic read at a time. Repeat 04.1 or 04.3 manually after background processing. `PENDING_PAYMENT` with a preparing or unknown order is `ORDER_NOT_READY` for the test. A closed order or expired H cannot pass. Inspect the returned admission state, checks, outcome code and order code. SignalR delivery needs separate authenticated browser or hub verification.
+- If a submit response is lost, resend **03.1** with the stored body and key. Re-sign in with the same Account if needed. The saved body is used even when the quote has since expired. For a genuinely new scenario, use a fresh copy of the blank environment or clear the prior review/consent, submitted intent, idempotency key, request/reservation IDs and order state. Resolve the original request before starting another one.
+- Operations reports readiness from its authenticated Payment response. The Driver-facing invoice endpoint rejects pending orders. An independent check for zero provider transactions or verified collections requires separate owner-authorized evidence. The integration run additionally checked Payment’s persisted order, quote and zero transactions. The collection makes no payment or checkout request and its final assertion requires an active uncompromised hold and no Operations confirmation.
+- For HTTP 401, check token expiry and the configured JWKS. For 403, check Driver role or owner permission. For 409, distinguish changed idempotent intent from an ineligible slot or stale quote. For 503, inspect the error. `RESERVATION_ADMISSION_DISABLED` indicates the route flag is off, and `PAYMENT_QUOTE_PROOF_UNAVAILABLE` at fresh submission indicates the starter prerequisites are missing. On review, `OWNER_UNAVAILABLE` can mean missing Facility or Payment schema, owner auth or pricing. A Saga timeout can mean owner queues are unbound or unreadable or the outbox failed to deliver. When quote expiry happens before guarded acceptance, review again and use a new scenario. An accepted quote can still provision before H after its review deadline.
 
-1. Import the collection and the example environment into Postman.
-2. Select **SPARK-273 Reservation Flow - local**.
-3. Set `driverToken` to a local Driver token. Set `paymentDriverToken` only when Payment accepts the same Driver identity for reservation orders.
-4. Set `siteId`, `slotId`, `vehicleId`, `start` and `end` from real test data. Use UTC ISO-8601 timestamps with `start` in the future and `end > start`. Set `differentEnd` to another valid interval end for the idempotency mismatch test.
-5. Keep `paymentMethod=PAYOS`; configure `paymentReturnUrl` and `paymentCancelUrl` only with safe local callback URLs.
-6. Never export populated secret values. The committed environment contains no token or password.
+## Optional cases
 
-## Run sequence
+- **06 — Zero Amount / Subscription Coverage. Blocked.** Production eligibility still returns uncovered. A zero tariff does not make the Driver subscription-covered. When the entitlement owner supplies a genuine canonical-plate entitlement, run a separate account-scoped review and submission, verify zero payable and a genuine linked Payment order and receipt, then observe Operations `CONFIRMED` before H. Check provider traffic is absent. The enabled collection does not exercise this case.
+- **07 — Negatives.** After completing the authenticated path, resend a changed interval under the original key (409 `IDEMPOTENCY_KEY_REUSED`) or intentionally omit authorization on the own booking read (401). Each runs independently and requires the original positive scenario variables.
+- **08 — Legacy / Compatibility.** Run 00.2 first. Supply an existing owned `legacyRequestId` and `legacyReservationId`. The two GETs verify v2 receipt and historical booking binding. These requests do not create a legacy hold.
 
-Run requests in collection order, one at a time for the first pass:
-
-1. **01.1 Server price preview** and **01.2 Review and capture exact terms**. The post-response scripts save quote ID/version, terms ID/version, expiry and accepted amounts.
-2. **01.3 Create reservation** uses one generated `Idempotency-Key`. It saves the request ID and, when present, reservation ID. Expected initial response is HTTP 202.
-3. **01.4 Replay same create** must return the same request ID. **03.1 Same key with changed intent** must return HTTP 409.
-4. **02.1 Read creation receipt** until its state is terminal. A committed hold returns `HOLD_CREATED` (contract version 2); this is not `CONFIRMED`.
-5. **02.2 Read own reservation** captures `state`, exact `holdExpiresAt`, `orderId`, order-provisioning state and zero-price acceptance state. `PENDING_PAYMENT` is expected after hold commit.
-6. If and only if `paymentOrderId` is nonempty and came from the Operations read, **02.3 Read Payment invoice** and **02.4 Initiate real Payment checkout** become eligible. The checkout uses Payment's actual `POST /api/v1/payments/orders/{orderId}/checkout` endpoint and an idempotency key. The pre-request script skips it when no real order ID exists.
-7. When checkout returns a real `paymentTransactionId`, **02.5 Read Payment transaction status** uses Payment's actual status endpoint. This status is diagnostic only.
-8. Re-run **02.6 Re-read reservation**. Mark the reservation confirmed only when this Operations response reports `state=CONFIRMED`; a Payment `SUCCESS`, redirect, QR scan or checkout callback is not confirmation.
-9. **03.2 Review overlapping reservation terms**, **03.3 Submit overlapping request** and **03.4 Read competing request conflict receipt** use a second `conflictVehicleId` owned by the Driver, the same specific site/slot, and a time window in conflict with the original interval. Set `conflictStart`/`conflictEnd` accordingly. Expect the competing request to become `REJECTED` with `SLOT_TIME_CONFLICT`; rerun 03.4 if it is still pending. This tests slot capacity independently of a same-plate conflict.
-10. **03.5 Re-read reservation after hold deadline** checks Operations' current state against the captured exact H. Run it at least five seconds after H and expect `EXPIRED` unless the reservation was independently confirmed.
-11. **03.6 Anonymous own-reservation read** must return HTTP 401.
-
-The scripts capture IDs and state in the selected Postman environment so a later request or refresh reuses the same reservation rather than creating another one.
-
-## Recovery, conflict and expiry checks
-
-- **Creation replay:** rerun 01.3 with the saved key and identical body; the same receipt/request must be returned. Do not generate a new key after a timeout until the existing receipt has been read.
-- **Changed replay:** run 03.1 with `differentEnd` set; expect 409 `IDEMPOTENCY_KEY_REUSED`.
-- **Capacity conflict:** with the current adapters configured, prepare a second eligible vehicle and review its terms for the same specific slot and overlapping interval. Submit with a new idempotency key. Expect the authoritative Operations conflict code in its receipt and no second active hold. If the second account is used, obtain its own token and terms; do not copy another Account's terms.
-- **Hold expiry:** save `holdExpiresAt`, wait past H, then read the own reservation. The expiry worker should release the temporary claim and Operations should report `EXPIRED`. Verify no new checkout/order can be created at or after H. For an already-created order or late collection, use the Payment/Operations recovery runbook; never infer a refund payout from an accepted reconciliation request.
-- **Stale terms:** change/expire the reviewed tariff or coverage between review and order provisioning. The old snapshot must not be repriced; expect durable `CLOSED_NO_ORDER`, released hold and renewed review from the live adapter.
-- **Zero price:** only use a Payment-owner-issued, versioned free/covered quote. Verify `zeroPriceAcceptanceState=ACCEPTED`, no `orderId`, no synthetic payment, and guarded Operations `CONFIRMED` after the pre-T evaluation. This case is blocked because Payment has no zero-price acceptance endpoint.
-- **Expired-hold payment recovery:** the active consumer handles generic `PaymentSucceededV1`, but quote-bound collection lookup and reconciliation are unavailable. Deliver verified money after H but before T only in an approved test environment; confirm only if the guarded Facility/Operations reacquisition succeeds. Otherwise reconciliation remains blocked and must be reported, not simulated. At/after T, expect no new confirmation.
-- **Duplicate delivery:** redeliver the same payment event/transaction identity; expect one durable payment-evidence path, one confirmation effect, and no duplicate confirmation outbox fact. The endpoint has no general EF Inbox; verify business idempotency under the locked reservation.
-
-## Expected current result / blocked scenarios
-
-With the checked-in source and correctly configured local services, preview/review should reach Payment and the reservation should reach `HOLD_CREATED`/`PENDING_PAYMENT` with a real Payment order when provisioning succeeds. `503 OWNER_UNAVAILABLE` from preview/review now means Payment is absent/unreachable or `Services:Payment`/`Services:Key` is not configured; it is not the unconditional expected result. `503 OWNER_CONTRACT_INVALID` means an owner envelope/echo/binding check failed.
-
-Zero-price acceptance, quote-bound collection lookup, reconciliation and production machine authentication remain **BLOCKED**. Event-driven paid confirmation uses generic `PaymentSucceededV1` and is source-integrated but not live-verified; the event-schema deviation needs owner review. PostgreSQL/RabbitMQ/provider/replay behavior and this Postman run remain **NOT RUN — USER VERIFICATION REQUIRED**. The Payment requests are intentionally conditional and will skip when Operations has not supplied a real order or Payment has not supplied a transaction ID.
+This collection is prepared for manual execution. The live acceptance run used the four real service hosts and separate disposable stores. Manual Postman and browser runs remain pending.

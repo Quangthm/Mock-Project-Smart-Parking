@@ -6,39 +6,6 @@ using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Tests.TestDoubles;
 
-public class FakePaymentOrderRepository : IPaymentOrderRepository
-{
-    public readonly List<PaymentOrder> Orders = new();
-
-    public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.Id == id));
-    }
-
-    public Task<PaymentOrder?> GetByOrderCodeAsync(string orderCode, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.OrderCode == orderCode));
-    }
-
-    public Task<PaymentOrder?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.IdempotencyKey == idempotencyKey));
-    }
-
-    public Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default)
-    {
-        Orders.Add(order);
-        return Task.CompletedTask;
-    }
-
-    public void Update(PaymentOrder order)
-    {
-        var idx = Orders.FindIndex(x => x.Id == order.Id);
-        if (idx >= 0) Orders[idx] = order;
-        else Orders.Add(order);
-    }
-}
-
 public class FakePaymentTransactionRepository : IPaymentTransactionRepository
 {
     public readonly List<PaymentTransaction> Transactions = new();
@@ -75,29 +42,6 @@ public class FakePaymentTransactionRepository : IPaymentTransactionRepository
         var idx = Transactions.FindIndex(x => x.Id == transaction.Id);
         if (idx >= 0) Transactions[idx] = transaction;
         else Transactions.Add(transaction);
-    }
-}
-
-public class FakeReservationQuoteRepository : IReservationQuoteRepository
-{
-    public readonly List<ReservationQuote> Quotes = new();
-
-    public Task<ReservationQuote?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Quotes.FirstOrDefault(x => x.Id == id));
-    }
-
-    public Task AddAsync(ReservationQuote quote, CancellationToken cancellationToken = default)
-    {
-        Quotes.Add(quote);
-        return Task.CompletedTask;
-    }
-
-    public void Update(ReservationQuote quote)
-    {
-        var idx = Quotes.FindIndex(x => x.Id == quote.Id);
-        if (idx >= 0) Quotes[idx] = quote;
-        else Quotes.Add(quote);
     }
 }
 
@@ -150,17 +94,6 @@ public class FakeProviderWebhookRepository : IProviderWebhookRepository
         var idx = Webhooks.FindIndex(x => x.Id == webhook.Id);
         if (idx >= 0) Webhooks[idx] = webhook;
         else Webhooks.Add(webhook);
-    }
-}
-
-public class FakeUnitOfWork : IUnitOfWork
-{
-    public int SaveCount { get; private set; }
-
-    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-    {
-        SaveCount++;
-        return Task.FromResult(1);
     }
 }
 
@@ -371,7 +304,6 @@ public class FakeEventPublisher : SmartParking.PaymentService.Application.Common
         return Task.CompletedTask;
     }
 }
-
 
 public class FakePublishEndpoint : MassTransit.IPublishEndpoint
 {

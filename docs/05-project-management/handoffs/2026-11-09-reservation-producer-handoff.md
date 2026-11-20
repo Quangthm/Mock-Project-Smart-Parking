@@ -1,5 +1,7 @@
 # Reservation producers — Payment and coverage handoff (11 November alignment)
 
+> **19 November commercial decision.** The earlier expiry options and dedicated paid-event proposal below are historical. Operations checks quote expiry at hold commit. Payment uses the existing order PUT for both amounts and PaymentSucceededV1 with authoritative lookup for verified money. See [Payment authority and paired verification](2026-11-19-SPARK-273-payment-authority.md).
+
 > **Superseded execution guidance.** Legacy Operations terms, vehicle-ID binding and zero-price no-order instructions are historical. Use the [current Payment confirmation handoff](2026-11-18-SPARK-273-payment-confirmation-handoff.md) for the paid event gate and covered HTTP acceptance. For the 18 November target contracts and current source audit, use the [SPARK-273 owner handoffs](2026-11-18-SPARK-273-reservation-owner-handoffs.md).
 
 Payment owner handoff, rechecked against the local source on 11 November 2026 at checkout `fff33f8f` (after the Payment merge). This is source review, not live verification. **Payment implementation remains with the Payment teammate. Facility producer implementation is now included in the Operations/Facility task.** Operations ports are in [BookingContracts.cs](../../../src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs); these service-local C# ports specify required semantics, **not agreed production Payment wire authentication**. There is no `src/Shared` build dependency.

@@ -20,20 +20,10 @@ public sealed record ReviewedTerms(Guid TermsId, string TermsVersion, DateTimeOf
 public sealed record VehicleBindingResult(bool Eligible, long? Revision, string? CanonicalPlate);
 public sealed record ZeroPriceAcceptanceResult(string State, ZeroPriceAcceptanceRequest AcceptedRequest,
     string? OutcomeCode = null);
-// CREATED replays the same order. CLOSED_NO_ORDER is an authoritative, durable fence
-// against later creation for this operation. UNKNOWN must never be translated into absence.
-public sealed record DepositOrderResult(string State, Guid? OrderId, DepositOrderRequest AcceptedRequest,
-    string? OutcomeCode = null);
-public sealed record VerifiedCollection(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
-    Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
-public sealed record CollectionLookup(string State, IReadOnlyList<VerifiedCollection> Collections);
 public sealed record VerifiedReservationCollection(Guid EventId, Guid CollectionId, Guid PaymentOrderId,
     Guid PaymentTransactionId, Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId,
     Guid QuoteId, string QuoteVersion, Guid TermsId, string TermsVersion, decimal Amount, string Currency,
     string Provider, string ProviderReference, DateTimeOffset ProviderVerifiedAt, DateTimeOffset OccurredAt);
-public sealed record ReservationPaymentEvidence(Guid EventId, Guid PaymentOrderId, Guid PaymentTransactionId,
-    Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId, decimal Amount, string Currency,
-    string Provider, string? ProviderReference, DateTimeOffset PaidAt);
 public sealed record ReservationConfirmedV1(Guid EventId, Guid ReservationId, Guid AccountId,
     Guid TenantId, Guid SiteId, DateTimeOffset ConfirmedAt);
 
@@ -59,4 +49,3 @@ public interface IReservationTermsRepository
 public sealed record PreviewReservationPriceQuery(ReservationPricePreview Intent) : IRequest<PricePreview>;
 public sealed record ReviewReservationTermsCommand(BookingSelection Intent) : IRequest<ReviewedTerms>;
 public sealed record ProgressReservationCommand(Guid RequestId) : IRequest;
-public sealed record RecordReservationPaymentCommand(ReservationPaymentEvidence Evidence) : IRequest;

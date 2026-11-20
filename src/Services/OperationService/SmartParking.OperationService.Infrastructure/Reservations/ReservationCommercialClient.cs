@@ -15,7 +15,7 @@ namespace SmartParking.OperationService.Infrastructure.Reservations;
 public sealed class ReservationCommercialClient(
     HttpClient client,
     IHttpContextAccessor context,
-    IConfiguration configuration) : IReservationCommercialOwner
+    IConfiguration configuration) : IReservationCommercialOwner, IReservationQuoteOwner
 {
     private const string Issuer = "SmartParking.OperationService";
     private const string PaymentAudience = "SmartParking.PaymentService";
@@ -26,6 +26,17 @@ public sealed class ReservationCommercialClient(
     public Task<PaymentReservationQuote> IssuePlateQuoteAsync(ReservationQuoteBinding binding, CancellationToken ct) =>
         SendAsync<PaymentReservationQuote>(HttpMethod.Post, "/internal/reservation-quotes/v1", binding, ct,
             servicePermission: QuotePermission);
+
+    public async Task<PaymentReservationQuote> ReadProofAsync(Guid accountId, Guid quoteId, string version, CancellationToken ct)
+    {
+        var proof = await SendAsync<PaymentReservationQuote>(HttpMethod.Get,
+            $"/internal/reservation-quotes/v1/{quoteId:D}?accountId={accountId:D}&version={Uri.EscapeDataString(version)}",
+            null, ct, servicePermission: QuotePermission);
+        if (proof.QuoteId != quoteId || proof.QuoteVersion != version || proof.Binding?.AccountId != accountId ||
+            proof.Binding.Coverage == null || proof.ValidUntil == default ||
+            proof.Status is not ("ISSUED" or "ACCEPTED" or "EXPIRED")) throw InvalidOwner();
+        return proof;
+    }
 
     public async Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct)
     {
@@ -107,6 +118,45 @@ public sealed class ReservationCommercialClient(
         {
             return new("CLOSED_NO_ORDER", null, request, error.Code);
         }
+        catch (ReservationGateException error) when (request.QuoteVersion.StartsWith("rq1-", StringComparison.Ordinal) &&
+            error.StatusCode >= 500)
+        {
+            return new("UNKNOWN", null, request, "PAYMENT_ORDER_OUTCOME_UNKNOWN");
+        }
+    }
+
+    public async Task<ZeroOrderDecision> AcceptZeroAsync(ZeroOrderBinding b, CancellationToken ct)
+    {
+        var request = new DepositOrderRequest(b.OperationId, b.ReservationId, b.AccountId, b.TenantId, b.SiteId,
+            b.QuoteId, b.QuoteVersion, b.Amount, b.Currency, b.Method, b.HoldExpiresAt,
+            new(b.SlotId, b.Plate, b.Start, b.End, b.IsCovered, b.CoverageVersion));
+        try
+        {
+            var data = await SendAsync<OrderResponse>(HttpMethod.Put, $"/internal/reservation-deposit-orders/{b.OperationId:D}",
+                request, ct, servicePermission: DepositOrderPermission);
+            if (data.AcceptedRequest == request && data.State == "CLOSED_NO_ORDER" && data.OrderId == null && data.ReceiptId == null)
+                return new("REJECTED", b, null, null, "PAYMENT_ORDER_CLOSED_NO_ORDER");
+            if (data.AcceptedRequest != request || data.State != "CREATED" || data.OrderId.GetValueOrDefault() == Guid.Empty ||
+                data.ReceiptId.GetValueOrDefault() == Guid.Empty) throw InvalidOwner();
+            return new("ACCEPTED", b, data.OrderId, data.ReceiptId);
+        }
+        catch (ReservationGateException error) when (IsDefinitiveOrderRejection(error))
+        {
+            return new("REJECTED", b, null, null, error.Code);
+        }
+        catch (ReservationGateException error) when (error.StatusCode >= 500)
+        {
+            return new("UNKNOWN", b, null, null, "ZERO_PRICE_ACCEPTANCE_OUTCOME_UNKNOWN");
+        }
+    }
+
+    public async Task ReconcileZeroAsync(ZeroOrderEvidence evidence, string reason, CancellationToken ct)
+    {
+        var b = evidence.Binding;
+        var receipt = await SendAsync<Guid>(HttpMethod.Put, $"/internal/reservation-deposit-orders/{b.OperationId:D}/zero-disposition",
+            new { b.OperationId, b.ReservationId, b.AccountId, evidence.OrderId, evidence.ReceiptId, b.QuoteId, b.QuoteVersion, reason },
+            ct, servicePermission: DepositOrderPermission);
+        if (receipt != evidence.ReceiptId) throw InvalidOwner();
     }
 
     public Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct) =>
@@ -135,9 +185,37 @@ public sealed class ReservationCommercialClient(
         return new(data.State, collections);
     }
 
-    public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct) =>
-        throw new ReservationGateException(503, "OWNER_UNAVAILABLE",
-            "Reservation reconciliation is not enabled.");
+    public async Task<IReadOnlyList<ReservationDepositEvidence>> ReadCollectionsAsync(Guid orderId, CancellationToken ct)
+    {
+        var data = await SendAsync<CollectionResponse>(HttpMethod.Get, $"/internal/reservation-deposit-orders/{orderId:D}/collections",
+            null, ct, servicePermission: DepositOrderPermission);
+        if (data.Collections == null) throw InvalidOwner();
+        var result = new List<ReservationDepositEvidence>();
+        foreach (var item in data.Collections)
+        {
+            var e = item.Evidence;
+            if (e is not { Version: 1 } || e.EventId == Guid.Empty || e.OperationId == Guid.Empty ||
+                item.OrderId != orderId || item.CollectionId == Guid.Empty || item.CollectionId != e.PaymentTransactionId ||
+                item.AccountId == Guid.Empty || item.ReservationId == Guid.Empty || item.TenantId == Guid.Empty || item.SiteId == Guid.Empty ||
+                item.QuoteId == Guid.Empty || string.IsNullOrWhiteSpace(item.TermsVersion) || item.Amount <= 0 || item.Currency != "VND" ||
+                e.PaymentMethod != "PAYOS" || e.Provider != "PAYOS" || string.IsNullOrWhiteSpace(e.ProviderReference) ||
+                e.ProviderVerifiedAt == default || e.OccurredAt == default) throw InvalidOwner();
+            result.Add(new(e.EventId, item.CollectionId, orderId, e.PaymentTransactionId, e.OperationId, item.ReservationId,
+                item.AccountId, item.TenantId, item.SiteId, item.QuoteId, item.TermsVersion, null, null, item.Amount,
+                item.Currency, e.Provider, e.ProviderReference, e.ProviderVerifiedAt, e.OccurredAt, e.PaymentMethod));
+        }
+        return result;
+    }
+
+    public async Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct)
+    {
+        if (!configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled") ||
+            !collection.TermsVersion.StartsWith("rq1-", StringComparison.Ordinal)) throw Unavailable();
+        var ack = await SendAsync<DispositionAcknowledgement>(HttpMethod.Post, "/internal/reservation-reconciliations",
+            new { reservationId, collection.CollectionId, collection.Amount, reason }, ct, servicePermission: DepositOrderPermission);
+        if (ack.ReservationId != reservationId || ack.CollectionId != collection.CollectionId || ack.RefundRequestId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(ack.Status)) throw InvalidOwner();
+    }
 
     private async Task<T> SendAsync<T>(
         HttpMethod method,
@@ -158,7 +236,7 @@ public sealed class ReservationCommercialClient(
             if (!response.IsSuccessStatusCode)
             {
                 // A missing versioned route or rejected service credential gives no selection evidence.
-                if (servicePermission == QuotePermission) throw Unavailable();
+                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) throw Unavailable();
                 if ((int)response.StatusCode < 500)
                 {
                     PaymentErrorEnvelope? paymentError = null;
@@ -170,6 +248,8 @@ public sealed class ReservationCommercialClient(
                     {
                     }
 
+                    if (servicePermission == QuotePermission && !(response.StatusCode == System.Net.HttpStatusCode.NotFound &&
+                        paymentError?.ErrorCode == "QUOTE_NOT_FOUND" && method == HttpMethod.Get)) throw Unavailable();
                     throw new ReservationGateException(
                         (int)response.StatusCode,
                         paymentError?.ErrorCode ?? "PAYMENT_REQUEST_REJECTED",
@@ -264,6 +344,7 @@ public sealed class ReservationCommercialClient(
 
     private static bool IsDefinitiveOrderRejection(ReservationGateException error) =>
         (error.StatusCode is 400 or 404 or 409) &&
+        error.Code != "QUOTE_BINDING_CONFLICT" &&
         (error.Code.StartsWith("QUOTE_", StringComparison.Ordinal) || error.Code == "TERMS_STALE");
 
     private static ReservationGateException InvalidOwner() =>
@@ -271,18 +352,4 @@ public sealed class ReservationCommercialClient(
 
     private static ReservationGateException Unavailable() =>
         new(503, "OWNER_UNAVAILABLE", "Reservation commercial owner is unavailable.");
-
-    private sealed record PaymentEnvelope<T>(bool Success, T Data);
-    private sealed record PaymentErrorEnvelope(string? ErrorCode, string? Message);
-    private sealed record PreviewResponse(decimal BookedAmount, decimal? DepositAmount, string Currency,
-        string PricingVersion, bool RequiresCompleteSelection);
-    private sealed record QuoteSelection(Guid VehicleId, Guid SiteId, Guid RequestedSlotId,
-        DateTimeOffset Start, DateTimeOffset End, string PaymentMethod);
-    private sealed record QuoteResponse(Guid QuoteId, string Version, DateTimeOffset ValidUntil,
-        QuoteSelection Selection, Guid AccountId, decimal BookedAmount, decimal DepositAmount, string Currency,
-        string PrepaymentMode, string CoverageVersion, string Disclosure);
-    private sealed record OrderResponse(string State, Guid? OrderId, DepositOrderRequest? AcceptedRequest);
-    private sealed record CollectionItem(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
-        Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
-    private sealed record CollectionResponse(string State, IReadOnlyList<CollectionItem>? Collections);
 }

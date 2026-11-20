@@ -50,6 +50,10 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
+        var reviewedId = await _orderRepository.FindReviewedOrderIdAsync(parseResult.OrderCode.ToString(), cancellationToken);
+        if (reviewedId is Guid orderId)
+            return await _unitOfWork.WithLocksAsync([orderId], () => RecordTransferAsync(orderId, parseResult, cancellationToken), cancellationToken);
+
         var eventId = parseResult.BankReference ?? parseResult.GatewayTransactionId ?? parseResult.OrderCode.ToString();
 
         // 2. Check duplicate webhook idempotency
@@ -202,5 +206,53 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         }
 
         return new ProcessPayOsWebhookResult(true, "Webhook processed successfully.");
+    }
+
+    private async Task<ProcessPayOsWebhookResult> RecordTransferAsync(Guid orderId, PaymentCallbackResult callback, CancellationToken ct)
+    {
+        if (callback.VerifiedTransferTime is not { } transferTime || callback.AmountVnd <= 0 ||
+            string.IsNullOrWhiteSpace(callback.BankReference) || callback.BankReference.Length > 255 ||
+            string.IsNullOrWhiteSpace(callback.GatewayTransactionId))
+            return new(false, "Missing verified transfer evidence.", "INVALID_PROVIDER_EVIDENCE");
+
+        var order = await _orderRepository.GetByIdAsync(orderId, ct) ?? throw new InvalidOperationException("Missing order.");
+        var prior = order.Transactions.SingleOrDefault(t => t.ProviderCollectionReference == callback.BankReference);
+        if (prior != null)
+            return prior.Amount == callback.AmountVnd && prior.PaidAt == transferTime
+                ? new(true, "Transfer already recorded.")
+                : new(false, "Conflicting transfer evidence.", "COLLECTION_BINDING_CONFLICT");
+
+        var verifiedAt = await _unitOfWork.DatabaseNowAsync(ct);
+        var attempt = order.Transactions.SingleOrDefault(t => t.GatewayTransactionId == callback.GatewayTransactionId);
+        var linkKnown = attempt != null;
+        attempt ??= order.Transactions.FirstOrDefault(t => t.PaymentMethod == PaymentMethod.PAYOS &&
+            t.TransactionType == TransactionType.PAYMENT && t.Status == PaymentStatus.PENDING &&
+            t.GatewayTransactionId == null && t.ProviderCollectionReference == null);
+        // A checkout link may receive several bank transfers. Each has its own transaction and stable event.
+        var tx = attempt is { ProviderCollectionReference: null } && attempt.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN
+            ? attempt : null;
+        if (tx == null)
+        {
+            tx = new PaymentTransaction { Id = Guid.NewGuid(), PaymentOrderId = order.Id, TenantId = order.TenantId,
+                PaymentMethod = PaymentMethod.PAYOS, CreatedAt = verifiedAt };
+            await _transactionRepository.AddAsync(tx, ct);
+        }
+        tx.Amount = callback.AmountVnd;
+        tx.ProviderCollectionReference = callback.BankReference;
+        tx.CollectionEventId = Guid.NewGuid();
+        tx.ProviderVerifiedAt = verifiedAt;
+        tx.MarkSuccess(!linkKnown || tx == attempt ? callback.GatewayTransactionId : null, transferTime);
+        if (order.Status == PaymentOrderStatus.PENDING && verifiedAt < order.ExpiresAt && order.FinalAmount == tx.Amount)
+            order.MarkPaid(verifiedAt);
+        await _eventPublisher.PublishAsync(new PaymentSucceededV1
+        {
+            EventId = tx.CollectionEventId.Value, OccurredAt = transferTime, CorrelationId = order.OrderCode,
+            PaymentOrderId = order.Id, PaymentTransactionId = tx.Id, PaymentMethod = order.ReviewedMethod!,
+            GatewayReference = callback.GatewayTransactionId, TenantId = order.TenantId, SiteId = order.SiteId,
+            ReferenceType = order.ReferenceType.ToString(), ReferenceId = order.ReferenceId, PlateNumber = order.PlateNumber,
+            AccountId = order.AccountId, Amount = tx.Amount, ParkingFee = order.FinalAmount, Currency = order.ReviewedCurrency!
+        }, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+        return new(true, "Verified transfer recorded.");
     }
 }

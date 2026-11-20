@@ -59,6 +59,27 @@ public sealed class ReconcileReservationCollectionCommandHandler
             throw new PaymentDomainException("TRANSACTION_NOT_SETTLED", $"Collection transaction '{req.CollectionId}' is not settled (status: {tx.Status}). Only settled transactions can be reconciled/refunded.", "collectionId");
         }
 
+        if (order.ReviewedMethod != null)
+        {
+            if (tx.CollectionEventId == null || tx.TransactionType != TransactionType.PAYMENT ||
+                req.ReservationId != order.ReferenceId || tx.Amount != req.Amount || tx.Amount <= 0)
+                throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Disposition does not match verified funds.");
+            return await _unitOfWork.WithLocksAsync([tx.Id], async () =>
+            {
+                var refunds = await _refundRepository.GetByPaymentOrderIdAsync(order.Id, cancellationToken);
+                var disposition = refunds.SingleOrDefault(r => r.CollectionId == tx.Id);
+                if (disposition == null)
+                {
+                    disposition = new RefundRequest { CollectionId = tx.Id, PaymentOrderId = order.Id,
+                        TenantId = order.TenantId, Amount = tx.Amount, Reason = req.Reason };
+                    await _refundRepository.AddAsync(disposition, cancellationToken);
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+                return new ReconcileReservationResponseDto(disposition.Id, order.ReferenceId, tx.Id,
+                    disposition.Status, disposition.Reason, disposition.CreatedAt);
+            }, cancellationToken);
+        }
+
         // Idempotency: check if an identical refund request exists for this order
         var existingRefunds = await _refundRepository.GetByPaymentOrderIdAsync(order.Id, cancellationToken);
         var duplicate = existingRefunds.FirstOrDefault(r => r.Reason == req.Reason);

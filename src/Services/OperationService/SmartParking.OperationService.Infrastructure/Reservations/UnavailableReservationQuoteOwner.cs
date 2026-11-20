@@ -11,6 +11,7 @@ public sealed class UnavailableReservationQuoteOwner : IReservationQuoteOwner
     public Task<PaymentReservationQuote> ReadProofAsync(Guid accountId, Guid quoteId, string version, CancellationToken ct) =>
         throw Unavailable();
     public Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct) => throw Unavailable();
+    public Task<IReadOnlyList<ReservationDepositEvidence>> ReadCollectionsAsync(Guid orderId, CancellationToken ct) => throw Unavailable();
     public Task<ZeroOrderDecision> AcceptZeroAsync(ZeroOrderBinding binding, CancellationToken ct) => throw Unavailable();
     public Task ReconcileZeroAsync(ZeroOrderEvidence evidence, string reason, CancellationToken ct) => throw Unavailable();
 }

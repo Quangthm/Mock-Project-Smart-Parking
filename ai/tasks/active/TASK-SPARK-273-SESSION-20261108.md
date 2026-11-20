@@ -500,3 +500,21 @@ Production quote submission remains gated. Payment proof and consumption semanti
 ## 19 November 2026 — post-merge quote holds and guarded confirmation
 
 Baseline `f06ff1a9662d301e313f4846cc257814d3f87b22` on the SPARK-273 feature branch. The receipt and protected local hold now commit with the Operations EF outbox. Normal confirmation requires a checkpoint strictly before H. Verified paid money can compete again before T. Late zero-value acceptance goes to reconciliation. Production quote ingress and commercial evidence adapters remain gated. The [Slices 2 and 4 handoff](../../../docs/05-project-management/handoffs/2026-11-19-SPARK-273-slices-2-and-4.md) owns the current file inventory, checks, compatibility requirements and open owner decisions.
+
+## 19 November 2026 · Payment authority and paired settlement
+
+The Operations and Facility source is committed at `41dd3e752`, directly above `f06ff1a96`. Payment implements signed reviewed issuance and scoped proof, atomic paid/zero provisioning, a linked zero invoice, verified transfers on the existing PaymentSucceededV1 outbox, financial lookup and idempotent disposition. Operations applies quote expiry at hold commit and uses H for new commercial effects. Subscription eligibility and new production admission remain gated.
+
+The [commercial handoff](../../../docs/05-project-management/handoffs/2026-11-19-SPARK-273-payment-authority.md) records wire contracts, the impact matrix, file inventory, exact test commands, fixture permissions, observed failures and manual merchant/browser checks. Fresh disposable stores only. The existing-data transition, live provider test and production activation remain open. The four pre-existing repository changes were preserved.
+
+## 20 November 2026 — Workflow audit and Postman readiness
+
+Read the approved reservation requirements, ownership decisions and current working tree at `41dd3e752`. The normal Operations host still resolves `UnavailableQuoteAdmissionStarter`, so a fresh plate/quote submission rolls back with 503 before a Saga start. Payment order and zero receipt are implemented in the prior commercial slice, but production coverage returns uncovered. The frontend still submits legacy terms. Phase B is blocked and the three existing Postman artifacts were preserved.
+
+The [workflow audit](../../../docs/04-testing/reports/SPARK-273-reservation-workflow-readiness-audit.md) records all ten stage findings, risk and regression trace, exact verification, deferred Postman assertions and owner priorities. Current audit results were 39 UserService tests passed and 1 PostgreSQL fixture skipped, plus 7 mocked frontend tests passed. Earlier PostgreSQL/RabbitMQ results are retained separately. The next paid-path acceptance step is approval and verification of real transactional admission under normal host composition.
+
+## 20 November 2026 — Reviewed admission activation
+
+The normal Operations host now resolves the transactional `AdmissionMessages` starter when admission, Saga consumers and signed reviewed settlement are enabled. Compose and the host runner map the existing flags and Facility's distinct broker identity. Payment's signed quote, proof and order implementation from the previous slice was available without further Payment changes. All opt-ins default to false.
+
+The [integration report](../../../docs/04-testing/reports/SPARK-273-reviewed-admission-integration.md) records real Driver login, signed quote and order calls, actual owner consumers on RabbitMQ, 202 and same-key replay, one PostgreSQL booking, and a genuine unpaid `PENDING_PAYMENT` order. A separate booking committed before quote expiry and recovered its real order after expiry and an Operations restart, before H. Both orders had zero transactions. The solution build passed. Selected Operations, Payment and Facility regression suites passed 85, 70 and 12 cases respectively. The three existing Postman files now stop at order readiness. The covered folder stays disabled until an authoritative plate entitlement is available. Existing-data transition and deployed verification remain open.

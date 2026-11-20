@@ -1,5 +1,7 @@
 # SPARK-273 · Quote holds, confirmation and recovery
 
+> **19 November commercial decision.** The earlier expiry options and dedicated paid-event proposal below are historical. Operations checks quote expiry at hold commit. Payment uses the existing order PUT for both amounts and PaymentSucceededV1 with authoritative lookup for verified money. See [Payment authority and paired verification](2026-11-19-SPARK-273-payment-authority.md).
+
 19 November 2026. The Operations portion is available behind controlled owner adapters. Production quote submission still returns 503 for fresh valid intents. Existing receipts replay under the original Account and idempotency key. The production subscription eligibility implementation returns uncovered.
 
 Baseline was `feature/SPARK-273-driver-book-parking-ahead-of-arrival` at develop merge `f06ff1a9662d301e313f4846cc257814d3f87b22`. The opening status showed user edits to `ai/AGENTS.md`, the SPARK-243 session, `scripts/seed-site-car-tariff.ps1` and the untracked `ai/context/user-coding-instructions.md`. Those four paths are excluded from the inventory.

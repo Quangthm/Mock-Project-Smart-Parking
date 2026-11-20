@@ -11,6 +11,8 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
         builder.ToTable("refund_requests");
 
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.CollectionId).HasColumnName("collection_id");
+        builder.HasIndex(x => x.CollectionId).IsUnique();
         builder.Property(x => x.Id).HasColumnName("id");
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.PaymentOrderId).HasColumnName("payment_order_id").IsRequired();

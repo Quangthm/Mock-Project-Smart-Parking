@@ -73,7 +73,8 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
         }
 
         // Active reconciliation with payOS when in non-definitive state (PENDING / UNKNOWN)
-        if (orderCodeNumber > 0)
+        // A paid link total cannot attest a distinct bank transfer for a reviewed order.
+        if (orderCodeNumber > 0 && order?.ReviewedMethod == null)
         {
             var reconcile = await _gatewayPort.QueryTransactionAsync(orderCodeNumber, tx.GatewayTransactionId, cancellationToken);
             if (reconcile.IsFound)
