@@ -115,7 +115,7 @@ Trên máy mới, sao chép `.env.example` thành `.env`. Docker tự tạo bả
 | `Assistant__Management__KeyDirectory` | Thư mục keyring ghi được và giữ lâu dài. Với DB Assistant đã cấu hình, giữ đúng keyring và certificate của DB đó. |
 | `Assistant__Management__KeyEncryptionCertificatePath`, `Assistant__Management__KeyEncryptionCertificatePassword` | File PFX bảo vệ keyring, có private key và mật khẩu tương ứng. Dùng PFX riêng cho môi trường dev. |
 | `Assistant__Guest__KnowledgeDirectory` | Docker mặc định dùng cặp 0.4.1 dưới `docs/03-design/ai/smartparkdocker/knowledge/0.4.1/`. Đặt đường dẫn nếu cần dùng một bộ đã duyệt khác. [Cách lưu và xuất bản knowledge](docs/03-design/ai/chatbot-design.md#knowledge-and-faq) |
-| `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider trong Settings. |
+| `Assistant__Guest__ReleaseEnabled`, `Assistant__Chat__ReleaseEnabled` | Đặt `true` để mở FAQ Guest và chat Driver trên môi trường dev đã chuẩn bị. Admin quản lý công tắc chung và provider tại **AI Chatbot** trên thanh điều hướng. |
 
 Ở Docker mode, `SMARTPARK_ASSISTANT_URL` và `ConnectionStrings__IoT` không bắt buộc: setup tự tạo connection string IoT từ `SMARTPARK_DEV_PASSWORD` và dùng cổng `SMARTPARK_ASSISTANT_DOCKER_PORT`. Hai khóa này chỉ cần khi chạy Assistant bằng host runner. UserService vẫn cần một nguồn private JWT hợp lệ (`SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64` hoặc `SMARTPARK_JWT_PRIVATE_KEY_FILE`) và Assistant cần public key tương ứng. Provider key không nằm trong `.env`. Sau khi container chạy, Admin nhập key tại **AI Chatbot** trên thanh điều hướng Admin.
 

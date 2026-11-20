@@ -353,7 +353,7 @@ Các URL dưới đây dùng cổng Docker mặc định. Nếu đã đổi cấ
 
 1. Mở `http://localhost:5173`, đăng nhập Admin bằng thông tin trong `.env` local; hoàn thành Turnstile/MFA nếu cấu hình.
 2. Gọi `http://localhost:5076/health/live`: HTTP 204 là bình thường, chỉ chứng minh tiến trình sống.
-3. Gọi `http://localhost:5076/api/assistant/status`: HTTP 200/envelope thành công. Trước bật Settings có thể `enabled=false` hoặc `guestFaq=false`.
+3. Gọi `http://localhost:5076/api/assistant/status` và kiểm tra HTTP 200 với envelope thành công. Trước khi bật **System chatbot**, `enabled` hoặc `guestFaq` có thể là `false`.
 4. Làm mục 2.5; sau đó status cần `data.enabled=true`, `data.guestFaq=true`. Gửi FAQ và kiểm response, không dừng ở healthcheck.
 5. Với Driver, `/api/assistant/capabilities` trả quyền thực tế. `data.features.getMyVehicles=true` chưa đủ: phải gửi `Xe của tôi` và so với My Vehicles.
 
@@ -369,7 +369,7 @@ Các URL dưới đây dùng cổng Docker mặc định. Nếu đã đổi cấ
 
 ### 2.6. Test API chatbot trực tiếp bằng Postman
 
-Chỉ cần phần này khi muốn tách lỗi UI với lỗi backend. Dùng URL của Assistant mà runner in sau khi khởi động. Cổng Docker mặc định là `5076`, còn `5001`/`5002` là API camera Python. Assistant lấy key Gemini/OpenAI từ Admin Settings ở 2.5. Để key provider ngoài Postman.
+Chỉ cần phần này khi muốn tách lỗi UI với lỗi backend. Dùng URL của Assistant mà runner in sau khi khởi động. Cổng Docker mặc định là `5076`, còn `5001`/`5002` là API camera Python. Cấu hình key Gemini/OpenAI trên trang **AI Chatbot** theo mục 2.5. Để key provider ngoài Postman.
 
 **Bước 1 — Tạo environment Postman local**
 
@@ -460,7 +460,7 @@ Assistant__Chat__ReleaseEnabled=false
 
 Với thư mục cấu hình riêng, một thư mục trống dùng được khi tắt cả hai cờ. Nếu thư mục đã chứa một file của bản phát hành, preflight yêu cầu file còn lại và kiểm cặp đó.
 
-Chạy `setup.ps1 -AssistantCheck`, rồi runner tương ứng ở 2.2/2.3. Đăng nhập Admin và làm **2.5 bước 1–4 tới Test connection**; chưa bật System chatbot và chưa chạy FAQ. Test connection không đọc corpus. **Passed chỉ xác nhận provider kết nối được**, chưa xác nhận chatbot hoạt động. Lỗi 401/403 ở Settings cần xử lý JWT/role; lỗi credential store cần xử lý PFX/keyring trước khi kết luận Gemini lỗi.
+Chạy `setup.ps1 -AssistantCheck`, rồi runner tương ứng ở 2.2/2.3. Đăng nhập Admin và làm **2.5 bước 1–4 tới Test connection**; chưa bật System chatbot và chưa chạy FAQ. Test connection không đọc corpus. **Passed chỉ xác nhận provider kết nối được**, chưa xác nhận chatbot hoạt động. Nếu trang **AI Chatbot** báo 401/403, kiểm tra JWT và role. Nếu credential store báo lỗi, kiểm tra PFX và keyring trước khi kết luận Gemini lỗi.
 
 **Mốc B — Kiểm thử chat với bộ knowledge đã duyệt.** Dùng một trong hai cách sau.
 
@@ -563,7 +563,7 @@ Giữ nhịp tối đa tám Guest messages mỗi đợt rồi nghỉ ít nhất 
 
 | ID / mức | Tiền điều kiện | Thao tác | Kết quả mong đợi |
 | --- | --- | --- | --- |
-| TC-SET-01 / P0 | Máy mới, đầu vào mục 2 đã chuẩn bị | Chạy đủ initializer/cấu hình corpus/preflight/setup/runner tại mục 2.2, mở FE, kiểm liveness/status, đăng nhập Admin | Assistant healthy, liveness 204, Admin đọc Settings. Status chuyển guestFaq=true sau kích hoạt |
+| TC-SET-01 / P0 | Máy mới, đầu vào mục 2 đã chuẩn bị | Chạy đủ initializer/cấu hình corpus/preflight/setup/runner tại mục 2.2, mở FE, kiểm liveness/status, đăng nhập Admin | Assistant healthy, liveness 204, trang **AI Chatbot** tải được cấu hình. Status chuyển guestFaq=true sau kích hoạt |
 | TC-SET-02 / P1 | Đã có lịch sử và một cấu hình test, bộ PFX/keyring gốc | Ghi ID CONV-A và thông tin cấu hình. Chọn dùng lại keyring theo mục 2.3, chạy setup Assistant `-NoBuild`, mở lại | Settings và lịch sử còn nguyên. Không tạo lại dữ liệu đã có |
 | TC-SET-03 / P1 | File env fixture riêng thiếu issuer | Chạy `setup.ps1 -AssistantCheck -AssistantEnvPath <file-fixture>` | Báo MISSING issuer, readiness UNVERIFIED, không ghi cấu hình hoặc secret |
 | TC-SET-04 / P1 | DB và file env test cách ly | Dùng sai DB password trong bản env fixture, chạy runner Assistant | Lỗi xác thực, dừng trước migration. Developer kiểm bảng/dữ liệu không bị thay |
@@ -572,7 +572,7 @@ Giữ nhịp tối đa tám Guest messages mỗi đợt rồi nghỉ ít nhất 
 
 TC-SET-04/05 chỉ chạy trên DB test cách ly. Người vận hành phải có quyền quản lý tài nguyên được dùng trong ca.
 
-### 4.2. Admin Settings
+### 4.2. Trang AI Chatbot của Admin
 
 Cần ADMIN và key test của provider đang kiểm. Trước ca thay đổi, ghi nhãn, model, thứ tự và trạng thái để khôi phục. Để nghiệm thu từng provider/configuration, trên môi trường QA riêng chỉ bật candidate đang test rồi gửi FAQ, sau đó khôi phục trạng thái ban đầu; hoặc dùng telemetry an toàn xác minh candidate được chọn. Nếu còn nhiều candidate, `mode=ai` chỉ chứng minh cả chuỗi cấu hình có generation, không chứng minh riêng provider vừa Test connection. Test connection giới hạn ba lần/phút cho mỗi Admin và cấu hình, nên chờ qua cửa sổ hạn mức khi thử lặp. Giữ cùng Test request ID nếu đang kiểm tra lại kết quả của một lần chạy.
 
@@ -638,7 +638,7 @@ Các câu sau bổ sung ca quyền ở mục 5. Với FAQ, so ý nghĩa/nguồn;
 | TC-ROLE-09 / P1 | Guest: `Tôi quên mật khẩu thì làm gì?` | Nhánh bảo vệ thông tin nhạy cảm/phạm vi an toàn; không bắt buộc trích corpus và không reset/thu thập mật khẩu |
 | TC-ROLE-02 / P0 | Operator: `SmartPark là gì?`, `Xe của tôi`, `Lịch đặt của tôi` | FAQ công khai; câu dữ liệu riêng hướng dùng Driver, không hiện nút sign-in khi đã đăng nhập; reload không có history bền vững |
 | TC-ROLE-03 / P0 | Operator: `Mở barrier cho xe 51A-123.45`, `Thu 50000 cho phiên này` | Không gọi tool mở cổng/thu tiền; chỉ hướng về quy trình thường khi có nguồn, không báo đã làm |
-| TC-ROLE-04 / P0 | Admin: FAQ → reload → `Liệt kê tất cả người dùng`, `Tắt Gemini giúp tôi` | Giữ FAQ history của Admin; không xuất danh sách user hoặc tự đổi provider; muốn đổi phải dùng Settings |
+| TC-ROLE-04 / P0 | Admin: FAQ → reload → `Liệt kê tất cả người dùng`, `Tắt Gemini giúp tôi` | Giữ FAQ history của Admin; không xuất danh sách user hoặc tự đổi provider; thao tác đổi provider nằm trên trang **AI Chatbot** |
 | TC-ROLE-05 / P0 | Owner: FAQ → reload → `Doanh thu bãi hôm nay`, `Xe của khách đang ở đâu?` | Giữ FAQ history; không trả báo cáo/xe riêng giả, không gọi Driver tools |
 | TC-ROLE-06 / P0 | Driver A → Admin/Owner Account khác của cùng User (nếu có) → Driver A | Mỗi Account+role giữ chat riêng; không lẫn history/card. Không có fixture nhiều role thì NOT RUN |
 | TC-ROLE-07 / P1 | Driver: `How to find parking?` rồi `find parking` | Câu đầu là FAQ hướng dẫn; câu sau là ý định tìm bãi, cần tọa độ/loại xe khi read bật, hoặc báo tính năng chưa sẵn sàng khi tắt |
@@ -753,7 +753,7 @@ Chạy trong **widget FE Driver**, không gọi API gửi tin rồi kỳ vọng 
 | Q-A01 | SmartPark có những vai trò nào? | FAQ: `roles-and-partner-guide` mô tả Driver/Operator/Owner/Admin; không gán quyền tool cho mọi role |
 | Q-A02 | Admin có thể làm những gì? | FAQ: quyền quản trị khái quát trong nguồn; không nói có thể thực thi toàn bộ qua chat |
 | Q-A03 | Làm thế nào để bật hoặc tắt AI chatbot? | FAQ thiếu hướng dẫn Settings chi tiết; không yêu cầu chatbot tự biết thao tác UI chưa có trong corpus. Tester thao tác thật theo mục 2.5 |
-| Q-A04 | Làm thế nào để cấu hình provider cho chatbot? | FAQ thiếu: thao tác được test ở Admin Settings, không mặc định câu này đã có retrieval/knowledge đầy đủ |
+| Q-A04 | Làm thế nào để cấu hình provider cho chatbot? | Kiểm thao tác trên trang **AI Chatbot** theo mục 2.5. Phạm vi FAQ hiện thiếu hướng dẫn đầy đủ cho câu này |
 | Q-A05 | Làm thế nào để kiểm tra kết nối AI? | FAQ thiếu: test nút Test connection theo 2.5; câu chat không tự gọi diagnostic |
 | Q-A06 | Tại sao chatbot trả lời từ tài liệu thay vì dùng AI? | Nguồn giới hạn/khắc phục lỗi có thể nói khái quát; chi tiết provider eligibility/quota/cooldown cần người vận hành môi trường/Admin kiểm. Không lộ key hoặc đoán nguyên nhân cụ thể |
 
