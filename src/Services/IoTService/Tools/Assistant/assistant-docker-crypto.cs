@@ -34,7 +34,6 @@ try
     // Validate reused keys before creating any material or updating .env.
     Directory.CreateDirectory(input.Directory);
     Directory.CreateDirectory(Path.Combine(input.Directory, "keyring"));
-    Directory.CreateDirectory(Path.Combine(input.Directory, "knowledge"));
     using var protection = RSA.Create(3072);
     using var caKey = RSA.Create(3072);
     using var serverKey = RSA.Create(3072);

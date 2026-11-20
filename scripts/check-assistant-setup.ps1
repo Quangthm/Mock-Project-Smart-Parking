@@ -228,6 +228,8 @@ $envFile = (Resolve-Path -LiteralPath $EnvPath).Path
 $envDirectory = Split-Path -Parent $envFile
 $settings = & (Join-Path $PSScriptRoot 'load-env.ps1') -EnvPath $envFile -NoExport
 $dockerEnabled = $settings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
+. (Join-Path $PSScriptRoot 'assistant-knowledge-path.ps1')
+$knowledge = Resolve-AssistantKnowledgeDirectory ([string]$settings['Assistant__Guest__KnowledgeDirectory']) $root $envDirectory -UseBundledDefault:$dockerEnabled
 function Report([string]$Check, [string]$Status, [string]$Detail) {
     [pscustomobject]@{ Check = $Check; Status = $Status; Detail = $Detail }
 }
@@ -260,7 +262,8 @@ foreach ($name in @('SMARTPARK_ASSISTANT_URL','ConnectionStrings__IoT','Assistan
     else { Report $name 'MISSING' 'Configure locally after review.' }
 }
 foreach ($name in @('Assistant__Management__KeyDirectory','Assistant__Guest__KnowledgeDirectory')) {
-    $path = Resolve-ConfiguredPath ([string]$settings[$name])
+    $path = if ($name -eq 'Assistant__Guest__KnowledgeDirectory') { $knowledge }
+        else { Resolve-ConfiguredPath ([string]$settings[$name]) }
     if ($path -and (Test-Path -LiteralPath $path -PathType Container)) {
         Report $name 'CONFIGURED' 'Existing directory; path may be relative to .env, permissions/protection unverified.'
     } else { Report $name 'MISSING' 'An existing keyring/knowledge directory is required; nothing created.' }
@@ -330,7 +333,6 @@ if ($settings['Assistant__Reads__Search__Enabled'] -eq 'true') {
         } else { Report $name 'CONFIGURED' 'Value is in bounds; deployment freshness policy unverified.' }
     }
 }
-$knowledge = Resolve-ConfiguredPath ([string]$settings['Assistant__Guest__KnowledgeDirectory'])
 foreach ($file in @('smartpark-knowledge.md','publication.json')) {
     if ($knowledge -and (Test-Path -LiteralPath (Join-Path $knowledge $file) -PathType Leaf)) {
         Report "Corpus/$file" 'UNVERIFIED' 'File present; host must validate content/hash/version/approval/expiry.'

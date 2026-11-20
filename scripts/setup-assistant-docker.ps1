@@ -40,6 +40,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'assistant-knowledge-path.ps1')
 
 function Initialize-AssistantDocker {
     if (!$EnvPath) { $EnvPath = Join-Path $root '.env' }
@@ -58,7 +59,7 @@ function Initialize-AssistantDocker {
         'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH', 'SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD',
         'SMARTPARK_ASSISTANT_DOCKER_USER_CA_PATH', 'Assistant__Jwt__PublicKeyFile', 'Assistant__Jwt__PublicKeyPem',
         'Assistant__Management__KeyDirectory', 'Assistant__Management__KeyEncryptionCertificatePath',
-        'Assistant__Management__KeyEncryptionCertificatePassword', 'Assistant__Guest__KnowledgeDirectory'
+        'Assistant__Management__KeyEncryptionCertificatePassword'
     )
     if (!$UseExistingSigningKey) { $protectedNames = $signingNames + $protectedNames }
     foreach ($name in $protectedNames) {
@@ -115,7 +116,6 @@ function Initialize-AssistantDocker {
         Assistant__Jwt__Audience = if ($settings['SMARTPARK_JWT_AUDIENCE']) { $settings['SMARTPARK_JWT_AUDIENCE'] } else { 'SmartParking' }
         Assistant__Management__KeyDirectory = "$relativeDirectory/keyring"
         Assistant__Management__KeyEncryptionCertificatePath = "$relativeDirectory/assistant.pfx"
-        Assistant__Guest__KnowledgeDirectory = "$relativeDirectory/knowledge"
         Assistant__Guest__ReleaseEnabled = 'false'
         Assistant__Chat__ReleaseEnabled = 'true'
         Assistant__Reads__User__Enabled = 'true'
@@ -164,7 +164,7 @@ function Initialize-AssistantDocker {
         }
     }
     Write-Host 'Local Assistant JWT, keyring protection, and User HTTPS material configured in .env.'
-    Write-Host 'For chat, deploy the approved Markdown and publication.json into the local knowledge directory, then configure the provider and enable Assistant in Admin Settings.'
+    Write-Host 'Docker can use the bundled FAQ publication. To use another approved pair, set Assistant__Guest__KnowledgeDirectory. Configure the provider and enable Assistant in Admin Settings.'
 }
 
 function Export-AssistantSigning {
@@ -431,7 +431,16 @@ if ($publicKey -notmatch '(?s)\A\s*-----BEGIN (RSA |)PUBLIC KEY-----\s+[A-Za-z0-
 }
 $keyDirectory = Get-RequiredPath 'Assistant__Management__KeyDirectory' 'Container'
 $certificate = Get-RequiredPath 'Assistant__Management__KeyEncryptionCertificatePath' 'Leaf'
-$knowledge = Get-RequiredPath 'Assistant__Guest__KnowledgeDirectory' 'Container'
+$knowledgeSetting = [string]$settings['Assistant__Guest__KnowledgeDirectory']
+if ($knowledgeSetting.StartsWith('replace-with-')) {
+    throw 'Configure Assistant__Guest__KnowledgeDirectory or leave it empty to use the bundled publication.'
+}
+$knowledge = Resolve-AssistantKnowledgeDirectory $knowledgeSetting $root $envDirectory -UseBundledDefault
+$knowledge = Resolve-AssistantPath $knowledge 'Assistant__Guest__KnowledgeDirectory'
+if (!(Test-Path -LiteralPath $knowledge -PathType Container)) {
+    throw 'Assistant setup cannot find the configured or bundled knowledge directory.'
+}
+$knowledge = (Resolve-Path -LiteralPath $knowledge).Path
 function Test-UnderDirectory([string]$Path, [string]$Directory) {
     $prefix = $Directory.TrimEnd([char[]]@('\','/')) + [IO.Path]::DirectorySeparatorChar
     return $Path.Equals($Directory, [StringComparison]::OrdinalIgnoreCase) -or
@@ -485,7 +494,9 @@ if (($guestRelease -and $guestRelease -cnotin @('true','false')) -or
 }
 $markdown = Join-Path $knowledge 'smartpark-knowledge.md'
 $manifest = Join-Path $knowledge 'publication.json'
-if ($guestRelease -ceq 'true' -or (Test-Path -LiteralPath $markdown) -or (Test-Path -LiteralPath $manifest)) {
+$bundledKnowledge = Resolve-AssistantKnowledgeDirectory '' $root $envDirectory -UseBundledDefault
+if ($knowledge -eq $bundledKnowledge -or $guestRelease -ceq 'true' -or $chatRelease -ceq 'true' -or
+    (Test-Path -LiteralPath $markdown) -or (Test-Path -LiteralPath $manifest)) {
     if (!(Test-Path -LiteralPath $markdown -PathType Leaf) -or !(Test-Path -LiteralPath $manifest -PathType Leaf)) {
         throw 'Provide the approved Markdown deployment copy and publication.json before setup.'
     }

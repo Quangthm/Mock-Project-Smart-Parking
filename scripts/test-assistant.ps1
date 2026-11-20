@@ -26,7 +26,7 @@ function Test-AssistantReadiness {
     $scratch = Join-Path $testWorkspace 'assistant-check'
     New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $root 'setup.ps1') -Destination $scratch
-    foreach ($name in @('load-env.ps1','jwt-environment.ps1','check-assistant-setup.ps1')) {
+    foreach ($name in @('load-env.ps1','jwt-environment.ps1','check-assistant-setup.ps1','assistant-knowledge-path.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $scratch 'scripts')
     }
     function dotnet { throw 'Unexpected dotnet call from read-only check.' }
@@ -92,6 +92,24 @@ function Test-AssistantReadiness {
         !($relativeRows | Where-Object { $_.Check -eq 'Assistant__Management__KeyDirectory' -and $_.Status -eq 'CONFIGURED' }) -or
         !($relativeRows | Where-Object { $_.Check -eq 'Assistant__Guest__KnowledgeDirectory' -and $_.Status -eq 'CONFIGURED' })) {
         throw 'Relative Assistant paths were not resolved from the environment file.'
+    }
+    . (Join-Path $PSScriptRoot 'assistant-knowledge-path.ps1')
+    $bundledSource = Resolve-AssistantKnowledgeDirectory '' $root $root -UseBundledDefault
+    $bundledTarget = Resolve-AssistantKnowledgeDirectory '' $scratch $relativeRoot -UseBundledDefault
+    $null = New-Item -ItemType Directory -Path $bundledTarget -Force
+    foreach ($file in 'smartpark-knowledge.md','publication.json') {
+        Copy-Item -LiteralPath (Join-Path $bundledSource $file) -Destination $bundledTarget
+    }
+    $bundledFixture = Join-Path $relativeRoot 'bundled.env'
+    Get-Content -LiteralPath $relativeFixture | Where-Object { $_ -notmatch '^Assistant__Guest__KnowledgeDirectory=' } |
+        Set-Content -LiteralPath $bundledFixture -Encoding UTF8
+    $bundledRows = @(& (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $bundledFixture)
+    if (@($bundledRows | Where-Object { $_.Check -like 'Corpus/*' -and $_.Status -eq 'UNVERIFIED' }).Count -ne 2) {
+        throw 'Readiness did not use the bundled publication for a Docker environment without an override.'
+    }
+    $pinnedBundle = 'docs/03-design/ai/smartparkdocker/knowledge/fixture-pinned'
+    if ((Resolve-AssistantKnowledgeDirectory $pinnedBundle $scratch $relativeRoot) -ne (Join-Path $scratch $pinnedBundle)) {
+        throw 'A pinned repository publication must resolve from the repository, even with an external environment file.'
     }
     $rejected = $false
     try { & (Join-Path $scratch 'setup.ps1') -AssistantCheck -AssistantEnvPath $fixture -RecreateDb }
@@ -359,7 +377,7 @@ function Test-AssistantDockerInitializer {
     $loader = Join-Path $PSScriptRoot 'load-env.ps1'
     . (Join-Path $PSScriptRoot 'jwt-environment.ps1')
 
-    [IO.File]::WriteAllText($envFile, "SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64=replace-with-fixture`nKEEP_ME=fixture`n")
+    [IO.File]::WriteAllText($envFile, "SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64=replace-with-fixture`nKEEP_ME=fixture`nAssistant__Guest__KnowledgeDirectory=custom-publication`n")
     $oldAppData = $env:APPDATA
     try {
         $env:APPDATA = $fixture
@@ -372,7 +390,11 @@ function Test-AssistantDockerInitializer {
     $null = & $initializer -Initialize -EnvPath $envFile
     if ((Get-FileHash -LiteralPath $envFile).Hash -ne $snapshot -or
         (Get-FileHash -LiteralPath (Join-Path $fixture $jwtFile)).Hash -ne $privateKeyHash -or
-        $settings['KEEP_ME'] -cne 'fixture') { throw 'Rerun replaced existing data.' }
+        $settings['KEEP_ME'] -cne 'fixture' -or
+        $settings['Assistant__Guest__KnowledgeDirectory'] -cne 'custom-publication') { throw 'Initializer replaced existing settings.' }
+    if (Test-Path -LiteralPath (Join-Path $fixture '.cache/assistant-docker/knowledge')) {
+        throw 'Initializer created a local knowledge directory even though Docker uses a publication separately.'
+    }
     if ([IO.Path]::IsPathRooted($jwtFile) -or
         (Read-JwtPrivateKeyFile $jwtFile $fixture) -notmatch '-----BEGIN PRIVATE KEY-----') { throw 'Root-relative signing file did not resolve.' }
     if ($output -match 'PRIVATE KEY' -or $output.Contains($settings['SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD']) -or
@@ -714,7 +736,7 @@ function Test-AssistantDockerSetup {
         foreach ($directory in @('FE','keys','knowledge','scripts/database/migrations','scripts/database/microservices')) {
             New-Item -ItemType Directory -Path (Join-Path $scratch $directory) -Force | Out-Null
         }
-        foreach ($file in @('compose.assistant.yml','compose.schema-integration.yml','scripts/setup-assistant-docker.ps1',
+        foreach ($file in @('compose.assistant.yml','compose.schema-integration.yml','scripts/setup-assistant-docker.ps1','scripts/assistant-knowledge-path.ps1',
             'scripts/apply-workflow-migrations.ps1','scripts/load-env.ps1','scripts/jwt-environment.ps1','scripts/discovery-docker.ps1',
             'scripts/database/microservices/06-iot-recognition-service-db.sql',
             'scripts/database/migrations/20261103_iot_assistant_management.sql','scripts/database/migrations/20261105_iot_assistant_s02.sql',
@@ -789,7 +811,29 @@ Hướng dẫn giả lập cho Docker.
             Set-Content -LiteralPath $searchEnv -Encoding UTF8
         Invoke-Setup $searchEnv -ValidateOnly
         if ($PreflightOnly) {
-            Write-Host 'PASS: Docker Assistant preflight rejects loopback and accepts a non-loopback HTTPS origin.'
+            . (Join-Path $PSScriptRoot 'assistant-knowledge-path.ps1')
+            $bundledSource = Resolve-AssistantKnowledgeDirectory '' $root $root -UseBundledDefault
+            $bundledTarget = Resolve-AssistantKnowledgeDirectory '' $scratch $scratch -UseBundledDefault
+            $null = New-Item -ItemType Directory -Path $bundledTarget -Force
+            foreach ($file in 'smartpark-knowledge.md','publication.json') {
+                Copy-Item -LiteralPath (Join-Path $bundledSource $file) -Destination $bundledTarget
+            }
+            $bundleEnv = Join-Path $scratch 'bundled.env'
+            Get-Content -LiteralPath $envPath | Where-Object { $_ -notmatch '^Assistant__Guest__KnowledgeDirectory=' } |
+                Set-Content -LiteralPath $bundleEnv -Encoding UTF8
+            Invoke-Setup $bundleEnv -ValidateOnly
+            [IO.File]::AppendAllText((Join-Path $bundledTarget 'smartpark-knowledge.md'), " ")
+            Invoke-Setup $bundleEnv 'publication metadata or Markdown hash does not match' -ValidateOnly
+            $null = New-Item -ItemType Directory -Path (Join-Path $scratch 'empty-knowledge') -Force
+            $emptyEnv = Join-Path $scratch 'empty-knowledge.env'
+            $emptySettings = @(Get-Content -LiteralPath $envPath) -replace '^Assistant__Guest__KnowledgeDirectory=.*$', 'Assistant__Guest__KnowledgeDirectory=empty-knowledge'
+            $emptySettings = $emptySettings -replace '^Assistant__Guest__ReleaseEnabled=.*$', 'Assistant__Guest__ReleaseEnabled=false'
+            $emptySettings | Set-Content -LiteralPath $emptyEnv -Encoding UTF8
+            Invoke-Setup $emptyEnv 'Provide the approved Markdown deployment copy' -ValidateOnly
+            $emptySettings -replace '^Assistant__Chat__ReleaseEnabled=.*$', 'Assistant__Chat__ReleaseEnabled=false' |
+                Set-Content -LiteralPath $emptyEnv -Encoding UTF8
+            Invoke-Setup $emptyEnv -ValidateOnly
+            Write-Host 'PASS: Docker Assistant validates owner origin, bundled publication, Markdown hash and release requirements.'
             return
         }
         $schema = @('compose','--project-name',$project,'--env-file',$envPath,'-f',(Join-Path $scratch 'compose.schema-integration.yml'))
