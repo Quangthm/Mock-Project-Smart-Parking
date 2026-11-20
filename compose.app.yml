@@ -173,6 +173,7 @@ services:
     image: smartpark/payment-service:local
     environment:
       <<: [*backend-env, *jwt-validation]
+      JwtValidation__AllowInsecureTransport: ${SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS:-false}
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       Services__OperationService__BaseUrl: http://operation-service:8080/
       ReservationIntegration__Enabled: ${SMARTPARK_RESERVATION_FACILITY_ENABLED:-false}
