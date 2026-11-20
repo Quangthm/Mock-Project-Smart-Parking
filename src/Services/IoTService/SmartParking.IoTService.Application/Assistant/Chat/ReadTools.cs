@@ -7,43 +7,45 @@ using SmartParking.IoTService.Application.Assistant.Guest;
 
 namespace SmartParking.IoTService.Application.Assistant.Chat;
 
-public sealed record ReadToolOptions(bool Vehicles = false, bool Reservations = false, bool Search = false, int SearchMaxAgeSeconds = 0, int SearchSkewSeconds = 0);
-public sealed class OwnerReadFailure(string code) : Exception { public string Code { get; } = code; }
-public sealed record VehicleSummary(Guid Id, string VehicleType, string DisplayLabel);
-public sealed record ReservationVehicle(string VehicleType, string? DisplayLabel);
-public sealed record ReservationSummary(Guid Id, Guid SiteId, ReservationVehicle? Vehicle, DateTimeOffset StartAt,
-    DateTimeOffset EndAt, string Status, DateTimeOffset AsOf);
-public sealed record ReservationPage(ReservationSummary[] Items, string? NextCursor, DateTimeOffset AsOf);
-public sealed record ReservationDetail(ReservationSummary Reservation, DateTimeOffset AsOf);
-public sealed record VehicleCard(string Type, VehicleSummary[] Items, DateTimeOffset AsOf, bool Truncated);
-public sealed record ReservationCard(string Type, ReservationSummary Reservation);
-public sealed record ReservationPageCard(string Type, string? NextCursor, DateTimeOffset? From, DateTimeOffset? To, DateTimeOffset AsOf);
-public interface IOwnerReadTools
-{
-    Task<ParkingSearchPage> Search(ParkingSearch query, string? cursor, CancellationToken ct);
-    Task<VehicleSummary[]> Vehicles(CancellationToken ct);
-    Task<ReservationPage> Reservations(DateTimeOffset? from, DateTimeOffset? to, string? cursor, CancellationToken ct);
-    Task<ReservationDetail> Detail(Guid id, CancellationToken ct);
-}
-
 public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools owner, ReadToolOptions options, TimeProvider clock, IChatStore store)
 {
-    public async Task<GuestReply?> TryAnswer(Guid account, Conversation conversation, Guid messageId, string message, Func<CancellationToken, Task> dispatch, CancellationToken ct)
+    private const string DetailPattern = @"^(?:reservation details|chi tiet lich dat) ([a-f0-9-]{36})$";
+    private const string DatePattern = @"^(?:my reservations|my bookings|lich dat) (\d{4}-\d{2}-\d{2})(?: (?:to|den) (\d{4}-\d{2}-\d{2}))?$";
+
+    private static bool IsVehicles(string text) =>
+        Regex.IsMatch(text, @"\A(?:(?:show(?: me)?|list) )?my (?:(?:saved|registered) )?vehicles\z") ||
+        Regex.IsMatch(text, @"\A(?:(?:cho(?: (?:toi|minh|tui))? )?(?:xem|coi)(?: giup(?: (?:toi|minh|tui))?)? |danh sach )?" +
+            @"xe cua (?:toi|minh|tui)(?: (?:voi|nhe|nha|di))?\z") ||
+        text is "toi da dang ky nhung xe nao" or "toi da dang ky xe nao" or "toi co nhung xe nao"
+        or "xe toi da dang ky" or "nhung xe toi da dang ky";
+    private static bool IsOwnList(string text) => Regex.IsMatch(text,
+        @"\A(?:(?:show(?: me)?|list) )?my (?:reservations|bookings)\z|\A(?:(?:cho (?:(?:toi|minh|tui) )?|giup (?:toi|minh|tui) )?(?:xem|coi)(?: giup(?: (?:toi|minh|tui))?)? )?(?:lich dat(?: cho)?|lich giu cho|lich booking) cua (?:toi|minh|tui)(?: (?:voi|nhe|di))?\z");
+    private static bool IsTomorrow(string text) => text is "ngay mai toi co lich dat khong" or "lich dat ngay mai"
+        or "my reservations tomorrow" or "my bookings tomorrow" or "do i have any bookings tomorrow";
+    private static bool IsMoreReservations(string text) => text is "more reservations" or "lich dat tiep theo";
+    private static bool IsSearch(string text) => ParkingSearch.IsRequest(text) || text is "more parking" or "tim bai tiep theo";
+
+    internal static bool IsReservationRead(string text) => IsOwnList(text) || IsTomorrow(text) ||
+        IsMoreReservations(text) || Regex.IsMatch(text, DetailPattern) || Regex.IsMatch(text, DatePattern);
+
+    internal static bool CanRead(string text) => IsVehicles(text) || IsReservationRead(text) || IsSearch(text);
+
+    internal async Task<GuestReply> Answer(Guid account, Conversation conversation, Guid messageId, string text, Func<CancellationToken, Task> dispatch, CancellationToken ct)
     {
-        var text = Normalize(message);
-        var vehicles = text is "my vehicles" or "show my vehicles" or "xe cua toi" or "danh sach xe cua toi"
-            or "toi da dang ky nhung xe nao" or "toi da dang ky xe nao" or "toi co nhung xe nao"
-            or "xe toi da dang ky" or "nhung xe toi da dang ky";
-        var reservations = text.Contains("lich dat", StringComparison.Ordinal) || text.Contains("my reservations", StringComparison.Ordinal) || text.Contains("my bookings", StringComparison.Ordinal) || text == "do i have any bookings tomorrow";
-        var detail = Regex.Match(text, @"^(?:reservation details|chi tiet lich dat) ([a-f0-9-]{36})$");
-        var next = text is "more reservations" or "lich dat tiep theo";
-        if (ParkingSearch.IsRequest(text) || text is "more parking" or "tim bai tiep theo")
+        if (IsSearch(text))
             return await Search(account, conversation, messageId, text, dispatch, ct);
-        if (!vehicles && !reservations && !detail.Success && !next) return null;
+        var vehicles = IsVehicles(text);
+        var detail = Regex.Match(text, DetailPattern);
         Require(account);
         var en = conversation.Locale == "en";
         if (vehicles && !options.Vehicles || !vehicles && !options.Reservations)
-            return Reply("unavailable", en ? "This read tool is not connected." : "Công cụ tra cứu này chưa được kết nối.");
+            return Reply("unavailable", (vehicles, en) switch
+            {
+                (true, true) => "This read tool is not connected.",
+                (true, false) => "Công cụ tra cứu này chưa được kết nối.",
+                (false, true) => "Reservation lookup is not connected. On the Driver dashboard, use Current booking for upcoming reservations or Booking history for past ones.",
+                _ => "Tra cứu lịch đặt chưa được kết nối. Trên màn hình Driver, chọn Current booking để xem lịch sắp tới hoặc Booking history để xem lịch đã qua."
+            });
         try
         {
             if (vehicles)
@@ -64,7 +66,7 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
                 return Reply("answered", en ? "Fresh reservation detail." : "Chi tiết lịch đặt vừa được đọc lại.", [new ReservationCard("reservation", fresh.Reservation)]);
             }
             DateTimeOffset? from = null, to = null; string? cursor = null;
-            if (next)
+            if (IsMoreReservations(text))
             {
                 var turns = await store.Context(new ChatScope(account, "driver"), conversation.Id, ct);
                 var remaining = 12000;
@@ -73,14 +75,14 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
                 if (page?.NextCursor is null) return Reply("clarification", en ? "No next page is available. Request the date range again." : "Không có trang tiếp theo. Hãy yêu cầu lại khoảng ngày.");
                 (from, to, cursor) = (page.From, page.To, page.NextCursor);
             }
-            else if (text is "ngay mai toi co lich dat khong" or "lich dat ngay mai" or "my reservations tomorrow" or "my bookings tomorrow" or "do i have any bookings tomorrow")
+            else if (IsTomorrow(text))
             {
                 var window = ReservationDayWindow.Tomorrow(clock, TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"));
                 (from, to) = (window.From, window.To);
             }
-            else
+            else if (!IsOwnList(text))
             {
-                var dates = Regex.Match(text, @"^(?:my reservations|my bookings|lich dat) (\d{4}-\d{2}-\d{2})(?: (?:to|den) (\d{4}-\d{2}-\d{2}))?$");
+                var dates = Regex.Match(text, DatePattern);
                 if (dates.Success && DateOnly.TryParseExact(dates.Groups[1].Value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) && date < DateOnly.MaxValue)
                 {
                     var last = date;
@@ -90,7 +92,7 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
                     var end = ReservationDayWindow.ForDate(last, TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"));
                     (from, to) = (window.From, end.To);
                 }
-                else if (text is not ("my reservations" or "my bookings" or "lich dat cua toi"))
+                else
                     return Reply("clarification", en ? "Specify a date as YYYY-MM-DD (Asia/Ho_Chi_Minh), or say my reservations tomorrow." : "Hãy ghi ngày YYYY-MM-DD (Asia/Ho_Chi_Minh), hoặc hỏi lịch đặt ngày mai.");
             }
             await dispatch(ct); Require(account); ct.ThrowIfCancellationRequested();
@@ -133,6 +135,6 @@ public sealed partial class ReadTools(ICurrentActor current, IOwnerReadTools own
         }
         return null;
     }
-    private static string Normalize(string message) => string.Join(' ', string.Concat(message.Normalize(NormalizationForm.FormD).ToLowerInvariant().Replace('đ', 'd')
+    internal static string Normalize(string message) => string.Join(' ', string.Concat(AnswerLanguage.Question(message).Normalize(NormalizationForm.FormD).ToLowerInvariant().Replace('đ', 'd')
         .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)).Trim().TrimEnd('?', '.', '!').Split(' ', StringSplitOptions.RemoveEmptyEntries));
 }

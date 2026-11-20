@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react"
 import { assistantApi, assistantConfigured, type ChatMessage, type Conversation } from "../../lib/assistantApi"
-import { interpretBookingTurn, type BookingTurn } from "../../lib/assistantBookingPreview"
+import { beginBookingPreview, interpretBookingTurn, type BookingTurn } from "../../lib/assistantBookingPreview"
 import { AuthApiError, getAuthSessionGeneration, subscribeAuthSession } from "../../lib/authApi"
 import { UntitledIcon } from "../icon/UntitledIcon"
 
@@ -82,6 +82,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [booking, setBooking] = useState<BookingTurn | null>(null)
+  const [bookingInput, setBookingInput] = useState("")
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingRequest | null>(null)
   const [canResend, setCanResend] = useState(false)
@@ -114,6 +115,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
         setEnabled(available)
         if (!available) {
           setBooking(null)
+          setBookingInput("")
           const saved = await assistantApi.conversations(null, controller.signal)
           if (!controller.signal.aborted) setHasSavedChat(saved.items.length > 0)
         }
@@ -182,13 +184,6 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
   }
   function send(text: string) {
     if (!enabled || active.current || pending || !text.trim() || generation !== getAuthSessionGeneration()) return
-    const bookingTurn = allowBookingPreview ? interpretBookingTurn(booking, text) : null
-    if (bookingTurn) {
-      setBooking(bookingTurn)
-      setNotice("")
-      setInput("")
-      return
-    }
     void run(async signal => {
       const attempt = conversation ? null : (creation.current ??= { id: crypto.randomUUID(), locale: "vi" })
       let current = conversation
@@ -225,6 +220,23 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
         if (result.state !== "completed") setNotice("Yêu cầu đã kết thúc mà không có câu trả lời.")
       }
     })
+  }
+  function stopBookingPreview() {
+    setBooking(null)
+    setBookingInput("")
+  }
+
+  function updateBookingPreview() {
+    if (!allowBookingPreview || !enabled || active.current || pending || !booking ||
+        generation !== getAuthSessionGeneration()) return
+    const turn = interpretBookingTurn(booking, bookingInput)
+    if (!turn) {
+      setNotice("Hãy nhập thông tin bản nháp hoặc chọn Bỏ bản nháp để quay lại hỏi trợ lý.")
+      return
+    }
+    setBooking(turn)
+    setBookingInput("")
+    setNotice("")
   }
   async function dispatch(id: string, original: NonNullable<PendingRequest["original"]>, signal: AbortSignal) {
     try { return await assistantApi.send(id, original, signal) }
@@ -281,7 +293,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
   }
   function resetConversation() {
     setConversation(null)
-    setBooking(null)
+    stopBookingPreview()
     setHasSavedChat(false)
     setMessages([])
     setHistoryCursor(null)
@@ -383,7 +395,7 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
               <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--card)] text-[var(--primary)]"><UntitledIcon name="sparkles" size={15} /></span>
               <div className="min-w-0 max-w-[86%] space-y-2 break-words rounded-2xl rounded-tl-sm bg-[var(--card)] px-3.5 py-2.5 leading-relaxed">
                 <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                <MessageCards message={message} disabled={!enabled || busy || Boolean(pending)} detail={id => send(`reservation details ${id}`)} />
+                <MessageCards message={message} disabled={!enabled || busy || Boolean(pending) || Boolean(booking)} detail={id => send(`reservation details ${id}`)} />
                 {message.sources.map(record).filter(source => source.status !== "withdrawn" && typeof source.excerpt === "string").map((source, index) =>
                   <details key={index}><summary>{label(source.title)}</summary><p className="whitespace-pre-wrap break-words">{label(source.excerpt)}</p></details>)}
               </div>
@@ -401,8 +413,11 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
                     : "Chưa đủ ngày giờ"}</dd></div>
             </dl>
             <p>{booking.reply}</p>
-            <p className="text-xs text-[var(--muted)]">Thông tin nhập trong phiên này. Xe, bãi và chỗ trống đang chờ xác minh.</p>
-            <button type="button" className="min-h-11 underline" onClick={() => setBooking(null)}>Bỏ bản nháp</button>
+            <p className="text-xs text-[var(--muted)]">Bản nháp lưu trong phiên chat. Khi đặt chỗ, hãy nhập thông tin trên form để kiểm tra và xác nhận.</p>
+            <button type="button" className="min-h-11 underline" onClick={() => {
+              stopBookingPreview()
+              setNotice("")
+            }}>Bỏ bản nháp</button>
           </article>}
           {busy && <p role="status">Đang tải…</p>}
           {notice && <p role="alert">{notice}</p>}
@@ -413,10 +428,23 @@ function DriverChatSession({ generation, pendingQuestion, onUseQuestion, allowBo
               onClick={() => recover("resend")}>Gửi lại cùng mã</button>}
           </div>}
         </div>
-        <form className="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--bg)] p-3" onSubmit={event => { event.preventDefault(); send(input) }}>
-          <input aria-label="Câu hỏi" placeholder="Nhập câu hỏi…" className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]" maxLength={4000}
-            disabled={!enabled || Boolean(pending)} value={input} onChange={event => setInput(event.target.value)} />
-          <button type="submit" aria-label="Gửi" className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--primary)] text-[var(--primary-fg)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-40" disabled={!enabled || busy || Boolean(pending) || !input.trim()}>
+        {!booking && allowBookingPreview && enabled && <button type="button" className="min-h-11 self-start px-4 text-xs underline disabled:opacity-40"
+          disabled={busy || Boolean(pending)} onClick={() => {
+            if (active.current || generation !== getAuthSessionGeneration()) return
+            setBooking(beginBookingPreview())
+            setNotice("")
+          }}>Tạo bản nháp</button>}
+        <form className="flex shrink-0 items-center gap-2 border-t border-[var(--border)] bg-[var(--bg)] p-3" onSubmit={event => {
+          event.preventDefault()
+          if (booking) updateBookingPreview()
+          else send(input)
+        }}>
+          <input aria-label={booking ? "Thông tin bản nháp" : "Câu hỏi"} placeholder={booking ? "Nhập thông tin bản nháp…" : "Nhập câu hỏi…"} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-[var(--primary)]" maxLength={4000}
+            disabled={!enabled || Boolean(pending)} value={booking ? bookingInput : input} onChange={event => {
+              if (booking) setBookingInput(event.target.value)
+              else setInput(event.target.value)
+            }} />
+          <button type="submit" aria-label={booking ? "Cập nhật bản nháp" : "Gửi"} className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--primary)] text-[var(--primary-fg)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-40" disabled={!enabled || busy || Boolean(pending) || !(booking ? bookingInput : input).trim()}>
             <UntitledIcon name="arrow-right" size={18} />
           </button>
         </form>

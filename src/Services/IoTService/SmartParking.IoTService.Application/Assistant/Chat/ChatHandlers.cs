@@ -104,28 +104,38 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
     }
     private async Task<GuestReply> Answer(ChatScope scope, Conversation conversation, SendChat input, ChatSnapshot snapshot, CancellationToken ct)
     {
-        var locale = AnswerLanguage.Detect(input.Message!, conversation.Locale);
         var questionText = AnswerLanguage.Question(input.Message!);
-        if (ConversationSummary.Matches(questionText))
-            return ConversationSummary.Reply(await store.Context(scope, conversation.Id, ct), locale);
-        if (PublicQuestionPatterns.Match(questionText) == "vehicle-navigation")
-            return new(Guid.Empty, "system", "answered", PublicQuestionPatterns.VehicleNavigationReply(locale == "en"), [], [], []);
-        var read = scope.Role == "driver" ? await reads.TryAnswer(scope.AccountId, conversation with { Locale = locale }, input.ClientMessageId, questionText, async token =>
-        {
-            if (!await store.DispatchAllowed(scope, conversation.Id, input.ClientMessageId, token)) throw new OperationCanceledException(token);
-            if (await readiness.Require(token) != snapshot) throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
-            if (!await store.DispatchAllowed(scope, conversation.Id, input.ClientMessageId, token)) throw new OperationCanceledException(token);
-            // Readiness may have awaited publication after reading settings; close that preparation window.
-            var freshSettings = await settings.ReadAsync(token).WaitAsync(token);
-            if (!freshSettings.Enabled) throw new ChatFailure(503, "ASSISTANT_DISABLED");
-            if (freshSettings.Revision != snapshot.SettingsRevision) throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
-            token.ThrowIfCancellationRequested();
-        }, ct) : null;
-        if (read is not null) return read;
+        var readText = ReadTools.Normalize(input.Message!);
+        var locale = AnswerLanguage.Detect(input.Message!,
+            ParkingSearch.IsVietnameseRequest(readText) ? "vi" : conversation.Locale);
+        var en = locale == "en";
         var corpus = await knowledge.ReadAsync(ct).WaitAsync(ct) ?? throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
         string intent;
         using (metrics?.Start("faq_retrieval"))
-            intent = GuestIntents.Classify(input.Message!, corpus.Articles);
+            intent = GuestIntents.Resolve(input.Message!, corpus.Articles);
+        if (GuestIntents.LocalReply(intent, Guid.Empty, en, scope.Role) is { } local) return local;
+        if (ConversationSummary.Matches(questionText))
+            return ConversationSummary.Reply(await store.Context(scope, conversation.Id, ct), locale);
+        if (intent == "vehicle-navigation")
+            return new(Guid.Empty, "system", "answered", PublicQuestionPatterns.VehicleNavigationReply(en), [], [], []);
+        if (scope.Role != "driver" && ReadTools.IsReservationRead(readText))
+            return BusinessDataHandoff.PersonalReservations(en);
+        if (scope.Role == "driver" && intent != "discovery-navigation" && ReadTools.CanRead(readText))
+            return await reads.Answer(scope.AccountId, conversation with { Locale = locale }, input.ClientMessageId, readText, async token =>
+            {
+                if (!await store.DispatchAllowed(scope, conversation.Id, input.ClientMessageId, token)) throw new OperationCanceledException(token);
+                if (await readiness.Require(token) != snapshot) throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
+                if (!await store.DispatchAllowed(scope, conversation.Id, input.ClientMessageId, token)) throw new OperationCanceledException(token);
+                // Readiness may have awaited publication after reading settings; close that preparation window.
+                var freshSettings = await settings.ReadAsync(token).WaitAsync(token);
+                if (!freshSettings.Enabled) throw new ChatFailure(503, "ASSISTANT_DISABLED");
+                if (freshSettings.Revision != snapshot.SettingsRevision) throw new ChatFailure(503, "RETRIEVAL_UNAVAILABLE");
+                token.ThrowIfCancellationRequested();
+            }, ct);
+        if (intent == "dynamic")
+            return new(Guid.Empty, "system", "clarification", en
+                ? "I cannot confirm live availability or prices for this request. Use Search Parking to search from your location and check the latest information."
+                : "Mình chưa xác nhận được chỗ trống hoặc giá hiện tại cho yêu cầu này. Bạn có thể dùng Search Parking để tìm từ vị trí của mình và kiểm tra thông tin mới nhất.", [], [], []);
         if (questionText.Trim().ToLowerInvariant() is "tell me more" or "explain more" or "nói rõ hơn" or "giải thích thêm")
         {
             var turns = await store.Context(scope, conversation.Id, ct);
@@ -138,7 +148,6 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
                 { intent = source.ArticleId; break; }
             }
         }
-        var en = locale == "en";
         if (GuestIntents.ParkingTimeGuidance(intent, en) is { } guidance)
             return new(Guid.Empty, "system", "clarification", guidance, [], [], []);
         var articleId = GuestIntents.ArticleId(intent);
@@ -158,7 +167,7 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
         var title = en ? article.TitleEn : article.TitleVi;
         var question = GuestIntents.CanonicalQuestion(intent) ?? title;
         var state = await settings.ReadAsync(ct).WaitAsync(ct);
-        var answer = (article.Id == "vehicle-guide" && (article.SourceLocale is null || article.SourceLocale == locale)) || ManagementRules.Candidates(state).Count == 0
+        var answer = GuestIntents.UsePublishedAnswer(intent, article, locale) || ManagementRules.Candidates(state).Count == 0
             ? await adapter.KnowledgeAsync(question, ct).WaitAsync(ct)
             : await generator.GenerateAsync(question, adapter, ct).WaitAsync(ct);
         if (string.IsNullOrWhiteSpace(answer.Reply) || answer.Reply.Length > 8000 || answer.Sources.Count > 1 ||
@@ -166,7 +175,8 @@ public sealed class ChatHandlers(ICurrentActor current, IChatStore store, IChatC
             throw new DemoGroundedUnavailableException(DemoGroundedFailure.InvalidResponse);
         return answer.Sources.Count == 0
             ? new(Guid.Empty, "system", "clarification", en ? "No supported answer is available." : "Chưa có câu trả lời đủ căn cứ.", [], [], [])
-            : new(Guid.Empty, answer.Mode == "knowledge" ? "knowledge" : "ai", "answered", answer.Reply,
+            : new(Guid.Empty, answer.Mode == "knowledge" ? "knowledge" : "ai", "answered",
+                answer.Mode == "knowledge" ? GuestIntents.KnowledgeContent(intent, answer.Reply, en) : answer.Reply,
                 [new(article.Id, corpus.Version, article.SourceLocale ?? locale, title, en ? article.En : article.Vi)], [], []);
     }
     public async Task<bool> Handle(ResetConversation request, CancellationToken ct)

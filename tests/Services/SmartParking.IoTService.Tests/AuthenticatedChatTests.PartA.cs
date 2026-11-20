@@ -73,6 +73,8 @@ public sealed partial class AuthenticatedChatTests
     [InlineData("admin", "Does SmartPark support cars and motorcycles?", "vehicle-guide")]
     [InlineData("owner", "Hãy trả lời bằng tiếng Anh: SmartPark hỗ trợ những loại xe nào?", "vehicle-guide")]
     [InlineData("driver", "Hướng dẫn tôi các bước đặt chỗ trên SmartPark.", "booking-guide")]
+    [InlineData("driver", "đặt chỗ sao", "booking-guide")]
+    [InlineData("owner", "đặt chỗ sao", "booking-guide")]
     [InlineData("admin", "Please show me the steps to book a parking spot on SmartPark.", "booking-guide")]
     public async Task PartAQaPromptsReachCanonicalPublicSourceAcrossRoles(string role, string question, string source)
     {
@@ -90,6 +92,31 @@ public sealed partial class AuthenticatedChatTests
         Assert.Equal(0, owner.Calls);
         Assert.Equal(source == "vehicle-guide" ? 0 : 1, f.Answers.Generations);
         Assert.Contains(source == "booking-guide" ? "từng bước có đánh số" : "SmartPark hỗ trợ", Assert.Single(f.Answers.Inputs));
+    }
+
+    [Theory]
+    [InlineData("driver", "Tui hủy chỗ đã đặt, lấy lại tiền được hông?", "cancellation-refund-guide")]
+    [InlineData("admin", "Quy trình Admin xét duyệt hồ sơ bãi đỗ thế nào?", "roles-and-partner-guide")]
+    [InlineData("owner", "Tôi muốn đăng ký làm chủ bãi.", "roles-and-partner-guide")]
+    public async Task RoleWorkflowFaqUsesPublishedGuidanceWithoutReadingBusinessRecords(string role, string question, string article)
+    {
+        var owner = new ReadOwner();
+        await using var fixture = await Fixture.Create(owner: owner);
+        fixture.Corpus.Value = PartAFaqTests.Corpus();
+        fixture.EnableProvider();
+        var token = fixture.Token(role: role);
+        var conversation = await fixture.Conversation(token: token);
+
+        var data = await fixture.Data(await fixture.Post($"/api/assistant/conversations/{conversation}/messages",
+            new { clientMessageId = Guid.NewGuid(), expectedRevision = 0, message = question }, token));
+
+        var answer = data.GetProperty("answer");
+        Assert.Equal("answered", answer.GetProperty("outcome").GetString());
+        var source = Assert.Single(answer.GetProperty("sources").EnumerateArray());
+        Assert.Equal(article, source.GetProperty("articleId").GetString());
+        Assert.Equal("0.4.1", source.GetProperty("version").GetString());
+        Assert.Empty(answer.GetProperty("cards").EnumerateArray());
+        Assert.Equal(0, owner.Calls);
     }
 
     [Theory]

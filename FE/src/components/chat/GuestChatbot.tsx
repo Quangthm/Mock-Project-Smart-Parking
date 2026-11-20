@@ -25,8 +25,8 @@ async function sendGuest(message: string, signal: AbortSignal, signedIn: boolean
   let reply = data.content
   if (loginRequired && signedIn) {
     reply = data.replyLocale === "en"
-      ? "Use the assistant on the Driver dashboard to view a Driver account’s vehicles and reservations."
-      : "Dùng trợ lý trong dashboard Driver để xem xe và lịch đặt của tài khoản Driver."
+      ? "Use your assigned workspace to access records or perform parking operations. For your own parking reservations, use a Driver account and select Current booking."
+      : "Dùng màn hình nghiệp vụ được phân công để tra cứu hoặc thao tác tại bãi. Với lịch đặt cá nhân, hãy dùng tài khoản Driver và chọn Current booking."
   }
   return { reply, mode, loginRequired: loginRequired && !signedIn }
 }
