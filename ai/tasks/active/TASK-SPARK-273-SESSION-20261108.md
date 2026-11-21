@@ -200,7 +200,7 @@ Local setup follow-up: documented a Windows PowerShell OpenSSL fallback and manu
 
 **Repository reference reviewed:** `feature/SPARK-273-driver-book-parking-ahead-of-arrival` at `8adf317304988098c51a948faad28a940b21667b`. **No GitHub/Jira writes, implementation, build, tests or deployment performed by this documentation update.**
 
-**User-approved architecture direction:** [11 November decision](../../../docs/05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) and [cross-team handoff](../../../docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md).
+**User-approved architecture direction:** [11 November decision](../../../docs/05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) and [cross-team handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md).
 
 1. Successful creation request terminates after the durable Operations `PENDING_PAYMENT` hold/claim/outbox; actual reservation remains pending until a separate Payment-collection consumer confirms. Preserve existing authorization and vehicle-binding workflow. Propose versioned request result token `HOLD_CREATED`; client compatibility still requires agreement.
 2. Retain versioned, immutable reviewed pricing/coverage terms. Merge commercial acceptance with one idempotent post-hold `EnsureOrder`, outside guarded Operations transaction. Payment owns tariff/deposit calculation and provider verification; Operations owns H, capacity and confirmation. Owner endpoint/wire names and quote storage remain contract details to agree.
@@ -350,13 +350,13 @@ Documentation checks passed for added relative links, JSON examples, FR/BR headi
 - Modified [docs/04-testing/postman/SPARK-273-manual-test-guide.md](<../../../docs/04-testing/postman/SPARK-273-manual-test-guide.md>)
 - Modified [docs/04-testing/reports/SPARK-273-deployment-checklist.md](<../../../docs/04-testing/reports/SPARK-273-deployment-checklist.md>)
 - Modified [docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md](<../../../docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md>)
-- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md>)
+- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md)
 - Modified [docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md>)
-- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md>)
-- Modified [docs/05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md>)
-- Modified [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md>)
-- Modified [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](<../../../docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md>)
-- Modified [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff>)
+- Modified [docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md)
+- Modified [docs/05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-completion-checklist.md)
+- Modified [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md)
+- Modified [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md)
+- Modified [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/SPARK-273%20%E2%80%94%20Reservation/PaymentServiceIntegrationHandoff)
 
 ## 18 November 2026 — Corrective Slice 1 review
 
@@ -369,7 +369,7 @@ Passed Git whitespace, changed relative links and anchors, JSON examples, FR/BR 
 ### Exact corrective documentation files
 
 - Created [docs/02-architecture/architecture-decisions/reservation-workflow-target.md](<../../../docs/02-architecture/architecture-decisions/reservation-workflow-target.md>). Document current workflow, sequence and states separately.
-- Created [docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md>). Separate paid collection evidence from future covered HTTP acceptance.
+- Created [docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md). Separate paid collection evidence from future covered HTTP acceptance.
 - Updated [docs/01-requirements/business-rules/04-reservations-allocation.md](<../../../docs/01-requirements/business-rules/04-reservations-allocation.md>). Separate paid recovery from covered expiry.
 - Updated [docs/01-requirements/business-rules/07-monthly-passes.md](<../../../docs/01-requirements/business-rules/07-monthly-passes.md>). Bind coverage to canonical plate and preserve Account context.
 - Updated [docs/01-requirements/srs/modules/04-reservations-allocation.md](<../../../docs/01-requirements/srs/modules/04-reservations-allocation.md>). Separate paid recovery from covered expiry.
@@ -385,11 +385,11 @@ Passed Git whitespace, changed relative links and anchors, JSON examples, FR/BR 
 - Updated [docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md](<../../../docs/04-testing/requirements-traceability/reservation-first-slice-scenarios.md>). Specify distinct paid event and covered expiry cases.
 - Updated [docs/05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md](<../../../docs/05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md>). Record the paid gate, covered expiry and slice split.
 - Updated [docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md>). Mark legacy execution guidance superseded and link the active contract.
-- Updated [docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md](<../../../docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md>). Mark legacy execution guidance superseded and link the active contract.
-- Updated [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](<../../../docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md>). Mark legacy execution guidance superseded and link the active contract.
-- Updated [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](<../../../docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md>). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-11-SPARK-273-implementation-alignment.md). Mark legacy execution guidance superseded and link the active contract.
 - Updated [docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md](<../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md>). List Slice 2 retirement touchpoints and migration gates.
-- Updated [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff>). Mark legacy execution guidance superseded and link the active contract.
+- Updated [docs/05-project-management/handoffs/SPARK-273 — Reservation/PaymentServiceIntegrationHandoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/SPARK-273%20%E2%80%94%20Reservation/PaymentServiceIntegrationHandoff). Mark legacy execution guidance superseded and link the active contract.
 - Updated this session record to capture verification and correction scope.
 
 ## 18 November 2026 — Slice 2 implementation
@@ -413,7 +413,7 @@ Facility resolves a slot using its existing guarded facts query. The plate revie
 | `ReservationDepositEvidence`, `VerifiedReservationCollection` legacy terms fields | TEMPORARILY RETAINED | The present confirmation checks bind booking, collection, quote and local terms. Retire only with compatible, independently verified Payment evidence and old message drainage. |
 | `reservation_terms`, FK `reservations.terms_id`, `terms_version`, `accepted_pricing_snapshot`, booking completeness CHECK, demo history seed | BLOCKED | The original SQL requires these fields for request-backed rows. The seed inserts referenced reviews. Owner-approved inventory and migration must cover pending orders, confirmed history and unsettled collections before physical retirement. No deployed data was inspected or changed. |
 
-The operational-policy snapshot, original Account and plate, capacity claim, H/T and legitimate booked/deposit amounts remain required. Own booking history projects durable booking amounts and plate without fetching current tariffs. The confirmed notification fact uses reservation/Account/tenant/site/time. Preserve these reads and in-flight serializers through the transition. See the [Payment owner's implementation handoff](../../../docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md).
+The operational-policy snapshot, original Account and plate, capacity claim, H/T and legitimate booked/deposit amounts remain required. Own booking history projects durable booking amounts and plate without fetching current tariffs. The confirmed notification fact uses reservation/Account/tenant/site/time. Preserve these reads and in-flight serializers through the transition. See the [Payment owner's implementation handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md).
 
 ### Verification checkpoint
 
@@ -491,7 +491,7 @@ All paths are repository-relative. The four pre-existing changes listed above ar
 
 ## 19 November 2026 — Slice 3 gated implementation
 
-The branch remains at `960aaef8742740f567008a8bf97a0133be6d950f`. See the [Slice 3 owner handoff and file inventory](../../../docs/05-project-management/handoffs/2026-11-19-SPARK-273-slice-3.md) for the Saga, admission isolation, same-site overlap, committed SignalR progress, recovery dispositions, test commands and remaining deployment gates.
+The branch remains at `960aaef8742740f567008a8bf97a0133be6d950f`. See the [Slice 3 owner handoff and file inventory](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-19-SPARK-273-slice-3.md) for the Saga, admission isolation, same-site overlap, committed SignalR progress, recovery dispositions, test commands and remaining deployment gates.
 
 Operations has 74 distinct passing cases across the final suite and its one targeted restart-test rerun. Facility passed 71, UserService passed 12 and frontend passed 20. Fresh PostgreSQL, RabbitMQ and an authenticated test WebSocket exercised the Operations path. Owner replies were controlled. Hard-crash boundaries, deployed ACLs and a real provider transaction remain unverified.
 
@@ -499,7 +499,7 @@ Production quote submission remains gated. Payment proof and consumption semanti
 
 ## 19 November 2026 — post-merge quote holds and guarded confirmation
 
-Baseline `f06ff1a9662d301e313f4846cc257814d3f87b22` on the SPARK-273 feature branch. The receipt and protected local hold now commit with the Operations EF outbox. Normal confirmation requires a checkpoint strictly before H. Verified paid money can compete again before T. Late zero-value acceptance goes to reconciliation. Production quote ingress and commercial evidence adapters remain gated. The [Slices 2 and 4 handoff](../../../docs/05-project-management/handoffs/2026-11-19-SPARK-273-slices-2-and-4.md) owns the current file inventory, checks, compatibility requirements and open owner decisions.
+Baseline `f06ff1a9662d301e313f4846cc257814d3f87b22` on the SPARK-273 feature branch. The receipt and protected local hold now commit with the Operations EF outbox. Normal confirmation requires a checkpoint strictly before H. Verified paid money can compete again before T. Late zero-value acceptance goes to reconciliation. Production quote ingress and commercial evidence adapters remain gated. The [Slices 2 and 4 handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-19-SPARK-273-slices-2-and-4.md) owns the current file inventory, checks, compatibility requirements and open owner decisions.
 
 ## 19 November 2026 · Payment authority and paired settlement
 
@@ -530,3 +530,7 @@ Source, EF and the owning initializer contain no separate collection event ID. T
 The fresh solution build passed. The first PostgreSQL fixture run passed Payment 273, Operations 83, and NotificationAudit 202 tests, with zero failures and six RabbitMQ-dependent skips. Payment exercised real competing writes, stale checkout concurrency, and SQL rollback of the collection and actual EF outbox or disposition. Prior regression reports are independent of this run.
 
 With the disposable RabbitMQ fixture, Payment passed 276/276 and the Facility reservation gate filter passed 8/8. The full Operations run passed 85/86 and timed out waiting for the broker delivery in `SignedQuoteOrderAndVerifiedTransfersReachGuardedConfirmation`. That test passed on an isolated rerun with the committed paid-state assertion and MassTransit warnings enabled. All 86 distinct Operations tests passed across the two runs. The isolated test exercised real broker redelivery, lookup retry, guarded confirmation, post-H financial settlement and additional disposition rollback/replay with a PayOS HTTP double. Merchant callback behavior and manual Postman remain unverified in this session. The disposable PostgreSQL and RabbitMQ services were stopped.
+
+## Reservation handoff consolidation
+
+Current handoffs are indexed in the [handoff README](../../../docs/05-project-management/handoffs/README.md). The three entry points cover the Driver frontend, reservation owners and Payment authority. Dated snapshots above preserve the context of earlier decisions and test runs.
