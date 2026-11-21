@@ -26,6 +26,7 @@ public class ProcessPayOsWebhookCommandHandlerTests
             _orderRepo,
             _txRepo,
             _invoiceRepo,
+            new FakeRefundRequestRepository(),
             _eventPublisher,
             _uow,
             NullLogger<ProcessPayOsWebhookCommandHandler>.Instance
@@ -51,6 +52,33 @@ public class ProcessPayOsWebhookCommandHandlerTests
 
         Assert.False(result.Success);
         Assert.Equal("INVALID_WEBHOOK_SIGNATURE", result.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("MOMO", "VND")]
+    [InlineData("PAYOS", "USD")]
+    public async Task Handle_VerifiedPayOsTransferCannotSettleAnOrderInAnotherMethodOrCurrency(string method, string currency)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _gatewayPort.CallbackResult = new(true, 123456, 25000, "LINK-123", "REF-123", "SUCCESS", now, "{}", now);
+        var order = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            OrderCode = "123456",
+            FinalAmount = 25000,
+            ReviewedMethod = method,
+            ReviewedCurrency = currency,
+            ExpiresAt = now.AddMinutes(5)
+        };
+        _orderRepo.Orders.Add(order);
+
+        var result = await CreateHandler().Handle(new ProcessPayOsWebhookCommand("{}", "valid-sig"), default);
+
+        Assert.False(result.Success);
+        Assert.Equal("COLLECTION_BINDING_CONFLICT", result.ErrorCode);
+        Assert.Equal(PaymentOrderStatus.PENDING, order.Status);
+        Assert.Empty(_txRepo.Transactions);
+        Assert.Empty(_eventPublisher.PublishedEvents);
     }
 
     [Fact]

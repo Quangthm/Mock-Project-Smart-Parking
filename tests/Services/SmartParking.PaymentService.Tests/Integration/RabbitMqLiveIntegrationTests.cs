@@ -377,6 +377,7 @@ public class RabbitMqLiveIntegrationTests
                 orderRepo,
                 txRepo,
                 invoiceRepo,
+                new FakeRefundRequestRepository(),
                 publisher,
                 uow,
                 NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

@@ -45,6 +45,7 @@ public class GetPaymentStatusQueryHandlerOutboxTests
             _orderRepo,
             _txRepo,
             _invoiceRepo,
+            new FakeRefundRequestRepository(),
             _eventPublisher,
             _uow,
             NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

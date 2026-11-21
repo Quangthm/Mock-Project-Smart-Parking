@@ -10,6 +10,12 @@ namespace SmartParking.FacilityService.Persistence;
 
 public sealed class ReservationDependencyRepository(ParkingDbContext db) : IReservationDependencyRepository
 {
+    public Task<Guid?> FindSlotSiteAsync(Guid slotId, CancellationToken ct) =>
+        db.ParkingSlotsFull.AsNoTracking()
+            .Where(slot => slot.Id == slotId && slot.DeletedAt == null)
+            .Select(slot => (Guid?)slot.SiteId)
+            .SingleOrDefaultAsync(ct);
+
     public async Task LockAsync(Guid token, Guid siteId, CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is null) throw new InvalidOperationException("Dependency requires the owning UoW transaction.");

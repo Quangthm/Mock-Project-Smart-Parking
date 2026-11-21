@@ -110,6 +110,7 @@ public sealed class OwnReservationReadHttpTests
             return Task.FromResult<IReadOnlyList<BookingReadResult>>(rows.Select(r => new BookingReadResult(r, null, null, null)).ToArray());
         }
         public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct) => throw new NotSupportedException();
         public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();

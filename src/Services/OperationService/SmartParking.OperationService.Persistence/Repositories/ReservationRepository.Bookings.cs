@@ -8,6 +8,9 @@ namespace SmartParking.OperationService.Persistence.Repositories;
 
 public sealed partial class ReservationRepository
 {
+    public Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct) =>
+        db.Reservations.AnyAsync(row => row.QuoteId == quoteId, ct);
+
     public async Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is null || string.IsNullOrWhiteSpace(proposed.NormalizedPlate))
@@ -20,7 +23,7 @@ public sealed partial class ReservationRepository
             (r.Status == "PARKING" ||
                 r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now) ||
                 r.Status == "CONFIRMED" || r.Status == "ALLOCATED") &&
-            (r.Status == "PARKING" || r.ExpectedStartTime < claimEnd &&
+            (r.Status == "PARKING" || r.SiteId == proposed.SiteId && r.ExpectedStartTime < claimEnd &&
                 (r.ClaimEndTime ?? r.ExpectedEndTime) > proposed.ExpectedStartTime), ct))
             throw new ReservationGateException(409, "VEHICLE_TIME_CONFLICT", "This plate already has a conflicting booking or physical visit.");
     }
@@ -116,14 +119,14 @@ public sealed partial class ReservationRepository
 
     public async Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) =>
         await db.Reservations.AsNoTracking().Where(r =>
-                r.DepositAmount == 0 && r.ConfirmationState == "PENDING" &&
+                r.DepositAmount == 0 && (r.ConfirmationState == "PENDING" || r.ConfirmationState == "RECONCILIATION_REQUIRED") &&
                 r.ConfirmationNextActionAt <= now && r.ConfirmationEvaluatedAt == null)
             .OrderBy(r => r.ConfirmationNextActionAt).ThenBy(r => r.Id)
             .Select(r => r.Id).Take(take).ToListAsync(ct);
 
     public async Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) =>
         await db.Reservations.AsNoTracking().Where(r =>
-                r.DepositAmount > 0 && r.CollectionId != null && r.ConfirmationState == "PENDING" &&
+                r.DepositAmount > 0 && r.CollectionId != null && (r.ConfirmationState == "PENDING" || r.ConfirmationState == "RECONCILIATION_REQUIRED") &&
                 r.ConfirmationNextActionAt <= now && r.ConfirmationEvaluatedAt == null)
             .OrderBy(r => r.ConfirmationNextActionAt).ThenBy(r => r.Id)
             .Select(r => r.Id).Take(take).ToListAsync(ct);

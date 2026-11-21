@@ -15,7 +15,14 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     operation TEXT NOT NULL CHECK (operation = 'CREATE_RESERVATION'),
     intent_json JSONB NOT NULL,
     fingerprint TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
+    progress_version BIGINT NOT NULL DEFAULT 1 CHECK (progress_version > 0),
+    account_check TEXT,
+    plate_check TEXT,
+    slot_check TEXT,
+    resolved_site_id UUID,
+    resolved_tenant_id UUID,
+    facility_version TEXT,
+    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,
     overall_deadline TIMESTAMPTZ NOT NULL,
@@ -37,7 +44,12 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     CHECK (admitted_at < overall_deadline)
 );
 CREATE INDEX IF NOT EXISTS ix_reservation_requests_due ON reservation_requests(next_action_at, id)
-    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING');
+    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING');
+
+CREATE TABLE IF NOT EXISTS reservation_admission_sagas (
+    correlation_id UUID PRIMARY KEY REFERENCES reservation_requests(id),
+    current_state TEXT NOT NULL
+);
 
 -- Review snapshots are immutable; acceptance binds each review to one workflow.
 CREATE TABLE IF NOT EXISTS reservation_terms (
@@ -289,6 +301,14 @@ CREATE TABLE IF NOT EXISTS reservations (
     vehicle_id UUID,
     terms_id UUID REFERENCES reservation_terms(id),
     terms_version TEXT,
+    quote_id UUID UNIQUE,
+    quote_version TEXT,
+    quote_valid_until TIMESTAMPTZ,
+    tariff_version TEXT,
+    coverage_version TEXT,
+    is_covered BOOLEAN,
+    covered_amount NUMERIC(18,2),
+    zero_receipt_id UUID UNIQUE,
     selected_payment_method TEXT,
     booked_amount NUMERIC(18,2) CHECK (booked_amount >= 0),
     deposit_amount NUMERIC(18,2) CHECK (deposit_amount >= 0),
@@ -309,6 +329,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     confirmation_next_action_at TIMESTAMPTZ,
     confirmation_code TEXT,
     collection_id UUID UNIQUE,
+    collection_fingerprint TEXT,
     confirmation_effect_id UUID UNIQUE,
     confirmation_evaluated_at TIMESTAMPTZ,
     claim_end_time TIMESTAMPTZ,
@@ -336,14 +357,19 @@ CREATE TABLE IF NOT EXISTS reservations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (expected_end_time > expected_start_time),
     CHECK (claim_end_time IS NULL OR claim_end_time >= expected_end_time),
-    CHECK (request_id IS NULL OR (vehicle_id IS NOT NULL AND normalized_plate IS NOT NULL AND
-        terms_id IS NOT NULL AND terms_version IS NOT NULL AND booked_amount IS NOT NULL AND
-        deposit_amount IS NOT NULL AND currency IS NOT NULL AND currency = 'VND' AND accepted_pricing_snapshot IS NOT NULL AND
-        accepted_operational_policy_snapshot IS NOT NULL)),
+    CHECK (request_id IS NULL OR (normalized_plate IS NOT NULL AND booked_amount IS NOT NULL AND
+        deposit_amount IS NOT NULL AND currency IS NOT NULL AND currency = 'VND' AND accepted_operational_policy_snapshot IS NOT NULL AND
+        ((quote_id IS NULL AND vehicle_id IS NOT NULL AND terms_id IS NOT NULL AND terms_version IS NOT NULL AND accepted_pricing_snapshot IS NOT NULL)
+         OR (quote_id IS NOT NULL AND vehicle_id IS NULL AND terms_id IS NULL AND terms_version IS NULL AND accepted_pricing_snapshot IS NULL
+             AND quote_version IS NOT NULL AND quote_valid_until IS NOT NULL AND created_at < quote_valid_until
+             AND coverage_version IS NOT NULL AND tariff_version IS NOT NULL AND selected_payment_method IS NOT NULL
+             AND target_slot_id IS NOT NULL AND hold_expires_at IS NOT NULL AND created_at < hold_expires_at AND hold_expires_at <= expected_start_time
+             AND is_covered IS NOT NULL AND covered_amount IS NOT NULL AND covered_amount = CASE WHEN is_covered THEN booked_amount ELSE 0 END AND booked_amount = deposit_amount + covered_amount)))),
     CHECK (request_id IS NULL OR status NOT IN ('CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED') OR
         (confirmation_evaluated_at IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_at = confirmation_evaluated_at AND confirmed_at < expected_start_time AND confirmation_effect_id IS NOT NULL)),
     CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL)),
-    CONSTRAINT no_overlapping_reservations_per_vehicle EXCLUDE USING gist (
+    CONSTRAINT no_overlapping_reservations_per_site_plate EXCLUDE USING gist (
+        site_id WITH =,
         normalized_plate WITH =,
         tstzrange(expected_start_time, COALESCE(claim_end_time, expected_end_time), '[)') WITH &&
     ) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))
@@ -357,7 +383,7 @@ CREATE INDEX IF NOT EXISTS ix_reservations_order_provisioning_due
     WHERE order_provisioning_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
 CREATE INDEX IF NOT EXISTS ix_reservations_no_payment_confirmation_due
     ON reservations(confirmation_next_action_at, id)
-    WHERE deposit_amount = 0 AND confirmation_state = 'PENDING';
+    WHERE deposit_amount = 0 AND confirmation_state IN ('PENDING', 'RECONCILIATION_REQUIRED');
 CREATE INDEX IF NOT EXISTS ix_reservations_zero_price_acceptance_due
     ON reservations(zero_price_acceptance_next_action_at, id)
     WHERE deposit_amount = 0 AND zero_price_acceptance_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');

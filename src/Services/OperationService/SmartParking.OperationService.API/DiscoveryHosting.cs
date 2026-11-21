@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.DataProtection;
 using SmartParking.OperationService.Application.Discovery;
@@ -9,25 +7,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace SmartParking.OperationService.API;
-
-public sealed class DiscoveryCursors(IDataProtectionProvider provider) : IDiscoveryCursors
-{
-    private readonly IDataProtector protector = provider.CreateProtector("Operations.PublicDiscovery.Cursor.v1");
-    public string Encode(DiscoveryCursor value) => protector.Protect(JsonSerializer.Serialize(value));
-    public DiscoveryCursor Decode(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 2048) throw new DiscoveryFailure(400, "INVALID_CURSOR");
-        try
-        {
-            return JsonSerializer.Deserialize<DiscoveryCursor>(protector.Unprotect(value))
-                ?? throw new DiscoveryFailure(400, "INVALID_CURSOR");
-        }
-        catch (Exception e) when (e is CryptographicException or FormatException or JsonException)
-        {
-            throw new DiscoveryFailure(400, "INVALID_CURSOR");
-        }
-    }
-}
 
 public static class DiscoveryHosting
 {
@@ -88,19 +67,9 @@ public static class DiscoveryHosting
         app.MapGet("/api/parking-search", async (HttpContext ctx, IMediator mediator) =>
         {
             ctx.Response.Headers.CacheControl = "no-store";
-            try
-            {
-                var query = Parse(ctx.Request);
-                var data = await mediator.Send(query, ctx.RequestAborted);
-                return Results.Json(new { success = true, data, traceId = ctx.TraceIdentifier });
-            }
-            catch (DiscoveryFailure error)
-            {
-                if (error.RetryAfter is int seconds) ctx.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
-                return Error(ctx, error.Status, error.Code);
-            }
-            catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested) { throw; }
-            catch (Exception) { return Error(ctx, 500, "INTERNAL_ERROR"); }
+            var query = Parse(ctx.Request);
+            var data = await mediator.Send(query, ctx.RequestAborted);
+            return Results.Json(new { success = true, data, traceId = ctx.TraceIdentifier });
         }).AllowAnonymous().RequireRateLimiting("parking-search");
     }
     private static IResult Error(HttpContext ctx, int status, string code) => Results.Json(new

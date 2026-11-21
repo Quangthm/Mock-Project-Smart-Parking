@@ -38,7 +38,14 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             return false;
         var result = (Status: 500, Code: "INTERNAL_ERROR", Message: "An unexpected error occurred.");
         object? errors = null;
-        if (exception is ValidationException validation)
+        if (exception is SmartParking.OperationService.Application.Discovery.DiscoveryFailure discovery)
+        {
+            if (discovery.RetryAfter is int seconds)
+                context.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            result = (discovery.Status, discovery.Code, "Parking search could not be completed.");
+            errors = Array.Empty<object>();
+        }
+        else if (exception is ValidationException validation)
         {
             var primaryError = validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_TIME_DURATION")
                 ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_ACTIVATION_SCHEDULE")
@@ -61,6 +68,7 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             && (context.Request.Path.StartsWithSegments("/api/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))

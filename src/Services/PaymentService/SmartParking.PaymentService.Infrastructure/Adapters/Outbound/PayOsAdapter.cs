@@ -274,6 +274,13 @@ public class PayOsAdapter : IPaymentGatewayPort
             string code = root.TryGetProperty("code", out var codeEl) ? codeEl.GetString() ?? "" : "";
 
             var status = (isValid && code == "00") ? "SUCCESS" : "FAILED";
+            DateTimeOffset? transferTime = null;
+            if (isValid && HasLiveCredentials() && dataEl.TryGetProperty("code", out var signedCode) &&
+                signedCode.GetString() == "00" && dataEl.TryGetProperty("currency", out var currency) &&
+                currency.GetString() == "VND" && dataEl.TryGetProperty("transactionDateTime", out var timestamp) &&
+                DateTime.TryParseExact(timestamp.GetString(), "yyyy-MM-dd HH:mm:ss",
+                    System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var local))
+                transferTime = new DateTimeOffset(local, TimeSpan.FromHours(7)).ToUniversalTime();
 
             return Task.FromResult(new PaymentCallbackResult(
                 IsValidSignature: isValid,
@@ -281,6 +288,7 @@ public class PayOsAdapter : IPaymentGatewayPort
                 AmountVnd: amount,
                 GatewayTransactionId: paymentLinkId,
                 BankReference: reference,
+                VerifiedTransferTime: transferTime,
                 PaymentStatus: status,
                 TransactionTime: DateTimeOffset.UtcNow,
                 RawPayload: rawPayload

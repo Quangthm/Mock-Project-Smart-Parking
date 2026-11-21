@@ -8,6 +8,7 @@ public class ReservationQuote
     public Guid TenantId { get; set; }
     public Guid SiteId { get; set; }
     public Guid AccountId { get; set; }
+    public string? ReviewedEvidence { get; init; }
     public Guid? VehicleId { get; set; }
     public Guid? RequestedSlotId { get; set; }
     public DateTimeOffset StartTime { get; set; }

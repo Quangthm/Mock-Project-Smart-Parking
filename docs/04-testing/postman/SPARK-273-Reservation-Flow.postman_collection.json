@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "95ef8f73-2730-4bb5-bf11-2ea005a770c4",
     "name": "SPARK-273 Reservation Flow",
-    "description": "Manual reservation flow against the implemented Operations routes. Operations calls real Payment preview/quote/order endpoints; zero-price acceptance and reconciliation remain fail-closed. Paid confirmation consumes generic PaymentSucceededV1 with persisted accepted-order validation (open deviation from the proposed dedicated collection event). Live Payment/Facility/broker verification remains pending. No mock or demo-payment route is used.",
+    "description": "Manual Driver-to-PENDING_PAYMENT workflow with live Payment order readiness. Send each request individually. Review the exact quote before entering acceptedQuoteId. Payment is outside this suite.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -15,79 +15,51 @@
       }
     ]
   },
-  "variable": [
-    { "key": "operationBaseUrl", "value": "http://localhost:5055" },
-    { "key": "paymentBaseUrl", "value": "http://localhost:5065" }
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Send requests manually. Customer consent and asynchronous reads are separate checkpoints.",
+          "pm.execution.setNextRequest(null);",
+          "const name = pm.info.requestName;",
+          "if (name !== '00.2 Driver login' && !pm.environment.get('driverToken')) {",
+          "    pm.execution.skipRequest();",
+          "    throw new Error('Run 00.2 Driver login first.');",
+          "}"
+        ]
+      }
+    }
   ],
   "item": [
     {
-      "name": "01 - Review and create",
+      "name": "00 – Driver authentication",
       "item": [
         {
-          "name": "01.1 - Server price preview",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\"\n}"
-            },
-            "url": "{{operationBaseUrl}}/api/reservation-price-previews"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Preview uses the live Operations response', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "pm.test('Preview contains authoritative versioned pricing', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.pricingVersion).to.be.a('string').and.not.empty; });",
-                  "if (body.data) { pm.environment.set('previewBookedAmount', body.data.bookedAmount); pm.environment.set('previewDepositAmount', body.data.depositAmount); pm.environment.set('previewCurrency', body.data.currency); pm.environment.set('previewPricingVersion', body.data.pricingVersion); }"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "01.2 - Review and capture exact terms",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\"\n}"
-            },
-            "url": "{{operationBaseUrl}}/api/reservation-terms"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Terms review returns a successful live response', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "pm.test('Terms bind quote, version, expiry and amounts', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.termsId).to.be.a('string'); pm.expect(body.data.termsVersion).to.be.a('string'); pm.expect(body.data.commercial.quoteId).to.be.a('string'); pm.expect(body.data.commercial.version).to.be.a('string'); });",
-                  "if (body.data) { pm.environment.set('termsId', body.data.termsId); pm.environment.set('termsVersion', body.data.termsVersion); pm.environment.set('quoteId', body.data.commercial.quoteId); pm.environment.set('pricingVersion', body.data.commercial.version); pm.environment.set('termsValidUntil', body.data.validUntil); pm.environment.set('acceptedBookedAmount', body.data.commercial.bookedAmount); pm.environment.set('acceptedDepositAmount', body.data.commercial.depositAmount); pm.environment.set('acceptedCurrency', body.data.commercial.currency); }"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "01.3 - Create reservation (stable idempotency key)",
+          "name": "00.2 Driver login",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{reservationIdempotencyKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{termsId}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}"
+              "raw": "{{requestJson}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": "{{operationBaseUrl}}/api/reservation-requests"
+            "url": "{{userBaseUrl}}/api/auth/login",
+            "description": "Enter local credentials. If configured, supply a real Turnstile token. A challenge cannot authenticate later requests."
           },
           "event": [
             {
@@ -95,7 +67,17 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.environment.get('reservationIdempotencyKey')) pm.environment.set('reservationIdempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                  "const env = pm.environment;",
+                  "",
+                  "env.unset('driverToken');",
+                  "env.unset('driverAccountId');",
+                  "env.unset('driverUserId');",
+                  "const email = env.get('driverEmail');",
+                  "const password = env.get('driverPassword');",
+                  "if (!email || !password) { pm.execution.skipRequest(); throw new Error('Set local Driver credentials.'); }",
+                  "const login = {email, password};",
+                  "if (env.get('driverTurnstileToken')) login.turnstileToken = env.get('driverTurnstileToken');",
+                  "pm.variables.set('requestJson', JSON.stringify(login));"
                 ]
               }
             },
@@ -104,28 +86,43 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Creation is durably admitted', function () { pm.response.to.have.status(202); });",
-                  "const body = pm.response.json();",
-                  "pm.test('Receipt is versioned and not a confirmation', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.contractVersion).to.eql(2); pm.expect(body.data.state).to.be.oneOf(['PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED']); });",
-                  "if (body.data) { pm.environment.set('requestId', body.data.requestId); if (body.data.reservationId) pm.environment.set('reservationId', body.data.reservationId); pm.environment.set('receiptState', body.data.state); }"
+                  "pm.test('UserService accepts the sign-in request', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "if (response.mfaRequired === true) {",
+                  "    throw new Error('MFA is required. Complete the existing MFA login flow as described in the guide.');",
+                  "}",
+                  "pm.test('Login returned a complete session', () => pm.expect(response.mfaRequired).to.eql(false));",
+                  "const token = data.accessToken;",
+                  "if (response.mfaRequired !== false || typeof token !== 'string' || token.split('.').length !== 3) {",
+                  "    throw new Error('No usable access token was returned.');",
+                  "}",
+                  "// Decode only for correlation. The services validate the signature and authorize requests.",
+                  "const Buffer = require('buffer').Buffer;",
+                  "const claims = JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));",
+                  "const driver = claims.role === 'driver' && isId(claims.sub) && isId(claims.account_id) &&",
+                  "    Number.isFinite(claims.exp) && claims.exp * 1000 > Date.now();",
+                  "pm.test('Complete session carries the Driver Account and user', () => pm.expect(driver).to.eql(true));",
+                  "if (!driver) throw new Error('Sign in with an eligible Driver Account.');",
+                  "env.set('driverToken', token);",
+                  "env.set('driverAccountId', claims.account_id);",
+                  "env.set('driverUserId', claims.sub);"
                 ]
               }
             }
           ]
         },
         {
-          "name": "01.4 - Replay same create (must not duplicate)",
+          "name": "00.3 Verify Driver identity",
           "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{reservationIdempotencyKey}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{end}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{termsId}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}"
-            },
-            "url": "{{operationBaseUrl}}/api/reservation-requests"
+            "method": "GET",
+            "header": [],
+            "url": "{{userBaseUrl}}/api/auth/me",
+            "description": "Verify the signed-in user and Driver role with the owning identity API."
           },
           "event": [
             {
@@ -133,10 +130,13 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Idempotent replay is accepted', function () { pm.response.to.have.status(202); });",
-                  "const body = pm.response.json();",
-                  "pm.test('Replay returns the original request identity', function () { pm.expect(body.data.requestId).to.eql(pm.environment.get('requestId')); });",
-                  "pm.environment.set('replayRequestId', body.data.requestId);"
+                  "pm.test('Driver profile is available', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "pm.test('Profile matches signed-in Driver', () => pm.expect(data.role === 'driver' && data.userId === env.get('driverUserId')).to.eql(true));"
                 ]
               }
             }
@@ -145,13 +145,15 @@
       ]
     },
     {
-      "name": "02 - Observe independent workflows",
+      "name": "01 – Vehicle and reservation setup",
       "item": [
         {
-          "name": "02.1 - Read creation receipt",
+          "name": "01.1 Resolve registered CAR",
           "request": {
             "method": "GET",
-            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}"
+            "header": [],
+            "url": "{{userBaseUrl}}/api/vehicles",
+            "description": "If the account has several registered cars, enter the canonical plate of the car you intend to use and resend this request."
           },
           "event": [
             {
@@ -159,165 +161,22 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Receipt read succeeds', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "pm.environment.set('receiptState', body.data.state);",
-                  "if (body.data.reservationId) pm.environment.set('reservationId', body.data.reservationId);",
-                  "pm.test('Hold receipt is distinct from confirmed lifecycle', function () { pm.expect(body.data.state).to.be.oneOf(['PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY']); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02.2 - Read own reservation (authoritative state and H)",
-          "request": {
-            "method": "GET",
-            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Own reservation read succeeds', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "const data = body.data;",
-                  "pm.environment.set('reservationState', data.state);",
-                  "if (data.holdExpiresAt) pm.environment.set('holdExpiresAt', data.holdExpiresAt);",
-                  "if (data.orderId) pm.environment.set('paymentOrderId', data.orderId);",
-                  "pm.environment.set('orderProvisioningState', data.orderProvisioningState);",
-                  "pm.environment.set('zeroPriceAcceptanceState', data.zeroPriceAcceptanceState);",
-                  "pm.test('Only Operations status establishes confirmation', function () { pm.expect(data.state).to.be.oneOf(['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED', 'CANCELLED', 'UNFULFILLABLE']); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02.3 - Read Payment invoice for a real order (skip until order exists)",
-          "request": {
-            "method": "GET",
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{paymentDriverToken}}", "type": "string" }]
-            },
-            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{paymentOrderId}}/invoice"
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": ["if (!pm.environment.get('paymentOrderId')) pm.execution.skipRequest();"]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Payment order invoice is read independently', function () { pm.response.to.have.status(200); });",
-                  "pm.environment.set('paymentInvoice', pm.response.text());"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02.4 - Initiate real Payment checkout (skip until real order exists)",
-          "request": {
-            "method": "POST",
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{paymentDriverToken}}", "type": "string" }]
-            },
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{checkoutIdempotencyKey}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"PAYOS\",\n  \"returnUrl\": \"{{paymentReturnUrl}}\",\n  \"cancelUrl\": \"{{paymentCancelUrl}}\"\n}"
-            },
-            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{paymentOrderId}}/checkout"
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (!pm.environment.get('paymentOrderId')) pm.execution.skipRequest();",
-                  "if (!pm.environment.get('checkoutIdempotencyKey')) pm.environment.set('checkoutIdempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Payment returns a real checkout response', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "pm.test('Checkout response contains provider transaction identity', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.paymentTransactionId).to.be.a('string'); pm.expect(body.data.checkoutUrl).to.be.a('string'); });",
-                  "if (body.data) { pm.environment.set('paymentTransactionId', body.data.paymentTransactionId); pm.environment.set('paymentCheckoutUrl', body.data.checkoutUrl); pm.environment.set('paymentTransactionStatus', body.data.status); }"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02.5 - Read Payment transaction status independently",
-          "request": {
-            "method": "GET",
-            "auth": {
-              "type": "bearer",
-              "bearer": [{ "key": "token", "value": "{{paymentDriverToken}}", "type": "string" }]
-            },
-            "url": "{{paymentBaseUrl}}/api/v1/payments/transactions/{{paymentTransactionId}}/status"
-          },
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": ["if (!pm.environment.get('paymentTransactionId')) pm.execution.skipRequest();"]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Payment status read succeeds independently', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "pm.environment.set('paymentTransactionStatus', body.data.status);",
-                  "pm.environment.set('paymentStatusAuthoritative', body.data.isAuthoritative);",
-                  "pm.test('Payment status alone is not reservation confirmation', function () { pm.expect(body.data.status).to.be.a('string'); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "02.6 - Re-read reservation; confirm only from Operations state",
-          "request": {
-            "method": "GET",
-            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Reservation is read from Operations after payment', function () { pm.response.to.have.status(200); });",
-                  "const data = pm.response.json().data;",
-                  "pm.environment.set('reservationState', data.state);",
-                  "if (data.state === 'CONFIRMED') pm.environment.set('confirmedAt', data.confirmedAt);",
-                  "pm.test('Reservation remains pending until backend commits confirmation', function () { pm.expect(data.state).to.be.oneOf(['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED', 'CANCELLED', 'UNFULFILLABLE']); });"
+                  "pm.test('UserService returns the Driver vehicle list', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "pm.test('Vehicle result is an array', () => pm.expect(Array.isArray(data)).to.eql(true));",
+                  "if (!Array.isArray(data)) throw new Error('Missing vehicle list.');",
+                  "const cars = data.filter(v => v.vehicleType === 'CAR' && isId(v.id) && /^[A-Z0-9]+$/.test(v.canonicalPlate));",
+                  "const selected = env.get('licensePlate');",
+                  "const eligible = selected ? cars.find(v => v.canonicalPlate === selected) : cars.length === 1 ? cars[0] : null;",
+                  "pm.test('A canonical plate is selected from the registered CAR list', () => pm.expect(Boolean(eligible)).to.eql(true));",
+                  "if (!eligible) throw new Error('Choose an eligible registered CAR and enter its canonical plate.');",
+                  "env.set('licensePlate', eligible.canonicalPlate);",
+                  "env.set('selectedCarPlate', eligible.canonicalPlate);"
                 ]
               }
             }
@@ -326,71 +185,127 @@
       ]
     },
     {
-      "name": "03 - Negative and recovery checks",
+      "name": "02 – Commercial quote review",
       "item": [
         {
-          "name": "03.1 - Same key with changed intent (expect 409)",
+          "name": "02.1 Review Payment quote",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{reservationIdempotencyKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vehicleId\": \"{{vehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{start}}\",\n  \"end\": \"{{differentEnd}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{termsId}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}"
+              "raw": "{{requestJson}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": "{{operationBaseUrl}}/api/reservation-requests"
+            "url": "{{operationBaseUrl}}/api/reservation-quotes",
+            "description": "Set the real slot ID and future timestamps first. Inspect the result and deliberately set acceptedQuoteId to the ID of the reviewed quote before sending 03.1."
           },
           "event": [
             {
-              "listen": "test",
+              "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
-                "exec": ["pm.test('Reusing a key for changed intent is rejected', function () { pm.response.to.have.status(409); });"]
+                "exec": [
+                  "const env = pm.environment;",
+                  "",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "if (env.get('submittedIntent') || env.get('requestId')) {",
+                  "    pm.execution.skipRequest();",
+                  "    throw new Error('An existing submission is retained. Resolve or replay it before starting a fresh scenario.');",
+                  "}",
+                  "for (const key of ['acceptedQuoteId','quoteId','quoteVersion','reviewedQuoteExpiresAt','reviewedAccountId',",
+                  "    'resolvedSiteId','reviewedBookedAmount','reviewedDepositAmount','reviewedCurrency','reviewedSelection']) env.unset(key);",
+                  "const selection = {licensePlate: env.get('licensePlate'), requestedSlotId: env.get('slotId'),",
+                  "    start: env.get('start'), end: env.get('end'), paymentMethod: env.get('paymentMethod')};",
+                  "if (!isId(selection.requestedSlotId) || !selection.licensePlate ||",
+                  "    selection.licensePlate !== env.get('selectedCarPlate') || !Number.isFinite(Date.parse(selection.start)) ||",
+                  "    !Number.isFinite(Date.parse(selection.end)) || Date.parse(selection.start) <= Date.now() ||",
+                  "    Date.parse(selection.end) <= Date.parse(selection.start) || selection.paymentMethod !== 'PAYOS') {",
+                  "    pm.execution.skipRequest();",
+                  "    throw new Error('Resolve a registered CAR and configure a real slot, future interval and PAYOS.');",
+                  "}",
+                  "pm.variables.set('requestJson', JSON.stringify(selection));"
+                ]
               }
-            }
-          ]
-        },
-        {
-          "name": "03.2 - Review overlapping reservation terms",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"vehicleId\": \"{{conflictVehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"start\": \"{{conflictStart}}\",\n  \"end\": \"{{conflictEnd}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\"\n}"
             },
-            "url": "{{operationBaseUrl}}/api/reservation-terms"
-          },
-          "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Conflict terms are reviewed by Operations', function () { pm.response.to.have.status(200); });",
-                  "const body = pm.response.json();",
-                  "pm.test('Conflict terms have a versioned identity', function () { pm.expect(body.success).to.eql(true); pm.expect(body.data.termsId).to.be.a('string'); pm.expect(body.data.termsVersion).to.be.a('string'); });",
-                  "if (body.data) { pm.environment.set('conflictTermsId', body.data.termsId); pm.environment.set('conflictTermsVersion', body.data.termsVersion); }"
+                  "pm.test('Operations returns the Payment-owned quote', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const sameTime = (a, b) => Number.isFinite(Date.parse(a)) && Date.parse(a) === Date.parse(b);",
+                  "const selection = JSON.parse(pm.variables.get('requestJson'));",
+                  "const binds = isId(data.quoteId) && /^rq1-.+/.test(data.quoteVersion || '') && isId(data.siteId) &&",
+                  "    data.canonicalPlate === selection.licensePlate && data.requestedSlotId === selection.requestedSlotId &&",
+                  "    sameTime(data.start, selection.start) && sameTime(data.end, selection.end) && data.paymentMethod === selection.paymentMethod;",
+                  "const terms = data.isCovered === false && data.coveredAmount === 0 &&",
+                  "    Number.isSafeInteger(data.bookedAmount) && data.bookedAmount > 0 && data.depositAmount === data.bookedAmount &&",
+                  "    data.currency === 'VND' && typeof data.disclosure === 'string' && data.disclosure.trim().length > 0 &&",
+                  "    typeof data.tariffVersion === 'string' && data.tariffVersion.length > 0 &&",
+                  "    typeof data.coverageVersion === 'string' && data.coverageVersion.length > 0 && Date.parse(data.validUntil) > Date.now();",
+                  "pm.test('Quote matches the reviewed selection', () => pm.expect(binds).to.eql(true));",
+                  "pm.test('Valid disclosed positive whole-VND terms', () => pm.expect(terms).to.eql(true));",
+                  "if (!binds || !terms) throw new Error('The paid review does not match the expected commercial terms.');",
+                  "env.set('quoteId', data.quoteId);",
+                  "env.set('quoteVersion', data.quoteVersion);",
+                  "env.set('reviewedQuoteExpiresAt', data.validUntil);",
+                  "env.set('reviewedAccountId', env.get('driverAccountId'));",
+                  "env.set('resolvedSiteId', data.siteId);",
+                  "env.set('reviewedBookedAmount', data.bookedAmount);",
+                  "env.set('reviewedDepositAmount', data.depositAmount);",
+                  "env.set('reviewedCurrency', data.currency);",
+                  "env.set('reviewedSelection', JSON.stringify(selection));"
                 ]
               }
             }
           ]
-        },
+        }
+      ]
+    },
+    {
+      "name": "03 – Reservation submission",
+      "item": [
         {
-          "name": "03.3 - Submit overlapping request with a new key",
+          "name": "03.1 Accept quote and submit",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{conflictIdempotencyKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{reservationIdempotencyKey}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"vehicleId\": \"{{conflictVehicleId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"requestedSlotId\": \"{{slotId}}\",\n  \"mode\": \"SPECIFIC_SLOT\",\n  \"start\": \"{{conflictStart}}\",\n  \"end\": \"{{conflictEnd}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"termsId\": \"{{conflictTermsId}}\",\n  \"termsVersion\": \"{{conflictTermsVersion}}\"\n}"
+              "raw": "{{requestJson}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
-            "url": "{{operationBaseUrl}}/api/reservation-requests"
+            "url": "{{operationBaseUrl}}/api/reservation-requests",
+            "description": "First send records the request body and stable key before sending. Use the same request again to recover a lost first acknowledgement."
           },
           "event": [
             {
@@ -398,7 +313,37 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.environment.get('conflictIdempotencyKey')) pm.environment.set('conflictIdempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const frozen = env.get('submittedIntent');",
+                  "if (env.get('driverAccountId') !== env.get('reviewedAccountId') || !env.get('reviewedSelection')) {",
+                  "    pm.execution.skipRequest();",
+                  "    throw new Error('Review the price using the same Driver Account.');",
+                  "}",
+                  "if (frozen) {",
+                  "    if (!isId(env.get('reservationIdempotencyKey'))) {",
+                  "        pm.execution.skipRequest();",
+                  "        throw new Error('A saved submission requires its original idempotency key.');",
+                  "    }",
+                  "    pm.variables.set('requestJson', frozen);",
+                  "} else {",
+                  "    const selection = JSON.parse(env.get('reviewedSelection'));",
+                  "    if (!isId(env.get('quoteId')) || !env.get('quoteVersion') ||",
+                  "        env.get('acceptedQuoteId') !== env.get('quoteId') ||",
+                  "        !(Date.parse(env.get('reviewedQuoteExpiresAt')) > Date.now()) ||",
+                  "        selection.licensePlate !== env.get('licensePlate') || selection.requestedSlotId !== env.get('slotId') ||",
+                  "        selection.start !== env.get('start') || selection.end !== env.get('end') ||",
+                  "        selection.paymentMethod !== env.get('paymentMethod')) {",
+                  "        pm.execution.skipRequest();",
+                  "        throw new Error('Accept this exact valid quote and keep its reviewed selection.');",
+                  "    }",
+                  "    const key = env.get('reservationIdempotencyKey') || pm.variables.replaceIn('{{$guid}}');",
+                  "    if (!isId(key)) { pm.execution.skipRequest(); throw new Error('Use a UUID idempotency key.'); }",
+                  "    const value = JSON.stringify({...selection, quoteId: env.get('quoteId'), quoteVersion: env.get('quoteVersion')});",
+                  "    env.set('reservationIdempotencyKey', key);",
+                  "    env.set('submittedIntent', value);",
+                  "    pm.variables.set('requestJson', value);",
+                  "}"
                 ]
               }
             },
@@ -407,26 +352,363 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Competing request is admitted for authoritative conflict evaluation', function () { pm.response.to.have.status(202); });",
+                  "pm.test('Operations durably admits the request', () => pm.response.to.have.status(202));",
+                  "if (pm.response.code !== 202) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const valid = isId(data.requestId) && data.contractVersion === 3 && typeof data.state === 'string' &&",
+                  "    (data.reservationId == null || isId(data.reservationId));",
+                  "const saved = env.get('requestId');",
+                  "pm.test('Receipt is version 3 and preserves any known request identity', () => pm.expect(valid && (!saved || saved === data.requestId)).to.eql(true));",
+                  "if (!valid || (saved && saved !== data.requestId)) throw new Error('Request identity or contract mismatch.');",
+                  "env.set('requestId', data.requestId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.2 Replay exact submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{reservationIdempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{requestJson}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-requests",
+            "description": "Reuse the original body and key, including after expiry. The request ID must be identical."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('submittedIntent') && env.get('reservationIdempotencyKey') && env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }",
+                  "pm.variables.set('requestJson', env.get('submittedIntent'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Idempotent replay returns the accepted receipt', () => pm.response.to.have.status(202));",
+                  "if (pm.response.code !== 202) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const valid = isId(data.requestId) && data.contractVersion === 3 && typeof data.state === 'string' &&",
+                  "    (data.reservationId == null || isId(data.reservationId));",
+                  "const saved = env.get('requestId');",
+                  "pm.test('Receipt is version 3 and preserves any known request identity', () => pm.expect(valid && Boolean(saved) && data.requestId === saved).to.eql(true));",
+                  "if (!valid || (saved && saved !== data.requestId) || !saved) throw new Error('Request identity or contract mismatch.');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 – Saga progress and guarded booking",
+      "item": [
+        {
+          "name": "04.1 Read Saga progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}/progress",
+            "description": "Manual diagnostic snapshot. Repeat only as needed after processing. Look for all four succeeded and HOLD_CREATED."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Operations returns scoped progress', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const valid = data.requestId === env.get('requestId') && Number.isSafeInteger(data.version) && data.version >= 0 &&",
+                  "    typeof data.admissionState === 'string' && data.checks &&",
+                  "    ['account','vehicle','facility','booking'].every(name => typeof data.checks[name] === 'string');",
+                  "pm.test('Snapshot belongs to the request and has all checks', () => pm.expect(Boolean(valid)).to.eql(true));",
+                  "if (!valid) throw new Error('Progress response mismatch.');",
+                  "if (['CHECKING', 'EVALUATING'].includes(data.admissionState)) {",
+                  "    throw new Error('ADMISSION_IN_PROGRESS. Re-read this request manually after processing.');",
+                  "}",
+                  "const hold = data.admissionState === 'HOLD_CREATED' && isId(data.reservationId) &&",
+                  "    ['account','vehicle','facility','booking'].every(name => data.checks[name] === 'SUCCEEDED');",
+                  "pm.test('All four checks succeeded and the hold was committed', () => pm.expect(hold).to.eql(true));",
+                  "if (!hold) throw new Error('Admission stopped. Inspect admissionState, outcomeCode and checks.');",
+                  "env.set('progressReservationId', data.reservationId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.2 Read durable receipt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}",
+            "description": "A committed receipt must identify the same hold as progress. A pending receipt requires a later manual read."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Operations returns the durable receipt', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const valid = data.requestId === env.get('requestId') && data.contractVersion === 3;",
+                  "pm.test('Receipt is version 3 and preserves request identity', () => pm.expect(valid).to.eql(true));",
+                  "if (!valid) throw new Error('Receipt binding mismatch.');",
+                  "if (data.state !== 'HOLD_CREATED') throw new Error('Hold is not available yet. Inspect receipt state and code.');",
+                  "const hold = isId(data.reservationId) && data.reservationId === env.get('progressReservationId') &&",
+                  "    (!env.get('reservationId') || data.reservationId === env.get('reservationId'));",
+                  "pm.test('Receipt and Saga progress identify the same single hold', () => pm.expect(hold).to.eql(true));",
+                  "if (!hold) throw new Error('Run 04.1 and compare the hold identity.');",
+                  "env.set('reservationId', data.reservationId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.3 Read own reservation and order readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}",
+            "description": "Stop and inspect H, state and orderProvisioningCode when the order is not ready. Repeat this read manually if still preparing."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('reservationId') && env.get('submittedIntent'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Operations returns the own reservation', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+                  "const sameTime = (a, b) => Number.isFinite(Date.parse(a)) && Date.parse(a) === Date.parse(b);",
+                  "const selection = JSON.parse(env.get('submittedIntent'));",
+                  "const binds = data.requestId === env.get('requestId') && data.reservationId === env.get('reservationId') &&",
+                  "    data.licensePlate === selection.licensePlate && data.requestedSlotId === selection.requestedSlotId &&",
+                  "    data.siteId === env.get('resolvedSiteId') && sameTime(data.start, selection.start) && sameTime(data.end, selection.end) &&",
+                  "    data.bookedAmount === Number(env.get('reviewedBookedAmount')) &&",
+                  "    data.depositAmount === Number(env.get('reviewedDepositAmount')) && data.currency === env.get('reviewedCurrency');",
+                  "pm.test('Own reservation matches the accepted quote and receipt', () => pm.expect(binds).to.eql(true));",
+                  "if (!binds) throw new Error('Own reservation binding mismatch.');",
+                  "env.set('reservationState', data.state);",
+                  "env.set('orderProvisioningState', data.orderProvisioningState);",
+                  "env.set('holdExpiresAt', data.holdExpiresAt || '');",
+                  "env.unset('paymentOrderId');",
+                  "const active = data.state === 'PENDING_PAYMENT' && data.confirmedAt == null && Date.parse(data.holdExpiresAt) > Date.now();",
+                  "pm.test('Booking is unpaid and H is still in the future', () => pm.expect(active).to.eql(true));",
+                  "if (!active) throw new Error('Hold is not an active PENDING_PAYMENT booking.');",
+                  "const ready = data.orderProvisioningState === 'CREATED' && isId(data.orderId);",
+                  "pm.test('Operations recorded the actual linked Payment order', () => pm.expect(ready).to.eql(true));",
+                  "if (!ready) throw new Error('ORDER_NOT_READY. Inspect orderProvisioningState and orderProvisioningCode.');",
+                  "env.set('paymentOrderId', data.orderId);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 – Payment handoff readiness",
+      "item": [
+        {
+          "name": "05.1 Verify own Payment order association",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations/by-order/{{paymentOrderId}}/request",
+            "description": "Final no-payment assertion. This verifies the Operations association saved from the signed Payment order response."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('paymentOrderId') && env.get('orderProvisioningState') === 'CREATED' && env.get('reservationState') === 'PENDING_PAYMENT' && Date.parse(env.get('holdExpiresAt')) > Date.now())) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Operations resolves the genuine order to its original request', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "pm.test('Order points to the original active unpaid request', () => pm.expect(data.requestId === env.get('requestId') && Date.parse(env.get('holdExpiresAt')) > Date.now()).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 – Zero Amount / Subscription Coverage (Blocked)",
+      "description": "Production plate entitlement always returns uncovered. No requests are enabled. See the guide.",
+      "item": []
+    },
+    {
+      "name": "07 – Optional negative tests",
+      "item": [
+        {
+          "name": "07.1 Reject changed intent under the same key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{reservationIdempotencyKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{requestJson}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{operationBaseUrl}}/api/reservation-requests",
+            "description": "Run explicitly after the positive path. Retains the original scenario and sends a different valid end with the same idempotency key."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('submittedIntent') && env.get('reservationIdempotencyKey'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }",
+                  "const changed = JSON.parse(env.get('submittedIntent'));",
+                  "changed.end = new Date(Date.parse(changed.end) + 60000).toISOString();",
+                  "pm.variables.set('requestJson', JSON.stringify(changed));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Different intent conflicts', () => pm.response.to.have.status(409));",
                   "const body = pm.response.json();",
-                  "if (body.data) { pm.environment.set('conflictRequestId', body.data.requestId); }"
+                  "pm.test('Stable idempotency conflict error', () => pm.expect(body.success === false && body.code === 'IDEMPOTENCY_KEY_REUSED').to.eql(true));"
                 ]
               }
             }
           ]
         },
         {
-          "name": "03.4 - Read competing request conflict receipt",
+          "name": "07.2 Reject anonymous own-reservation read",
           "request": {
             "method": "GET",
-            "url": "{{operationBaseUrl}}/api/reservation-requests/{{conflictRequestId}}"
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}",
+            "description": "Run after completing the authenticated scenario. This request deliberately omits the Driver token."
           },
           "event": [
             {
               "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
-                "exec": ["if (!pm.environment.get('conflictRequestId')) pm.execution.skipRequest();"]
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('reservationId'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
               }
             },
             {
@@ -434,27 +716,36 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Conflict receipt read succeeds', function () { pm.response.to.have.status(200); });",
-                  "const data = pm.response.json().data;",
-                  "pm.environment.set('conflictReceiptState', data.state);",
-                  "pm.test('Overlapping slot request is rejected when processing is terminal', function () { if (data.state === 'REJECTED') pm.expect(data.code).to.eql('SLOT_TIME_CONFLICT'); else pm.expect(data.state).to.be.oneOf(['PENDING_AUTHORIZATION', 'PREPARING']); });"
+                  "pm.test('Own reservation requires a Driver session', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('Stable unauthenticated error', () => pm.expect(body.success === false && body.code === 'UNAUTHENTICATED').to.eql(true));"
                 ]
               }
             }
           ]
-        },
+        }
+      ]
+    },
+    {
+      "name": "08 – Legacy / Compatibility (Read Only)",
+      "item": [
         {
-          "name": "03.5 - Re-read reservation after hold deadline",
+          "name": "08.1 Read existing legacy receipt",
           "request": {
             "method": "GET",
-            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{legacyRequestId}}",
+            "description": "Use a known owned historical VehicleId/terms request ID. This scenario does not create a legacy booking."
           },
           "event": [
             {
               "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
-                "exec": ["if (!pm.environment.get('reservationId') || !pm.environment.get('holdExpiresAt')) pm.execution.skipRequest();"]
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('legacyRequestId'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
               }
             },
             {
@@ -462,29 +753,50 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Reservation expiry is read from Operations', function () { pm.response.to.have.status(200); });",
-                  "const data = pm.response.json().data;",
-                  "pm.environment.set('reservationState', data.state);",
-                  "pm.environment.set('holdExpiresAt', data.holdExpiresAt);",
-                  "pm.test('Expired hold is released after its exact deadline', function () { if (Date.now() >= new Date(data.holdExpiresAt).getTime() + 5000) pm.expect(data.state).to.eql('EXPIRED'); else pm.expect(data.state).to.be.oneOf(['PENDING_PAYMENT', 'CONFIRMED', 'EXPIRED']); });"
+                  "pm.test('Historical receipt remains readable', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "pm.test('Historical version 2 receipt preserves its request identity', () => pm.expect(data.contractVersion === 2 && data.requestId === env.get('legacyRequestId') && typeof data.state === 'string').to.eql(true));"
                 ]
               }
             }
           ]
         },
         {
-          "name": "03.6 - Anonymous own-reservation read (expect 401)",
+          "name": "08.2 Read existing legacy booking",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
-            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}"
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{legacyReservationId}}",
+            "description": "Use a known owned historical booking ID from the legacy receipt."
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('legacyRequestId') && env.get('legacyReservationId'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": ["pm.test('Own reservation is not available anonymously', function () { pm.response.to.have.status(401); });"]
+                "exec": [
+                  "pm.test('Historical booking remains readable', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+                  "const response = pm.response.json();",
+                  "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+                  "const data = response.data;",
+                  "const env = pm.environment;",
+                  "pm.test('Historical booking matches its original request', () => pm.expect(data.reservationId === env.get('legacyReservationId') && data.requestId === env.get('legacyRequestId') && typeof data.state === 'string').to.eql(true));"
+                ]
               }
             }
           ]

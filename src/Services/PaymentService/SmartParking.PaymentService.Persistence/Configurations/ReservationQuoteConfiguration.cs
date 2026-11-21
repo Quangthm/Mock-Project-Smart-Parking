@@ -12,6 +12,8 @@ public class ReservationQuoteConfiguration : IEntityTypeConfiguration<Reservatio
         builder.ToTable("reservation_quotes");
 
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.ReviewedEvidence).HasColumnName("reviewed_evidence").HasColumnType("jsonb")
+            .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Throw);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.SiteId).HasColumnName("site_id").IsRequired();

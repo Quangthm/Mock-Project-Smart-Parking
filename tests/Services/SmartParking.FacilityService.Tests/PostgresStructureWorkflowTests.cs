@@ -25,6 +25,29 @@ public sealed class StructurePostgresFactAttribute : FactAttribute
 
 public sealed class PostgresStructureWorkflowTests
 {
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task SlotOnlyReviewResolvesLiveFacilityFactsWithoutCreatingDependency()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var slot = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "A01", VehicleType.CAR);
+        await using var db = new ParkingDbContext(new DbContextOptionsBuilder<ParkingDbContext>()
+            .UseNpgsql(fixture.Parking).Options);
+        var repository = new ReservationDependencyRepository(db);
+        var site = await repository.FindSlotSiteAsync(slot, default);
+        Assert.Equal(fixture.SiteId, site);
+        Assert.Null(await repository.FindSlotSiteAsync(Guid.NewGuid(), default));
+        var read = new Application.Reservations.ReadBookingFactsHandler(repository, new UnitOfWork(db));
+        var query = new Application.Reservations.ReadBookingFactsQuery(site!.Value, slot);
+        var facts = await read.Handle(query, default);
+        Assert.Equal((fixture.Owner.TenantId, fixture.SiteId, slot), (facts.TenantId, facts.SiteId, facts.SlotId));
+        Assert.True(facts.EligibleCarSlot);
+        await fixture.ExecuteAsync(fixture.Parking, $"UPDATE spatial_units SET deleted_at=now() WHERE id='{fixture.UnitId}'");
+        var changed = await read.Handle(query, default);
+        Assert.False(changed.EligibleCarSlot);
+        Assert.NotEqual(facts.Version, changed.Version);
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Parking, "SELECT count(*) FROM reservation_dependencies"));
+    }
+
     [Fact]
     public void ReservationEfModelMapsExistingOperationsTablesAndKeys()
     {

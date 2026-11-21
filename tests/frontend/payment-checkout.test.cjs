@@ -124,11 +124,27 @@ test('checkout sends payOS request, idempotency key and same-origin return route
   assert.equal(body.returnUrl, `http://localhost:5173/payment/success?orderId=${orderId}`);
   assert.equal(body.cancelUrl, `http://localhost:5173/payment/fail?orderId=${orderId}`);
   assert.equal(f.api.paymentApi.rememberedCheckout(orderId).paymentTransactionId, transactionId);
+  assert.equal(f.api.paymentApi.rememberedCheckout(orderId).standalone, true);
+  f.api.paymentApi.bindReservationCheckout(orderId, transactionId);
+  assert.equal(f.api.paymentApi.rememberedCheckout(orderId).standalone, false);
 });
 
 test('checkout rejects a non-payOS redirect and the backend demo gateway', async () => {
   await assert.rejects(fixture({ checkoutUrl: 'https://example.com/steal' }).api.paymentApi.checkout(orderId), /untrusted checkout link/);
   await assert.rejects(fixture({ accountNumber: '0123456789', accountName: 'SMARTPARKING CORP' }).api.paymentApi.checkout(orderId), /demo gateway/);
+});
+
+test('reservation checkout carries its request reference through both provider returns', async () => {
+  const f = fixture();
+  const requestId = '3a584ece-c27b-481d-9e92-4e9bb64a5a6a';
+  await f.api.paymentApi.checkout(orderId, requestId);
+  assert.equal(f.api.paymentApi.rememberedCheckout(orderId).standalone, false);
+  const body = JSON.parse(f.calls[0].init.body);
+  for (const url of [body.returnUrl, body.cancelUrl]) {
+    const params = new URL(url).searchParams;
+    assert.equal(params.get('requestId'), requestId);
+    assert.equal(params.get('orderId'), orderId);
+  }
 });
 
 test('return URL alone never marks a payment successful', () => {

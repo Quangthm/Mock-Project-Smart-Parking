@@ -11,6 +11,7 @@ type PaymentCheckoutProps = {
   showMethodPicker?: boolean
   reservationOrderId?: string
   bookingOrderId?: string
+  reservationRequestId?: string
   holdExpiresAt?: string | null
 }
 
@@ -18,6 +19,7 @@ export function PaymentCheckout({
   showMethodPicker = true,
   reservationOrderId,
   bookingOrderId,
+  reservationRequestId,
   holdExpiresAt,
 }: PaymentCheckoutProps) {
   const [manualOrderId, setManualOrderId] = useState(() =>
@@ -47,7 +49,7 @@ export function PaymentCheckout({
   }, [checkout])
 
   const transactionId = checkout?.paymentTransactionId
-  useServerRefresh(status === "pending" && transactionId ? transactionId + ":" + orderId : undefined, async (isCurrent) => {
+  useServerRefresh(!providedOrderId && status === "pending" && transactionId ? transactionId + ":" + orderId : undefined, async (isCurrent) => {
       if (!transactionId) return
       try {
         const result = await paymentApi.status(transactionId)
@@ -76,6 +78,7 @@ export function PaymentCheckout({
         if (result.orderId.toLowerCase() !== normalized) throw new Error("Payment Service returned a different order.")
         if (classifyPaymentStatus(result) === "success") throw new Error("This payment order has already been paid.")
         if (result.status === "PENDING" && new Date(previous.expiresAt).getTime() > Date.now()) {
+          if (providedOrderId) paymentApi.bindReservationCheckout(normalized, previous.paymentTransactionId)
           setCheckout(previous)
           setStatus("pending")
           return
@@ -85,7 +88,7 @@ export function PaymentCheckout({
         }
         if (result.status === "FAILED" || result.status === "CANCELLED") paymentApi.resetAttempt(normalized)
       }
-      const created = await paymentApi.checkout(normalized)
+      const created = await paymentApi.checkout(normalized, providedOrderId ? reservationRequestId ?? null : undefined)
       setCheckout(created)
       setStatus("pending")
     } catch (failure) {

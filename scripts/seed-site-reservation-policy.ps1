@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Guid]$SiteId = '8fe65b2e-386e-4bee-b7a4-000527af7d18',
+    [Guid]$SiteId = 'b0000000-0000-4000-8000-000000000001',
     [Parameter(Mandatory)][bool]$ArrivalLateToleranceEnabled,
     [switch]$ReplaceExisting
 )

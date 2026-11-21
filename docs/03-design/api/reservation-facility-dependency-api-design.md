@@ -1,13 +1,13 @@
 # Reservation Facility dependency — API design
 
-> **SPARK-273 architecture alignment (11 November 2026).** This document includes historical implementation notes. For the current approved workflow and confirmation boundary, see the [11 November decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md). Existing Facility confirmation checks remain required until the aggregate-only fast-path invariant gate is verified.
+> **SPARK-273 target (18 November 2026).** See the [approved amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md). The existing controller contract below remains the protection and recovery baseline. The new review lookup and admission validation are specified under the target interfaces. Existing confirmation verification stays required until the competing-writer proof passes.
 
 | Metadata | Value |
 | --- | --- |
 | Status | Approved direction; implemented draft, build/runtime UNVERIFIED |
 | Contract version / date | v1 / 2026-11-11 |
 | Owning service | Facility; Operations is the only caller |
-| Implementation / verification | SPARK-273 Commit 1 working tree; deployment verification pending |
+| Implementation / verification | Existing protection routes inspected at 3b60787d06f; new target lookup and consumer pending |
 | Requirements baseline | [Reservation requirements](../../01-requirements/business-rules/policy-catalogue.md), CAR / Specific Slot |
 
 ## Overview
@@ -17,7 +17,7 @@ Operations obtains immutable Facility resource facts with a durable configuratio
 | Traceability | Reference |
 | --- | --- |
 | Booking use case / related contracts | [Reservation API](reservation-first-slice-api-design.md) |
-| Approved direction and recovery | [R-ARCH-05](../../02-architecture/architecture-decisions/reservation-first-slice-implementation-proposal.md), [durable dependency](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md) |
+| Approved direction and recovery | [Current reservation workflow](../../02-architecture/architecture-decisions/reservation-workflow-target.md), [durable dependency](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md) |
 | Classification / security | [Operation matrix](../../01-requirements/srs/authorization-operation-classification.md); no fabricated human actor |
 
 ## API specification
@@ -118,7 +118,7 @@ A timeout is an unknown result. Operations owns durable retries and sends exact 
 - [ ] Complete Operations commercial recovery and Payment producers before enabling paid reservations.
 - [ ] SignalR relay and post-confirmation allocation/refund/maintenance enforcement remain teammate/next-phase work.
 
-See [the deployment cases and durable event handoff](../../05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
+See [the deployment cases and durable event handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
 
 ## 11 November 2026 — conditional confirmation dependency retirement (design note)
 
@@ -127,3 +127,31 @@ See [the deployment cases and durable event handoff](../../05-project-management
 For a future `CONFIRMATION`-free fast path, Facility and Operations must demonstrate that **every supported Facility structure/site/slot/unit mutation and physical Gate claim** either serializes against the live Operations claim or causes a durable, timely invalidation visible under the guarded Operations aggregate transition. Prove delayed/out-of-order Facility synchronization, callback loss/replay, crash/restart, same-slot concurrent edit/entry, maintenance and future writer behavior; document excluded direct-write bypasses. Only after the gate passes may Operations skip the redundant confirmation dependency for a **still-valid protected hold**. `CONFIRMATION` acquire and fresh capacity checks continue for expired/invalidated-hold reacquisition strictly before reservation start T.
 
 The 10 November single guarded database evaluation timestamp and no-entitlement-after-T rule remain unchanged. This note authorizes no new Facility endpoint, key reuse, schema reset or production behavior claim.
+
+## Target interfaces — 18 November 2026
+
+### Internal HTTP slot resolution for quote review
+
+| Item | Contract |
+| --- | --- |
+| Method / URL | GET `/internal/reservation-dependencies/v1/slots/{slotId}` |
+| Availability | Implemented alongside the site-and-slot facts route. Both use the same Facility configuration snapshot. |
+| Authentication / origin | SERVICE; dedicated authenticated Operations identity, audience and permission checked by Facility |
+| Scope | Selected Facility slot; derive authoritative tenant/site in the owning repository |
+| Content type / headers | No body; JSON response; service bearer credential; no browser JWT |
+
+**Request sample:** slot path identifier `33333333-3333-4333-8333-333333333333` (required UUID); no site or tenant input. **Response sample** (conceptual HTTP 200, known slot):
+
+```json
+{"slotId":"33333333-3333-4333-8333-333333333333","siteId":"22222222-2222-4222-8222-222222222222","tenantId":"11111111-1111-4111-8111-111111111111","eligibleCarSlot":true,"version":"opaque-version","participatesInStructureGuard":true}
+```
+
+Facility finds the live slot GUID in its own store and uses the existing site structure guard to read its configuration. Inactive site/tenant, deleted ancestry or incompatible category yields `eligibleCarSlot: false`. A missing or deleted slot gives 404 `SLOT_NOT_FOUND`. Invalid UUID gives 400. Missing or insufficient service identity gives 401/403. Structure contention can give 409 `STRUCTURE_BUSY`. Operations treats contention, generic routing 404, malformed results and transport failures as dependency failures. A new review can retry. The read creates no durable dependency or capacity claim.
+
+### MassTransit slot validation for admission
+
+Facility resolves the selected GUID via its repository independently during admission. Consume a versioned service-local request from Operations with request/workflow, stable branch operation and attempt IDs, selected slot, required CAR/eligibility context and deadline. Reply with the matching correlation, authoritative tenant/site/slot and eligibility/configuration evidence, or an explicit business rejection. Keep unavailable, transient error and timeout distinct from definitive rejection. Operations owns attempt fencing and durable decision recording. No synchronous broker RPC. Verify correct/incorrect sender and duplicate, delayed, mismatched and stale attempts. Exact wire names, queue bindings and trust setup require owner agreement.
+
+### Protected claim verification
+
+Treat mismatched review/admission/protection context as changed terms or ineligibility. Keep acquire/complete/abort, exact-token replay and unknown resolution where needed for admission and confirmation. Perform external calls outside the protected Operations transaction. Verify competing structure changes, Gate claims, maintenance, lost acknowledgements and invalidation lag before considering any retirement. Use the [owner handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#facilityservice--quote-and-admission-slices) and [QA scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md); review and runtime checks remain pending.

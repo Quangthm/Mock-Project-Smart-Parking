@@ -37,7 +37,10 @@ public sealed class GetReservationCollectionsQueryHandler
         }
 
         var transactions = await _transactionRepository.GetByOrderIdAsync(order.Id, cancellationToken);
-        var successTransactions = transactions.Where(t => t.Status == PaymentStatus.SUCCESS).ToList();
+        var reviewed = order.ReviewedMethod != null;
+        var successTransactions = transactions.Where(t => t.Status == PaymentStatus.SUCCESS &&
+            t.TransactionType == TransactionType.PAYMENT && (!reviewed ||
+                (t.HasVerifiedProviderCollection() && t.TenantId == order.TenantId && t.PaymentMethod.ToString() == order.ReviewedMethod))).ToList();
 
         if (successTransactions.Count > 0)
         {
@@ -48,10 +51,12 @@ public sealed class GetReservationCollectionsQueryHandler
                 AccountId: order.AccountId ?? Guid.Empty,
                 TenantId: order.TenantId,
                 SiteId: order.SiteId,
-                QuoteId: Guid.Empty,
-                TermsVersion: "1",
+                QuoteId: order.QuoteId ?? Guid.Empty,
+                TermsVersion: order.TermsVersion ?? "1",
                 Amount: tx.Amount,
-                Currency: "VND"
+                Currency: order.ReviewedCurrency ?? "VND",
+                Evidence: reviewed ? new(1, tx.Id, Guid.Parse(order.IdempotencyKey!), tx.Id,
+                    order.ReviewedMethod!, "PAYOS", tx.ProviderCollectionReference!, tx.ProviderVerifiedAt!.Value, tx.PaidAt!.Value) : null
             )).ToList();
 
             return new CollectionLookupResponseDto("SETTLED", collections);
@@ -67,6 +72,13 @@ public sealed class GetReservationCollectionsQueryHandler
             return new CollectionLookupResponseDto("PENDING", Array.Empty<VerifiedCollectionDto>());
         }
 
+        if (reviewed)
+        {
+            // Even a closed order may receive a later verified transfer.
+            var state = order.Status == PaymentOrderStatus.PENDING && DateTimeOffset.UtcNow < order.ExpiresAt
+                ? "PENDING" : "NO_VERIFIED_COLLECTION";
+            return new CollectionLookupResponseDto(state, Array.Empty<VerifiedCollectionDto>());
+        }
         return new CollectionLookupResponseDto("CLOSED_NO_COLLECTION", Array.Empty<VerifiedCollectionDto>());
     }
 }

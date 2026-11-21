@@ -14,5 +14,3 @@ public interface IVehicleRepository
     Task<bool> TryAddAsync(RegisteredVehicle vehicle, CancellationToken ct);
     Task<VehicleBinding?> ResolveBindingAsync(Guid accountId, Guid vehicleId, CancellationToken ct);
 }
-
-public sealed record VehicleBinding(Guid VehicleId, Guid AccountId, string VehicleType, long Revision, string CanonicalPlate = "");

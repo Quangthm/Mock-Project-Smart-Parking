@@ -1151,16 +1151,10 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
         </section>
       )}
 
-      {step === "qr" && selectedSlot && selectedVehicleId && user && (
+      {step === "qr" && user && (
         <div className="booking-stage-right booking-payment-checkout">
-          <ReservationCheckout key={`${selectedSlot.id}:${selectedVehicleId}:${startTime}:${endTime}:${step}`}
-            accountScope={`${user.id}:driver`} onDone={onDone}
-            selection={{ siteId: lot.id, requestedSlotId: selectedSlot.id, vehicleId: selectedVehicleId,
-              start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-              paymentMethod: "PAYOS" }} />
-          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
-            Back to payment methods
-          </button>
+          <ReservationCheckout key={storageKey} storageKey={storageKey} onDone={onDone}
+            selection={reservationSelection} onBack={() => setStep("payment")} />
         </div>
       )}
 

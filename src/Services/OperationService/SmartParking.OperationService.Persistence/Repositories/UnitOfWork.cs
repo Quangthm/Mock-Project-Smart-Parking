@@ -10,23 +10,19 @@ public sealed class UnitOfWork(
     ReservationDbContext db,
     IReservationRepository reservations,
     IParkingSessionRepository parkingSessions,
-    ISlotAllocationRepository slotAllocations, OperationsConcurrency guards, TimeProvider clock) : IUnitOfWork
+    ISlotAllocationRepository slotAllocations, OperationsConcurrency guards, TimeProvider clock,
+    Application.Reservations.IReservationProgressPublisher? progress = null) : IUnitOfWork
 {
     public IReservationRepository Reservations => reservations;
     public IParkingSessionRepository ParkingSessions => parkingSessions;
     public ISlotAllocationRepository SlotAllocations => slotAllocations;
 
     public async Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken cancellationToken) =>
-        db.Database.CurrentTransaction is not null ? new JoinedTransaction() :
-            new Transaction(await db.Database.BeginTransactionAsync(cancellationToken));
+        db.Database.CurrentTransaction is not null ? new JoinedUnitOfWorkTransaction() :
+            new UnitOfWorkTransaction(await db.Database.BeginTransactionAsync(cancellationToken));
 
     // The MassTransit EF consumer outbox owns the outer transaction when dispatching a message.
     // A joined handler must never commit/dispose that transaction ahead of inbox/outbox capture.
-    private sealed class JoinedTransaction : IUnitOfWorkTransaction
-    {
-        public Task CommitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -59,6 +55,16 @@ public sealed class UnitOfWork(
                 if (reservation.RequestId is not null && reservation.Status is ("CONFIRMED" or "ALLOCATED" or "PARKING" or "COMPLETED") &&
                     (reservation.ConfirmationEvaluatedAt is null || reservation.ConfirmedAt is null || reservation.ConfirmedAt >= reservation.ExpectedStartTime || reservation.ConfirmedAt != reservation.ConfirmationEvaluatedAt || reservation.ConfirmationEffectId is null))
                     throw new InvalidOperationException("A pre-start eligibility checkpoint is required.");
+                if (entry.State == EntityState.Modified &&
+                    (entry.Property(nameof(reservation.QuoteId)).IsModified ||
+                     reservation.QuoteId.HasValue && entry.Properties.Any(p => p.IsModified && p.Metadata.Name is
+                         nameof(reservation.AccountId) or nameof(reservation.RequestId) or nameof(reservation.TargetSlotId) or
+                         nameof(reservation.ExpectedStartTime) or nameof(reservation.ExpectedEndTime) or nameof(reservation.ClaimEndTime) or
+                         nameof(reservation.CreatedAt) or nameof(reservation.HoldExpiresAt) or nameof(reservation.QuoteVersion) or
+                         nameof(reservation.QuoteValidUntil) or nameof(reservation.TariffVersion) or nameof(reservation.CoverageVersion) or
+                         nameof(reservation.IsCovered) or nameof(reservation.CoveredAmount) or nameof(reservation.SelectedPaymentMethod) or
+                         nameof(reservation.BookedAmount) or nameof(reservation.DepositAmount) or nameof(reservation.Currency))))
+                    throw new InvalidOperationException("Accepted quote binding is immutable.");
                 if (entry.State == EntityState.Modified && entry.Property("NormalizedPlate").OriginalValue is string priorPlate && reservation.NormalizedPlate != priorPlate)
                     throw new InvalidOperationException("Accepted plate identity is immutable.");
                 if (entry.State == EntityState.Modified && entry.Property("AcceptedPricingSnapshot").OriginalValue is string pricing && reservation.AcceptedPricingSnapshot != pricing)
@@ -87,12 +93,21 @@ public sealed class UnitOfWork(
                 }
             }
         }
+        var changes = new HashSet<(Guid Request, Guid Account)>();
+        foreach (var entry in entries)
+        {
+            if (entry.Entity is SmartParking.OperationService.Domain.Reservations.ReservationRequest request)
+            {
+                if (entry.State == EntityState.Modified) request.AdvanceProgressVersion();
+                changes.Add((request.Id, request.AccountId));
+            }
+            else if (entry.Entity is ReservationRow { RequestId: Guid id } booking)
+                changes.Add((id, booking.AccountId));
+        }
+        if (progress is not null)
+            foreach (var change in changes)
+                await progress.SendAsync(new(Guid.NewGuid(), change.Request, change.Account), cancellationToken);
         return await db.SaveChangesAsync(cancellationToken);
     }
 
-    private sealed class Transaction(IDbContextTransaction transaction) : IUnitOfWorkTransaction
-    {
-        public Task CommitAsync(CancellationToken cancellationToken) => transaction.CommitAsync(cancellationToken);
-        public ValueTask DisposeAsync() => transaction.DisposeAsync();
-    }
 }

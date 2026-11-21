@@ -22,6 +22,7 @@ internal sealed class FakeBookingRepository(ReservationRow booking) : IReservati
         Task.FromResult<IReadOnlyList<BookingReadResult>>([]);
     public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) =>
         Task.FromResult<ReservationRow?>(booking.Id == reservationId ? booking : null);
+    public Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct) => Task.FromResult(booking.QuoteId == quoteId);
     public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) => Task.FromResult(false);
     public Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);
     public Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>([]);

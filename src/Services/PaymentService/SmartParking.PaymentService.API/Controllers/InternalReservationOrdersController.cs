@@ -70,6 +70,14 @@ public sealed class InternalReservationOrdersController : ControllerBase
         });
     }
 
+    [HttpPut("reservation-deposit-orders/{operationId:guid}/zero-disposition")]
+    public async Task<IActionResult> RecordZeroDisposition(Guid operationId,
+        Application.Reservations.RecordZeroDisposition request, CancellationToken ct)
+    {
+        if (operationId != request.OperationId) return BadRequest();
+        return Ok(new { success = true, data = await _mediator.Send(request, ct) });
+    }
+
     [HttpPost("reservation-reconciliations")]
     [ProducesResponseType(typeof(ReconcileReservationResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

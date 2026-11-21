@@ -55,4 +55,42 @@ public sealed class ReservationEvaluationCheckpointTests
         Assert.Null(booking.CollectionId);
         Assert.Throws<InvalidOperationException>(() => booking.ConfirmAtEvaluation(null, Start.AddSeconds(1)));
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExactHoldDeadlineClosesNormalConfirmationAndOnlyVerifiedPaidCanReacquire(bool covered)
+    {
+        var h = Start.AddMinutes(-2);
+        var row = ReservationRow.PrepareQuote(Guid.NewGuid(), Guid.NewGuid(), "51A12345", Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), "PAYOS", Start, Start.AddHours(1), Start.AddHours(1),
+            Start.AddMinutes(-5), h, 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "{}", Guid.NewGuid(),
+            "quote-1", Start, "tariff-1", "coverage-1", covered);
+        Guid? collection = null;
+        if (covered)
+        {
+            row.BeginZeroPriceAcceptance(row.CreatedAt, TimeSpan.FromSeconds(1));
+            Assert.Throws<InvalidOperationException>(() => row.RecordZeroOrder(Guid.NewGuid(), Guid.Empty, row.CreatedAt));
+            row.RecordZeroOrder(Guid.NewGuid(), Guid.NewGuid(), row.CreatedAt);
+        }
+        else
+        {
+            row.BeginOrderProvisioning(row.CreatedAt, TimeSpan.FromSeconds(1));
+            row.RecordOrderCreated(Guid.NewGuid());
+            collection = Guid.NewGuid();
+            Assert.True(row.BeginPaidConfirmation(collection.Value, row.CreatedAt));
+        }
+        Assert.Throws<InvalidOperationException>(() => row.ConfirmAtEvaluation(collection, h));
+        row.ReleaseExpiredHold(h);
+        Assert.Null(row.ActiveClaimSlotId);
+        if (covered)
+        {
+            Assert.Throws<InvalidOperationException>(() => row.ConfirmReacquiredPaidClaim(Guid.NewGuid(), h));
+            Assert.Null(row.ConfirmedAt);
+        }
+        else
+        {
+            row.ConfirmReacquiredPaidClaim(collection!.Value, h);
+            Assert.Equal(h, row.ConfirmedAt);
+        }
+    }
 }

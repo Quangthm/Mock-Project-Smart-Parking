@@ -157,19 +157,21 @@ export const paymentApi = {
     }
     return response.blob()
   },
-  async checkout(orderId: string): Promise<CheckoutResponse> {
+  async checkout(orderId: string, reservationRequestId?: string | null): Promise<CheckoutResponse> {
     const normalized = orderId.trim().toLowerCase()
     if (!isPaymentOrderId(normalized)) throw new Error("Enter a valid payment order ID.")
     const key = checkoutStorage?.getItem(idempotencyKey(normalized)) ?? crypto.randomUUID()
     checkoutStorage?.setItem(idempotencyKey(normalized), key)
     const origin = window.location.origin
+    const reference = reservationRequestId && isPaymentOrderId(reservationRequestId)
+      ? `&requestId=${encodeURIComponent(reservationRequestId)}` : ""
     const result = await paymentRequest<CheckoutResponse>(`/orders/${normalized}/checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": key },
       body: JSON.stringify({
         paymentMethod: "PAYOS",
-        returnUrl: `${origin}/payment/success?orderId=${normalized}`,
-        cancelUrl: `${origin}/payment/fail?orderId=${normalized}`,
+        returnUrl: `${origin}/payment/success?orderId=${normalized}${reference}`,
+        cancelUrl: `${origin}/payment/fail?orderId=${normalized}${reference}`,
       }),
     })
     if (!isPaymentOrderId(result.paymentTransactionId)) throw new Error("Payment Service returned an invalid transaction ID.")
@@ -179,7 +181,9 @@ export const paymentApi = {
     if (result.accountNumber === "0123456789" && result.accountName === "SMARTPARKING CORP") {
       throw new Error("Payment Service is using its demo gateway. Configure real payOS credentials before sending a payment.")
     }
-    checkoutStorage?.setItem(checkoutKey(normalized), JSON.stringify(result))
+    checkoutStorage?.setItem(checkoutKey(normalized), JSON.stringify({
+      ...result, standalone: reservationRequestId === undefined,
+    }))
     checkoutStorage?.setItem("sp_payos_latest_order", normalized)
     return result
   },
@@ -187,12 +191,18 @@ export const paymentApi = {
     if (!isPaymentOrderId(transactionId)) throw new Error("Invalid payment transaction ID.")
     return paymentRequest<PaymentStatusResponse>(`/transactions/${transactionId}/status`, { method: "GET" })
   },
-  rememberedCheckout(orderId: string): CheckoutResponse | null {
+  rememberedCheckout(orderId: string): (CheckoutResponse & { standalone?: boolean }) | null {
     if (!isPaymentOrderId(orderId)) return null
     try {
       const value = JSON.parse(checkoutStorage?.getItem(checkoutKey(orderId.toLowerCase())) ?? "null")
-      return value && isPaymentOrderId(value.paymentTransactionId) && isTrustedPayOsUrl(value.checkoutUrl) ? value as CheckoutResponse : null
+      return value && isPaymentOrderId(value.paymentTransactionId) && isTrustedPayOsUrl(value.checkoutUrl) ? value : null
     } catch { return null }
+  },
+  bindReservationCheckout(orderId: string, transactionId: string): void {
+    const previous = this.rememberedCheckout(orderId)
+    if (previous?.standalone && previous.paymentTransactionId === transactionId) {
+      checkoutStorage?.setItem(checkoutKey(orderId.toLowerCase()), JSON.stringify({ ...previous, standalone: false }))
+    }
   },
   resetAttempt(orderId: string): void {
     if (!isPaymentOrderId(orderId)) return

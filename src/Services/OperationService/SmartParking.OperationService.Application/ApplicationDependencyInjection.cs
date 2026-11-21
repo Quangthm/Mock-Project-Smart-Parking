@@ -9,6 +9,7 @@ public static class ApplicationDependencyInjection
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        services.AddSingleton<Reservations.IReservationSubscriptionEligibility, Reservations.ReservationSubscriptionEligibility>();
         services.AddAutoMapper(cfg => cfg.AddMaps(typeof(ApplicationDependencyInjection).Assembly));
         services.AddValidatorsFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
         services.AddMediatR(cfg =>

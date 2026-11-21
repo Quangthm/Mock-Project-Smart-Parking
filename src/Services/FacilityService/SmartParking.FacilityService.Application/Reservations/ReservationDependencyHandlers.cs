@@ -20,10 +20,12 @@ public sealed class DependencyIntentValidator : AbstractValidator<DependencyInte
         RuleFor(x => x.Deadline).NotEmpty();
     }
 }
+
 public sealed class AcquireDependencyValidator : AbstractValidator<AcquireDependencyCommand>
 {
     public AcquireDependencyValidator() { RuleFor(x => x.Intent).NotNull().SetValidator(new DependencyIntentValidator()); }
 }
+
 public sealed class ReadBookingFactsValidator : AbstractValidator<ReadBookingFactsQuery>
 {
     public ReadBookingFactsValidator()
@@ -32,10 +34,12 @@ public sealed class ReadBookingFactsValidator : AbstractValidator<ReadBookingFac
         RuleFor(x => x.SlotId).NotEmpty();
     }
 }
+
 public sealed class AbortDependencyValidator : AbstractValidator<AbortDependencyCommand>
 {
     public AbortDependencyValidator() { RuleFor(x => x.Intent).NotNull().SetValidator(new DependencyIntentValidator()); }
 }
+
 public sealed class CompleteDependencyValidator : AbstractValidator<CompleteDependencyCommand>
 {
     public CompleteDependencyValidator()
@@ -44,6 +48,7 @@ public sealed class CompleteDependencyValidator : AbstractValidator<CompleteDepe
         RuleFor(x => x.OutcomeJson).NotEmpty().MaximumLength(8192);
     }
 }
+
 public static class DependencyProtocol
 {
     public static DependencyIntent Intent(ReservationDependency row) => new(row.Id, row.WorkflowId,
@@ -57,6 +62,7 @@ public static class DependencyProtocol
         ReservationDependency.Create(intent.Token, intent.WorkflowId, intent.TenantId, intent.SiteId,
             intent.SlotId, intent.Purpose, intent.IntentFingerprint, intent.Deadline, now);
 }
+
 public sealed class AcquireDependencyHandler(IReservationDependencyRepository repository, IUnitOfWork work)
     : IRequestHandler<AcquireDependencyCommand, DependencyResult>
 {
@@ -90,6 +96,7 @@ public sealed class AcquireDependencyHandler(IReservationDependencyRepository re
         return new(intent, row.State, row.SnapshotJson is null ? null : JsonSerializer.Deserialize<ResourceSnapshot>(row.SnapshotJson));
     }
 }
+
 public sealed class AbortDependencyHandler(IReservationDependencyRepository repository, IUnitOfWork work)
     : IRequestHandler<AbortDependencyCommand, DependencyAcknowledgement>
 {
@@ -106,6 +113,7 @@ public sealed class AbortDependencyHandler(IReservationDependencyRepository repo
         return new(command.Intent, "ABORTED", null);
     }
 }
+
 public sealed class CompleteDependencyHandler(IReservationDependencyRepository repository, IUnitOfWork work)
     : IRequestHandler<CompleteDependencyCommand, DependencyAcknowledgement>
 {
@@ -120,15 +128,5 @@ public sealed class CompleteDependencyHandler(IReservationDependencyRepository r
         row.Complete(DependencyProtocol.Hash(command.OutcomeJson), await repository.NowAsync(ct));
         await work.SaveChangesAsync(ct); await transaction.CommitAsync(ct);
         return new(command.Intent, "COMPLETED", row.OutcomeFingerprint);
-    }
-}
-public sealed class ReadBookingFactsHandler(IReservationDependencyRepository repository, IUnitOfWork work)
-    : IRequestHandler<ReadBookingFactsQuery, BookingFacts>
-{
-    public async Task<BookingFacts> Handle(ReadBookingFactsQuery query, CancellationToken ct)
-    {
-        await using var transaction = await work.BeginTransactionAsync(ct);
-        await repository.LockAsync(Guid.NewGuid(), query.SiteId, ct);
-        return (await repository.SnapshotAsync(query.SiteId, query.SlotId, ct)).Booking;
     }
 }

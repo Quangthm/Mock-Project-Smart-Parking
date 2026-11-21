@@ -54,19 +54,28 @@ internal static class BookingContracts
             row.PaymentOrderId != payment.PaymentOrderId || row.DepositAmount is null or <= 0 ||
             row.DepositAmount != payment.Amount || row.Currency != payment.Currency)
             throw new InvalidOperationException("Payment collection is not bound to the reservation and order identity.");
-        var accepted = AcceptedTerms(row);
-        if (accepted.QuoteId != payment.QuoteId || accepted.Version != payment.QuoteVersion ||
+        var legacy = row.QuoteId is null ? AcceptedTerms(row) : null;
+        if ((row.QuoteId ?? legacy!.QuoteId) != payment.QuoteId || (row.QuoteVersion ?? legacy!.Version) != payment.QuoteVersion ||
+            row.QuoteId.HasValue && (payment.PaymentMethod != row.SelectedPaymentMethod ||
+                string.IsNullOrWhiteSpace(payment.Provider) || string.IsNullOrWhiteSpace(payment.ProviderReference) ||
+                payment.ProviderVerifiedAt == default || payment.OccurredAt == default) ||
             row.TermsId != payment.TermsId || row.TermsVersion != payment.TermsVersion)
             throw new InvalidOperationException("Payment collection is not bound to the accepted quote and terms.");
         if (row.CollectionId is not null && row.CollectionId != payment.CollectionId)
             throw new InvalidOperationException("A different payment collection is already recorded for this reservation.");
     }
+    public static ZeroOrderBinding ZeroBinding(ReservationRow row) => new(row.RequestId!.Value, row.Id,
+        row.AccountId, row.TenantId, row.SiteId, row.TargetSlotId!.Value, row.NormalizedPlate!, row.ExpectedStartTime,
+        row.ExpectedEndTime, row.SelectedPaymentMethod!, row.QuoteId!.Value, row.QuoteVersion!, row.IsCovered!.Value, row.CoverageVersion!,
+        row.Currency!, row.DepositAmount!.Value, row.HoldExpiresAt!.Value);
+
     public static BookingView View(ReservationRow row) => new(row.Id, row.Status, row.SiteId, row.TargetSlotId,
         row.ExpectedStartTime, row.ExpectedEndTime, row.HoldExpiresAt, row.PaymentOrderId,
         row.OrderProvisioningState, row.OrderProvisioningCode,
         row.ZeroPriceAcceptanceState,
         row.BookedAmount, row.DepositAmount, row.Currency, row.ConfirmedAt, row.CreatedAt)
     {
+        RequestId = row.RequestId,
         Vehicle = string.IsNullOrWhiteSpace(row.VehicleType) ? null : new(row.VehicleType, row.OriginalPlate ?? row.NormalizedPlate),
         LicensePlate = row.OriginalPlate ?? row.NormalizedPlate
     };

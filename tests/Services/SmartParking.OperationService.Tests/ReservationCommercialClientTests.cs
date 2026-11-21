@@ -101,6 +101,10 @@ public sealed class ReservationCommercialClientTests
 
         var result = await client.EnsureOrderAsync(request, CancellationToken.None);
 
+        using var body = JsonDocument.Parse(handler.LastBody!);
+        Assert.Equal(request.QuoteId, body.RootElement.GetProperty("quoteId").GetGuid());
+        Assert.Equal(request.QuoteVersion, body.RootElement.GetProperty("termsVersion").GetString());
+        Assert.False(body.RootElement.TryGetProperty("operationsTermsId", out _));
         Assert.Equal("CREATED", result.State);
         Assert.NotNull(result.OrderId);
         Assert.NotEqual(Guid.Empty, result.OrderId.Value);
@@ -155,16 +159,13 @@ public sealed class ReservationCommercialClientTests
     private static DepositOrderRequest NewDepositOrderRequest()
     {
         var selection = NewSelection();
-        var terms = new CommercialTerms(Guid.NewGuid(), "v1", DateTimeOffset.UtcNow.AddMinutes(10),
-            selection, Guid.NewGuid(), 50000m, 10000m, "VND", "FULL", "STANDARD_v1", "Terms");
         return new DepositOrderRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            selection.SiteId, selection.VehicleId, selection.RequestedSlotId, selection.Start, selection.End,
-            Guid.NewGuid(), "ops-v1", terms, DateTimeOffset.UtcNow.AddMinutes(10));
+            selection.SiteId, Guid.NewGuid(), "v1", 10000m, "VND", selection.PaymentMethod,
+            DateTimeOffset.UtcNow.AddMinutes(10));
     }
 
     private static object Accepted(DepositOrderRequest request)
     {
-        var terms = request.AcceptedTerms;
         return new
         {
             operationId = request.OperationId,
@@ -172,11 +173,11 @@ public sealed class ReservationCommercialClientTests
             accountId = request.AccountId,
             tenantId = request.TenantId,
             siteId = request.SiteId,
-            quoteId = terms.QuoteId,
-            termsVersion = terms.Version,
-            amount = terms.DepositAmount,
-            currency = terms.Currency,
-            paymentMethod = terms.Selection.PaymentMethod,
+            quoteId = request.QuoteId,
+            termsVersion = request.QuoteVersion,
+            amount = request.Amount,
+            currency = request.Currency,
+            paymentMethod = request.PaymentMethod,
             expiresAt = request.ExpiresAt
         };
     }
@@ -185,16 +186,4 @@ public sealed class ReservationCommercialClientTests
 
     private static HttpResponseMessage Json(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
-
-    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> response)
-        : HttpMessageHandler
-    {
-        public HttpRequestMessage? LastRequest { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            LastRequest = request;
-            return Task.FromResult(response(request));
-        }
-    }
 }

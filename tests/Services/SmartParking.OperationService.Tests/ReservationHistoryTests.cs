@@ -99,6 +99,11 @@ public sealed class ReservationHistoryTests
         Assert.True(detailJson.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal(JsonValueKind.Array, listJson.RootElement.GetProperty("data").ValueKind);
         var data = detailJson.RootElement.GetProperty("data");
+        foreach (var representation in new[] { data, listJson.RootElement.GetProperty("data")[0] })
+        {
+            Assert.Equal(booking.RequestId!.Value, representation.GetProperty("requestId").GetGuid());
+            Assert.Equal("51A-12345", representation.GetProperty("vehicle").GetProperty("displayLabel").GetString());
+        }
         Assert.Equal(item.ReservationId, data.GetProperty("reservationId").GetGuid());
         Assert.Equal(JsonValueKind.Null, data.GetProperty("paymentStatus").ValueKind);
         Assert.Equal(JsonValueKind.Null, data.GetProperty("siteName").ValueKind);
