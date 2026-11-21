@@ -137,7 +137,8 @@ public class EnsureReservationDepositOrderCommandHandlerTests
         // Verify tombstone order in DB
         Assert.Single(orderRepo.Orders);
         var tombstone = orderRepo.Orders[0];
-        Assert.Equal(PaymentOrderStatus.CANCELLED, tombstone.Status);
+        Assert.True(tombstone.IsProvisioningFence);
+        Assert.Null(tombstone.Status);
         Assert.Equal(opId.ToString(), tombstone.IdempotencyKey);
         Assert.Equal(requestDto.QuoteId, tombstone.QuoteId);
         Assert.Equal(requestDto.TermsVersion, tombstone.TermsVersion);

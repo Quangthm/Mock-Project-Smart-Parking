@@ -40,6 +40,7 @@ public sealed partial class QuoteBookingDatabaseTests
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
             ApplicationName = typeof(ReviewedReservationQuotesController).Assembly.GetName().Name });
         builder.Logging.ClearProviders();
+        builder.Logging.AddSimpleConsole().SetMinimumLevel(LogLevel.None).AddFilter("MassTransit", LogLevel.Warning);
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Configuration.Sources.Clear();
         var settings = builder.Configuration;
@@ -179,12 +180,16 @@ public sealed partial class QuoteBookingDatabaseTests
             transport.FailNextLookup = true;
             (await Callback(first)).EnsureSuccessStatusCode();
             (await Callback(first)).EnsureSuccessStatusCode();
+            Assert.Equal(SmartParking.PaymentService.Domain.Enums.PaymentOrderStatus.PAID,
+                (await db.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == orderId)).Status);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(35));
             BasicGetResult? original;
             while ((original = await delivery.BasicGetAsync(queue, autoAck: false, timeout.Token)) == null)
                 await Task.Delay(100, timeout.Token);
             using var originalEnvelope = JsonDocument.Parse(original.Body);
-            Assert.Equal(transactionId, originalEnvelope.RootElement.GetProperty("message").GetProperty("paymentTransactionId").GetGuid());
+            var settledMessage = originalEnvelope.RootElement.GetProperty("message");
+            Assert.Equal(transactionId, settledMessage.GetProperty("paymentTransactionId").GetGuid());
+            Assert.Equal(transactionId, settledMessage.GetProperty("eventId").GetGuid());
             // Closing an unacknowledged channel must return that exact delivery to the durable queue.
             await delivery.CloseAsync();
             await using var retried = await connection.CreateChannelAsync();
@@ -208,9 +213,18 @@ public sealed partial class QuoteBookingDatabaseTests
             Assert.Equal(1, transport.FailedLookups);
             var evidence = Assert.Single(await owner.ReadCollectionsAsync(orderId, default));
             Assert.Equal((transactionId, first), (evidence.CollectionId, evidence.ProviderReference));
-            (await Callback(Guid.NewGuid().ToString("N"))).EnsureSuccessStatusCode();
-            while (!await db.RefundRequests.AsNoTracking().AnyAsync(r => r.PaymentOrderId == orderId)) await Task.Delay(100, timeout.Token);
+            var extraReference = Guid.NewGuid().ToString("N");
+            paymentFault.Enabled = true;
+            Assert.Equal(HttpStatusCode.InternalServerError, (await Callback(extraReference)).StatusCode);
+            paymentFault.Enabled = false;
+            Assert.Single(await owner.ReadCollectionsAsync(orderId, default));
+            Assert.False(await db.RefundRequests.AsNoTracking().AnyAsync(r => r.PaymentOrderId == orderId));
+            (await Callback(extraReference)).EnsureSuccessStatusCode();
+            (await Callback(extraReference)).EnsureSuccessStatusCode();
             var additional = Assert.Single(await owner.ReadCollectionsAsync(orderId, default), c => c.CollectionId != transactionId);
+            var disposition = await db.RefundRequests.AsNoTracking().SingleAsync(r => r.PaymentOrderId == orderId);
+            Assert.Equal(((Guid?)additional.CollectionId, "ADDITIONAL_COLLECTION", "REFUND_REQUESTED"),
+                (disposition.CollectionId, disposition.Reason, disposition.Status));
             await owner.ReconcileAsync(id, additional.Collection(), "COLLECTION_BINDING_CONFLICT", default);
             Assert.Equal(1, await db.RefundRequests.CountAsync(r => r.PaymentOrderId == orderId));
             Assert.Equal(transactionId, (await Read()).CollectionId);
@@ -264,6 +278,8 @@ public sealed partial class QuoteBookingDatabaseTests
             Assert.Equal("EXPIRED", (await Read()).Status);
             proof = lateProof;
             (await Callback(Guid.NewGuid().ToString("N"))).EnsureSuccessStatusCode();
+            Assert.Equal(SmartParking.PaymentService.Domain.Enums.PaymentOrderStatus.PAID,
+                (await db.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == latePaid.PaymentOrderId)).Status);
             using var lateTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
             await AwaitConfirmationToken(id, lateTimeout.Token);
             await HoldToken(operations, id, "CONFIRMATION");

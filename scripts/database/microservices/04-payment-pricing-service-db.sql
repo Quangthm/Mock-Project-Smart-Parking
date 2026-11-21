@@ -176,12 +176,8 @@ CREATE TABLE IF NOT EXISTS payment_orders (
     quote_id UUID,
     reviewed_method TEXT,
     reviewed_currency TEXT,
-    is_provisioning_fence BOOLEAN NOT NULL DEFAULT FALSE
-        CHECK (NOT is_provisioning_fence OR (reviewed_method IS NOT NULL AND status = 'CANCELLED')),
-    zero_disposition_reason VARCHAR(100) CHECK (zero_disposition_reason IS NULL OR (reviewed_method IS NOT NULL AND final_amount = 0)),
-    CHECK (reviewed_method IS NULL OR
-        (reviewed_method = 'PAYOS' AND reviewed_currency IS NOT NULL AND reviewed_currency = 'VND'
-         AND quote_id IS NOT NULL AND idempotency_key IS NOT NULL AND expires_at IS NOT NULL)),
+    is_provisioning_fence BOOLEAN NOT NULL DEFAULT FALSE,
+    zero_disposition_reason VARCHAR(100),
     terms_version VARCHAR(50),
     plate_number VARCHAR(50),
     
@@ -191,10 +187,30 @@ CREATE TABLE IF NOT EXISTS payment_orders (
     final_amount DECIMAL(14,2) NOT NULL CHECK (final_amount >= 0),
     CHECK (final_amount = (amount - discount_amount - deposit_deducted)),
     
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED')),
+    status VARCHAR(50) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED')),
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_payment_orders_reviewed_binding CHECK (
+        (reviewed_method IS NULL AND reviewed_currency IS NULL) OR
+        (order_type = 'RESERVATION_FEE' AND reference_type = 'RESERVATION'
+         AND reviewed_method IS NOT NULL AND btrim(reviewed_method) <> ''
+         AND reviewed_currency IS NOT NULL AND reviewed_currency ~ '^[A-Z]{3}$'
+         AND account_id IS NOT NULL AND quote_id IS NOT NULL
+         AND terms_version IS NOT NULL AND btrim(terms_version) <> ''
+         AND idempotency_key IS NOT NULL AND btrim(idempotency_key) <> '' AND expires_at IS NOT NULL)
+    ),
+    CONSTRAINT ck_payment_orders_provisioning_fence CHECK (
+        (status IS NULL) = is_provisioning_fence AND
+        (NOT is_provisioning_fence OR
+         (order_type = 'RESERVATION_FEE' AND reference_type = 'RESERVATION'
+          AND idempotency_key IS NOT NULL AND btrim(idempotency_key) <> '' AND expires_at IS NOT NULL))
+    ),
+    CONSTRAINT ck_payment_orders_zero_disposition CHECK (
+        zero_disposition_reason IS NULL OR
+        (reviewed_method IS NOT NULL AND NOT is_provisioning_fence AND final_amount = 0 AND status = 'PAID'
+         AND btrim(zero_disposition_reason) <> '')
+    )
 );
 CREATE INDEX IF NOT EXISTS idx_payment_orders_tenant_site ON payment_orders(tenant_id, site_id);
 CREATE INDEX IF NOT EXISTS idx_payment_orders_account ON payment_orders(account_id);
@@ -218,10 +234,10 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     payment_method VARCHAR(50) NOT NULL CHECK (payment_method IN ('PAYOS', 'VNPAY', 'MOMO', 'ZALOPAY', 'CASH')),
     gateway_transaction_id VARCHAR(255),
     provider_collection_reference VARCHAR(255),
-    collection_event_id UUID UNIQUE,
     provider_verified_at TIMESTAMPTZ,
+    CHECK ((provider_collection_reference IS NULL) = (provider_verified_at IS NULL)),
     CHECK (provider_collection_reference IS NULL OR
-        (collection_event_id IS NOT NULL AND provider_verified_at IS NOT NULL AND paid_at IS NOT NULL
+        (btrim(provider_collection_reference) <> '' AND paid_at IS NOT NULL
          AND status = 'SUCCESS' AND transaction_type = 'PAYMENT' AND amount > 0)),
     idempotency_key VARCHAR(255),
     amount DECIMAL(14,2) NOT NULL,

@@ -11,11 +11,9 @@ public class PaymentTransactionConfiguration : IEntityTypeConfiguration<PaymentT
         builder.ToTable("payment_transactions");
 
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.ProviderCollectionReference).HasColumnName("provider_collection_reference").HasMaxLength(255);
-        builder.Property(x => x.CollectionEventId).HasColumnName("collection_event_id").IsConcurrencyToken();
+        builder.Property(x => x.ProviderCollectionReference).HasColumnName("provider_collection_reference").HasMaxLength(255).IsConcurrencyToken();
         builder.Property(x => x.ProviderVerifiedAt).HasColumnName("provider_verified_at");
         builder.HasIndex(x => new { x.PaymentMethod, x.ProviderCollectionReference }).IsUnique();
-        builder.HasIndex(x => x.CollectionEventId).IsUnique();
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.PaymentOrderId).HasColumnName("payment_order_id").IsRequired();

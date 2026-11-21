@@ -27,7 +27,8 @@ public class PaymentOrder
     public decimal DepositDeducted { get; set; }
     public decimal FinalAmount { get; set; }
 
-    public PaymentOrderStatus Status { get; set; } = PaymentOrderStatus.PENDING;
+    // Provisioning fences have no commercial lifecycle.
+    public PaymentOrderStatus? Status { get; set; } = PaymentOrderStatus.PENDING;
     public DateTimeOffset? ExpiresAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -35,7 +36,14 @@ public class PaymentOrder
     public ICollection<PaymentTransaction> Transactions { get; set; } = new List<PaymentTransaction>();
     public Invoice? Invoice { get; set; }
 
+    public PaymentOrderStatus RequireCommercialStatus() =>
+        Status ?? throw new InvalidOperationException("A commercial payment order must have a status.");
+
     public bool IsExpired(DateTimeOffset now) => ExpiresAt.HasValue && ExpiresAt.Value < now;
+
+    public bool CanSettleReviewedPayment(decimal collectedAmount) =>
+        ReviewedMethod is not null && !IsProvisioningFence && Status == PaymentOrderStatus.PENDING &&
+        FinalAmount > 0 && FinalAmount == collectedAmount;
 
     public void MarkPaid(DateTimeOffset now)
     {

@@ -6,45 +6,6 @@ using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Tests.TestDoubles;
 
-public class FakePaymentTransactionRepository : IPaymentTransactionRepository
-{
-    public readonly List<PaymentTransaction> Transactions = new();
-
-    public Task<PaymentTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Transactions.FirstOrDefault(x => x.Id == id));
-    }
-
-    public Task<PaymentTransaction?> GetByGatewayTransactionIdAsync(string gatewayTxId, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Transactions.FirstOrDefault(x => x.GatewayTransactionId == gatewayTxId));
-    }
-
-    public Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Transactions.FirstOrDefault(x => x.IdempotencyKey == idempotencyKey));
-    }
-
-    public Task<IReadOnlyList<PaymentTransaction>> GetByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default)
-    {
-        var list = Transactions.Where(x => x.PaymentOrderId == orderId).ToList();
-        return Task.FromResult<IReadOnlyList<PaymentTransaction>>(list);
-    }
-
-    public Task AddAsync(PaymentTransaction transaction, CancellationToken cancellationToken = default)
-    {
-        Transactions.Add(transaction);
-        return Task.CompletedTask;
-    }
-
-    public void Update(PaymentTransaction transaction)
-    {
-        var idx = Transactions.FindIndex(x => x.Id == transaction.Id);
-        if (idx >= 0) Transactions[idx] = transaction;
-        else Transactions.Add(transaction);
-    }
-}
-
 public class FakeRefundRequestRepository : IRefundRequestRepository
 {
     public readonly List<RefundRequest> RefundRequests = new();

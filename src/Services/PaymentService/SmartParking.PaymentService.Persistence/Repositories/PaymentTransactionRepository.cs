@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 using SmartParking.PaymentService.Domain.Entities;
+using SmartParking.PaymentService.Domain.Enums;
 
 namespace SmartParking.PaymentService.Persistence.Repositories;
 
@@ -26,6 +27,10 @@ public class PaymentTransactionRepository : IPaymentTransactionRepository
             .Include(x => x.PaymentOrder)
             .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTxId, cancellationToken);
     }
+
+    public Task<PaymentTransaction?> GetByProviderCollectionReferenceAsync(PaymentMethod method, string reference, CancellationToken cancellationToken = default) =>
+        _dbContext.PaymentTransactions.SingleOrDefaultAsync(
+            x => x.PaymentMethod == method && x.ProviderCollectionReference == reference, cancellationToken);
 
     public async Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
     {

@@ -39,7 +39,8 @@ public sealed class GetReservationCollectionsQueryHandler
         var transactions = await _transactionRepository.GetByOrderIdAsync(order.Id, cancellationToken);
         var reviewed = order.ReviewedMethod != null;
         var successTransactions = transactions.Where(t => t.Status == PaymentStatus.SUCCESS &&
-            t.TransactionType == TransactionType.PAYMENT && (!reviewed || t.CollectionEventId != null)).ToList();
+            t.TransactionType == TransactionType.PAYMENT && (!reviewed ||
+                (t.HasVerifiedProviderCollection() && t.TenantId == order.TenantId && t.PaymentMethod.ToString() == order.ReviewedMethod))).ToList();
 
         if (successTransactions.Count > 0)
         {
@@ -54,7 +55,7 @@ public sealed class GetReservationCollectionsQueryHandler
                 TermsVersion: order.TermsVersion ?? "1",
                 Amount: tx.Amount,
                 Currency: order.ReviewedCurrency ?? "VND",
-                Evidence: reviewed ? new(1, tx.CollectionEventId!.Value, Guid.Parse(order.IdempotencyKey!), tx.Id,
+                Evidence: reviewed ? new(1, tx.Id, Guid.Parse(order.IdempotencyKey!), tx.Id,
                     order.ReviewedMethod!, "PAYOS", tx.ProviderCollectionReference!, tx.ProviderVerifiedAt!.Value, tx.PaidAt!.Value) : null
             )).ToList();
 

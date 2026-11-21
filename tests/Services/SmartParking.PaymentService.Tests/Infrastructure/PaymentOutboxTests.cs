@@ -236,6 +236,7 @@ public class PaymentOutboxTests
                 orderRepo,
                 txRepo,
                 invoiceRepo,
+                new FakeRefundRequestRepository(),
                 publisher,
                 uow,
                 NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

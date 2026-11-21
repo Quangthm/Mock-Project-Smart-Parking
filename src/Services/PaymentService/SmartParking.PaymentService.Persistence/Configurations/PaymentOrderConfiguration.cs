@@ -40,7 +40,8 @@ public class PaymentOrderConfiguration : IEntityTypeConfiguration<PaymentOrder>
         builder.Property(x => x.DepositDeducted).HasColumnName("deposit_deducted").HasPrecision(14, 2).HasDefaultValue(0);
         builder.Property(x => x.FinalAmount).HasColumnName("final_amount").HasPrecision(14, 2).IsRequired();
 
-        builder.Property(x => x.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(50).HasDefaultValue(Domain.Enums.PaymentOrderStatus.PENDING);
+        builder.Property(x => x.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(50)
+            .HasDefaultValue(Domain.Enums.PaymentOrderStatus.PENDING).ValueGeneratedNever();
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
