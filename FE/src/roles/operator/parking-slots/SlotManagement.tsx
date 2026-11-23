@@ -1,7 +1,9 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { showUiToast } from "../../../lib/uiToast"
 import { parkingApi } from "../../../lib/parkingApi"
+import { invalidateOperatorLayout } from "../../../lib/operatorRealtimeResources"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { formatSlotLabel } from "../../../lib/operationalLayout"
 import { SLOT_VISUAL_STATE_HEX } from "../../../lib/3d/parking3DConfig"
@@ -35,6 +37,17 @@ export function SlotManagement({ siteId, siteName, slots, slotView, hasOverrideP
 
   // Release confirmation modal
   const [releasingSlot, setReleasingSlot] = useState<{ id: string; code: string } | null>(null)
+
+  useEffect(() => {
+    if (!releasingSlot) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) {
+        setReleasingSlot(null)
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [releasingSlot, busy])
 
   const backupSlots = useMemo(
     () => slots.filter((slot) => slotView(slot).reservationState === "BACKUP").map((slot) => ({
@@ -83,7 +96,7 @@ export function SlotManagement({ siteId, siteName, slots, slotView, hasOverrideP
       setSelectedSlotId("")
       showUiToast("Backup slot designated", "The selected slot is reserved for backup capacity.")
       setDesignateReason("")
-      window.dispatchEvent(new Event("sp-operator-refresh"))
+      invalidateOperatorLayout(siteId, "mutation")
     } catch (err) {
       showUiToast("Backup slot not designated", err instanceof Error ? err.message : "Failed to designate backup slot.", "error")
       setFeedback({
@@ -110,7 +123,7 @@ export function SlotManagement({ siteId, siteName, slots, slotView, hasOverrideP
       })
       setReleasingSlot(null)
       showUiToast("Backup slot released", "The slot is available for regular bookings.")
-      window.dispatchEvent(new Event("sp-operator-refresh"))
+      invalidateOperatorLayout(siteId, "mutation")
     } catch (err) {
       showUiToast("Backup slot not released", err instanceof Error ? err.message : "Failed to release backup slot.", "error")
       setFeedback({
@@ -321,7 +334,7 @@ export function SlotManagement({ siteId, siteName, slots, slotView, hasOverrideP
       </div>
 
       {/* CONFIRMATION MODAL: Release Backup */}
-      {releasingSlot && (
+      {releasingSlot && typeof document !== "undefined" && createPortal(
         <div
           role="presentation"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -331,7 +344,7 @@ export function SlotManagement({ siteId, siteName, slots, slotView, hasOverrideP
             role="dialog"
             aria-modal="true"
             aria-labelledby="release-backup-title"
-            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl animate-in text-sm text-[var(--fg)]"
+            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl text-sm text-[var(--fg)]"
           >
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-[var(--status-maintenance-bg)] p-3 text-[var(--maintenance)]">
@@ -383,7 +396,8 @@ export function SlotManagement({ siteId, siteName, slots, slotView, hasOverrideP
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

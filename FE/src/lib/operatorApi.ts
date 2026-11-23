@@ -476,7 +476,7 @@ export async function refreshOperatorSite(site: OperatorSite): Promise<OperatorS
   return { ...updated, modelUrl: site.modelUrl ?? updated.modelUrl }
 }
 
-async function readAssignedOperatorSite(assignment: { siteId: string; tenantId: string; permissions: string[] }): Promise<OperatorSite> {
+export async function readAssignedOperatorSite(assignment: { siteId: string; tenantId: string; permissions: string[] }): Promise<OperatorSite> {
       const projection = await readOperatorLayout(() => parkingApi.operationalLayout(assignment.siteId))
       if (projection?.siteId && projection.siteId !== assignment.siteId) {
         throw new Error("The parking service returned a layout for a different site.")

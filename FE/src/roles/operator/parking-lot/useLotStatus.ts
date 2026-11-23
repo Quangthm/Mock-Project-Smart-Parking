@@ -7,7 +7,14 @@ import {
   type ParkingSessionHistoryEntry,
 } from "../../../lib/operatorApi"
 import { AuthApiError } from "../../../lib/authApi"
-import { parkingApi } from "../../../lib/parkingApi"
+import type { LayoutConnectionState, LayoutSyncOutcome } from "../../../lib/operatorLayoutLive"
+import {
+  invalidateOperatorGateResources,
+  invalidateOperatorParkingSessions,
+  reconcileOperatorLayout,
+  subscribeOperatorLayout,
+  subscribeOperatorParkingSessions,
+} from "../../../lib/operatorRealtimeResources"
 import type { LotType, SlotStatus } from "../../../lib/types"
 import {
   isLayoutStale,
@@ -51,13 +58,13 @@ export type LotVisualFilter =
   | "unavailable"
 
 type ViewMode = "3d" | "grid" | "list"
-type DemoVehicle = {
+export type DemoVehicle = {
   plate: string
   imageUrl: string
   session: DemoSlotSession
 }
 
-type PendingCheckIn = {
+export type PendingCheckIn = {
   plate: string
   imageUrl?: string
   vehicleType?: string
@@ -150,6 +157,8 @@ export interface UseLotStatusOptions {
    */
   refreshLayout?: () => Promise<OperationalLayoutProjection | null | void>
   refreshOnResume?: boolean
+  connectionState?: LayoutConnectionState
+  syncState?: LayoutSyncOutcome | "pending"
 }
 
 export type SlotProjectionLookup = (
@@ -260,6 +269,222 @@ export function createStatusFilterPredicates(
   }
 }
 
+export function resolveOperatorSlotView(
+  slot: OperatorSlot,
+  projected?: SlotVisualStateDto,
+): SlotView {
+  const axes = resolveSlotAxes(slot, projected)
+  if (axes.physicalState === "OCCUPIED" && slot.demoSession) {
+    return {
+      physicalState: "OCCUPIED",
+      reservationState: axes.reservationState,
+      visualState: "occupied",
+    }
+  }
+  return { ...axes, visualState: slotVisualState(axes) }
+}
+
+export function reconcileSlotAssignment(
+  slot: OperatorSlot,
+  assignment: DemoVehicle | undefined,
+  pending: DemoVehicle | undefined,
+  projected: SlotVisualStateDto | undefined,
+): OperatorSlot {
+  const direct = slot as AxesAwareSlot
+  const authoritativePhysical =
+    projected?.physicalState ??
+    direct.physicalState ??
+    legacyPhysicalState(slot)
+
+  const isPhysicalReleased = authoritativePhysical === "AVAILABLE" || authoritativePhysical === "MAINTENANCE"
+  if (assignment && !isPhysicalReleased && assignment.session.status !== "COMPLETED") {
+    return {
+      ...slot,
+      status: "occupied",
+      physicalState: "OCCUPIED",
+      isPhysicallyOccupied: true,
+      isBookable: false,
+      demoPlate: assignment.plate,
+      demoImageUrl: assignment.imageUrl,
+      demoCheckedInAt: assignment.session.entryTime,
+      demoSession: assignment.session,
+    }
+  }
+  return pending
+    ? { ...slot, demoImageUrl: pending.imageUrl, demoCheckedInAt: pending.session.entryTime }
+    : slot
+}
+
+export interface CheckoutMatchDetail {
+  siteId?: string
+  plate?: string
+  sessionId?: string
+  reservationId?: string | null
+  slotId?: string | null
+}
+
+function normalizeCheckoutPlate(value?: string | null): string {
+  return (value ?? "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase()
+}
+
+function matchesCheckoutTarget(
+  candidate: {
+    slotId?: string | null
+    plate?: string
+    session?: {
+      id?: string
+      reservationId?: string | null
+      originalPlate?: string
+      normalizedPlate?: string
+    }
+  },
+  detail: CheckoutMatchDetail,
+): boolean {
+  const detailSessionId = (detail.sessionId ?? "").trim()
+  const detailReservationId = (detail.reservationId ?? "").trim()
+  const itemSessionId = (candidate.session?.id ?? "").trim()
+  const itemReservationId = (candidate.session?.reservationId ?? "").trim()
+
+  const detailHasIdentity = Boolean(detailSessionId || detailReservationId)
+  const itemHasIdentity = Boolean(itemSessionId || itemReservationId)
+
+  // Authoritative session identity check: when both sides identify a session
+  // or reservation, a mismatch must preserve the distinct occupant even if the
+  // slot or license plate was reused.
+  if (detailHasIdentity && itemHasIdentity) {
+    if (detailSessionId && itemSessionId && itemSessionId === detailSessionId) return true
+    if (detailSessionId && itemReservationId && itemReservationId === detailSessionId) return true
+    if (detailReservationId && itemReservationId && itemReservationId === detailReservationId) return true
+    if (detailReservationId && itemSessionId && itemSessionId === detailReservationId) return true
+    return false
+  }
+
+  // Fallback compatibility for legacy slot-only or plate-only events/entries
+  // where at least one side lacks session identity.
+  if (detail.slotId && candidate.slotId && candidate.slotId === detail.slotId) {
+    return true
+  }
+
+  const targetPlate = normalizeCheckoutPlate(detail.plate)
+  if (!targetPlate) return false
+
+  const plateA = normalizeCheckoutPlate(candidate.plate)
+  const plateB = normalizeCheckoutPlate(candidate.session?.originalPlate)
+  const plateC = normalizeCheckoutPlate(candidate.session?.normalizedPlate)
+  return plateA === targetPlate || plateB === targetPlate || plateC === targetPlate
+}
+
+export function filterAssignmentsOnCheckout(
+  assignments: Record<string, DemoVehicle>,
+  detail: CheckoutMatchDetail,
+): Record<string, DemoVehicle> {
+  return Object.fromEntries(
+    Object.entries(assignments).filter(
+      ([slotId, vehicle]) =>
+        !matchesCheckoutTarget(
+          {
+            slotId,
+            plate: vehicle.plate,
+            session: vehicle.session,
+          },
+          detail,
+        ),
+    ),
+  )
+}
+
+export function filterPendingCheckInsOnCheckout<
+  T extends {
+    plate?: string
+    slotId?: string | null
+    session?: {
+      id?: string
+      reservationId?: string | null
+      originalPlate?: string
+      normalizedPlate?: string
+    } | null
+  },
+>(stored: T[], detail: CheckoutMatchDetail): T[] {
+  return stored.filter(
+    (checkIn) =>
+      !matchesCheckoutTarget(
+        {
+          slotId: checkIn.slotId,
+          plate: checkIn.plate,
+          session: checkIn.session ?? undefined,
+        },
+        detail,
+      ),
+  )
+}
+
+export interface OperatorFreshnessEvaluation {
+  isStale: boolean
+  isSourceStale: boolean
+  isSyncFailed: boolean
+  isMalformedMetadata: boolean
+  isAgeStale: boolean
+  isHealthyIdleLive: boolean
+  staleAgeSeconds: number | null
+}
+
+export interface EvaluateOperatorFreshnessOptions {
+  connectionState?: LayoutConnectionState
+  syncState?: LayoutSyncOutcome | "pending"
+  refreshFailed?: boolean
+  now?: number
+}
+
+export function evaluateOperatorFreshness(
+  freshness: Pick<OperationalLayoutProjection, "generatedAt" | "isFresh" | "stalenessThresholdSeconds"> | null | undefined,
+  options: EvaluateOperatorFreshnessOptions = {},
+): OperatorFreshnessEvaluation {
+  const now = options.now ?? Date.now()
+  const isSyncFailed = Boolean(options.refreshFailed || options.syncState === "error" || options.syncState === "stale")
+
+  if (!freshness) {
+    return {
+      isStale: isSyncFailed,
+      isSourceStale: false,
+      isSyncFailed,
+      isMalformedMetadata: false,
+      isAgeStale: false,
+      isHealthyIdleLive: false,
+      staleAgeSeconds: null,
+    }
+  }
+
+  const threshold = freshness.stalenessThresholdSeconds
+  const isInvalidThreshold = typeof threshold !== "number" || !Number.isFinite(threshold) || threshold <= 0
+  const parsedGeneratedAt = Date.parse(freshness.generatedAt)
+  const isInvalidTimestamp = Number.isNaN(parsedGeneratedAt)
+  const isMalformedMetadata = isInvalidThreshold || isInvalidTimestamp
+
+  const isSourceStale = freshness.isFresh !== true
+  const staleAgeSeconds = isInvalidTimestamp ? null : Math.max(0, Math.round((now - parsedGeneratedAt) / 1000))
+  const isElapsedAge = !isMalformedMetadata && (now - parsedGeneratedAt > (threshold as number) * 1000)
+
+  const isHealthyIdleLive =
+    options.connectionState === "connected" &&
+    options.syncState === "synced" &&
+    freshness.isFresh === true &&
+    !isMalformedMetadata &&
+    !isSyncFailed
+
+  const isAgeStale = isElapsedAge || isMalformedMetadata
+  const isStale = isSyncFailed || isSourceStale || isMalformedMetadata || (isElapsedAge && !isHealthyIdleLive)
+
+  return {
+    isStale,
+    isSourceStale,
+    isSyncFailed,
+    isMalformedMetadata,
+    isAgeStale,
+    isHealthyIdleLive,
+    staleAgeSeconds,
+  }
+}
+
 export function useLotStatus(
   lot: OperatorSite | null,
   initialSlotCode = "",
@@ -325,17 +550,34 @@ export function useLotStatus(
     previousSiteIdRef.current = site?.id
     lastLayoutRef.current = null
     setFetchedLayout(null)
+    setRefreshFailed(false)
   }, [site?.id])
 
-  // A new site object from the parent load already carries its slots and
-  // freshness triple captured together, so drop any older hook-level snapshot.
-  const previousLotRef = useRef(lot)
   useEffect(() => {
-    if (previousLotRef.current === lot) return
-    previousLotRef.current = lot
-    lastLayoutRef.current = null
-    setFetchedLayout(null)
-  }, [lot])
+    if (options.layout || !site?.id) return
+    let active = true
+    const unsubscribe = subscribeOperatorLayout(site.id, (snapshot) => {
+      if (!active) return
+      if (snapshot.lastOutcome === "error") {
+        setRefreshFailed(true)
+        setNow(Date.now())
+        return
+      }
+      const nextLayout = resolveLotLayout(snapshot.data)
+      if (nextLayout) {
+        setFetchedLayout(nextLayout)
+        lastLayoutRef.current = nextLayout
+        if (snapshot.lastOutcome === "synced") {
+          setRefreshFailed(false)
+        }
+        setNow(Date.now())
+      }
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [options.layout, site?.id])
 
   const refreshLayoutRef = useRef(options.refreshLayout)
   refreshLayoutRef.current = options.refreshLayout
@@ -354,9 +596,17 @@ export function useLotStatus(
           lastLayoutRef.current = next
         }
       } else if (site) {
-        const projection = await parkingApi.operationalLayout(site.id)
-        setFetchedLayout(projection)
-        lastLayoutRef.current = projection
+        const snapshot = await reconcileOperatorLayout(site.id, "mutation")
+        if (snapshot.lastOutcome === "error") {
+          throw snapshot.lastError instanceof Error
+            ? snapshot.lastError
+            : new Error("Failed to refresh parking layout.")
+        }
+        const projection = resolveLotLayout(snapshot.data)
+        if (projection) {
+          setFetchedLayout(projection)
+          lastLayoutRef.current = projection
+        }
       }
       setRefreshFailed(false)
     } catch {
@@ -442,7 +692,10 @@ export function useLotStatus(
         !staleIds.includes(item.session?.id ?? "")),
     ))
     setLastScanAt(Date.now())
-    if (completedIds.length > 0) await refreshLayout()
+    if (completedIds.length > 0) {
+      invalidateOperatorGateResources(site.id, "mutation", { includeLayout: false })
+      await refreshLayout()
+    }
     setIsScanning(false)
   }, [isScanning, pendingDemoAssignments, refreshLayout, site])
 
@@ -453,10 +706,10 @@ export function useLotStatus(
     setLastScanAt(null)
 
     let active = true
-    void reservationApi.listParkingSessions(site.id).then((sessions) => {
-      if (!active) return
+    const unsubscribe = subscribeOperatorParkingSessions(site.id, (snapshot) => {
+      if (!active || !snapshot.data) return
       const assignments: Record<string, DemoVehicle> = {}
-      for (const session of sessions) {
+      for (const session of snapshot.data) {
         if (!session.currentSlotId || !session.locationScannedAt ||
             !(session.status === "ACTIVE" || session.status === "PENDING_PAYMENT")) continue
         const vehicle = toDemoSession(session)
@@ -467,12 +720,13 @@ export function useLotStatus(
         }
       }
       setDemoAssignments(assignments)
-    }).catch(() => undefined)
+    })
+    invalidateOperatorParkingSessions(site.id, "initial")
 
     const stored = JSON.parse(
       window.localStorage.getItem(pendingCheckInStorageKey(site.id)) ?? "[]",
     ) as PendingCheckIn[]
-    if (stored.length === 0) return () => { active = false }
+    if (stored.length === 0) return () => { active = false; unsubscribe() }
     const assignments: Record<string, DemoVehicle> = {}
     const availableSlots = site.slots.filter((slot) => slot.status === "available")
     stored.forEach((checkIn, index) => {
@@ -492,7 +746,10 @@ export function useLotStatus(
     })
     setPendingDemoAssignments(assignments)
     window.localStorage.setItem(pendingCheckInStorageKey(site.id), JSON.stringify(stored))
-    return () => { active = false }
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [site?.id])
 
   useEffect(() => {
@@ -527,15 +784,25 @@ export function useLotStatus(
       }
     }
     const handleCheckOut = (event: Event) => {
-      const detail = (event as CustomEvent<{ siteId: string; plate: string }>).detail
+      const detail = (event as CustomEvent<{
+        siteId: string
+        plate: string
+        sessionId?: string
+        reservationId?: string | null
+        slotId?: string | null
+      }>).detail
       if (!site || detail.siteId !== site.id) return
-      const removePlate = (assignments: Record<string, DemoVehicle>) =>
-        Object.fromEntries(Object.entries(assignments).filter(([, vehicle]) => vehicle.plate !== detail.plate))
-      setDemoAssignments(removePlate)
-      setPendingDemoAssignments(removePlate)
+      const removeMatch = (assignments: Record<string, DemoVehicle>) =>
+        filterAssignmentsOnCheckout(assignments, detail)
+      setDemoAssignments(removeMatch)
+      setPendingDemoAssignments(removeMatch)
       const storageKey = pendingCheckInStorageKey(site.id)
       const stored = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as PendingCheckIn[]
-      window.localStorage.setItem(storageKey, JSON.stringify(stored.filter((checkIn) => checkIn.plate !== detail.plate)))
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(filterPendingCheckInsOnCheckout(stored, detail)),
+      )
+      invalidateOperatorGateResources(site.id, "mutation", { includeLayout: false })
       void refreshLayout()
     }
     window.addEventListener("smartpark:demo-check-in", handleCheckIn)
@@ -550,27 +817,6 @@ export function useLotStatus(
     const timer = window.setInterval(scanSlots, 300000)
     return () => window.clearInterval(timer)
   }, [scanSlots])
-
-  const allSlots: OperatorSlot[] = useMemo(() => (site?.slots ?? []).map((slot) => {
-    const assignment = demoAssignments[slot.id]
-    const pending = pendingDemoAssignments[slot.id]
-    if (assignment) {
-      return {
-        ...slot,
-        status: "occupied",
-        physicalState: "OCCUPIED",
-        isPhysicallyOccupied: true,
-        isBookable: false,
-        demoPlate: assignment.plate,
-        demoImageUrl: assignment.imageUrl,
-        demoCheckedInAt: assignment.session.entryTime,
-        demoSession: assignment.session,
-      }
-    }
-    return pending
-      ? { ...slot, demoImageUrl: pending.imageUrl, demoCheckedInAt: pending.session.entryTime }
-      : slot
-  }), [site, demoAssignments, pendingDemoAssignments])
 
   const projectionSlots = useMemo(() => {
     const map = new Map<string, SlotVisualStateDto>()
@@ -590,16 +836,15 @@ export function useLotStatus(
     )
   }, [projectionSlots])
 
+  const allSlots: OperatorSlot[] = useMemo(() => (site?.slots ?? []).map((slot) => {
+    const assignment = demoAssignments[slot.id]
+    const pending = pendingDemoAssignments[slot.id]
+    const projected = projectedFor(slot)
+    return reconcileSlotAssignment(slot, assignment, pending, projected)
+  }), [site, demoAssignments, pendingDemoAssignments, projectedFor])
+
   const slotView = useCallback((slot: OperatorSlot): SlotView => {
-    if (slot.demoSession) {
-      return {
-        physicalState: "OCCUPIED",
-        reservationState: resolveSlotAxes(slot, projectedFor(slot)).reservationState,
-        visualState: "occupied",
-      }
-    }
-    const axes = resolveSlotAxes(slot, projectedFor(slot))
-    return { ...axes, visualState: slotVisualState(axes) }
+    return resolveOperatorSlotView(slot, projectedFor(slot))
   }, [projectedFor])
 
   const STATUS_FILTER_PREDICATES = useMemo(
@@ -657,8 +902,13 @@ export function useLotStatus(
   // path uses the legacy aggregate, which carries no freshness triple, so treat
   // that as unknown: never dim, never show the stale banner, never claim fresh.
   const freshness = activeLayout ?? site?.freshness ?? null
-  const isStale = refreshFailed || (freshness !== null && isLayoutStale(freshness, now))
-  const staleAgeSeconds = freshness !== null ? layoutAgeSeconds(freshness, now) : null
+  const freshnessEval = evaluateOperatorFreshness(freshness, {
+    connectionState: options.connectionState,
+    syncState: options.syncState,
+    refreshFailed,
+    now,
+  })
+  const { isStale, staleAgeSeconds } = freshnessEval
 
   return {
     viewMode, setViewMode, selectedFloor, setSelectedFloor, selectedZone, setSelectedZone,

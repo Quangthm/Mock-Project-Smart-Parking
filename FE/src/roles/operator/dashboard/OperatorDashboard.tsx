@@ -1,7 +1,6 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useApp } from "../../../context/AppContext"
-import { useServerRefresh } from "../../../lib/serverRefresh"
 import { CheckInOut } from "../check-in-out/CheckInOut"
 import { LotStatus } from "../parking-lot/LotStatus"
 import type { SlotStatusFilter } from "../parking-lot/useLotStatus"
@@ -16,13 +15,28 @@ import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo
 import { showUiToast } from "../../../lib/uiToast"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import {
-  loadOperatorSites,
-  refreshOperatorSite,
   operatorOperationsApi,
   reservationApi,
   type OperatorSite,
 } from "../../../lib/operatorApi"
-import { watchOperatorLayout, type LayoutConnectionState } from "../../../lib/operatorLayoutLive"
+import {
+  clearOperatorRealtimeResources,
+  getOperatorRealtimeMetrics,
+  invalidateOperatorBookings,
+  invalidateOperatorGateResources,
+  invalidateOperatorParkingSessions,
+  loadAssignedOperatorSitesCoordinated,
+  reconcileOperatorBookingLookup,
+  reconcileOperatorLayout,
+  subscribeOperatorBookings,
+  subscribeOperatorLayout,
+} from "../../../lib/operatorRealtimeResources"
+import {
+  reconcileOperatorSiteSnapshot,
+  watchOperatorLayout,
+  type LayoutConnectionState,
+  type LayoutSyncDiagnostics,
+} from "../../../lib/operatorLayoutLive"
 import type { Booking } from "../../../lib/types"
 
 export type OperatorTab =
@@ -76,25 +90,18 @@ export function OperatorDashboard({
   const [sitesError, setSitesError] = useState("")
   const [sitesLoading, setSitesLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [bookingRevision, setBookingRevision] = useState(0)
   const [checkoutRevision, setCheckoutRevision] = useState(0)
   const [layoutConnectionState, setLayoutConnectionState] = useState<LayoutConnectionState>("connecting")
+  const [layoutSyncState, setLayoutSyncState] = useState<LayoutSyncDiagnostics["lastSyncOutcome"]>("pending")
+  const [lastLayoutSyncedAt, setLastLayoutSyncedAt] = useState<number>(0)
+  const [coordinatorReads, setCoordinatorReads] = useState<number>(0)
   const [layoutConnectionAttempt, setLayoutConnectionAttempt] = useState(0)
-  const [sitesRevision, setSitesRevision] = useState(0)
-  const [sitesRefreshing, setSitesRefreshing] = useState(false)
   const [loadedScope, setLoadedScope] = useState("")
   const userScope = user ? user.id + ":" + user.role + ":" + accessRole : ""
-  useServerRefresh(user?.role === "operator" && tab !== "checkin" && tab !== "checkout" ? userScope : undefined, () => {
-    if (!sitesRefreshing && !bookingsState.loading && !ticketsState.loading && !notificationsState.loading && !reportsState.loading) {
-      setRefreshKey(value => value + 1)
-    }
-  })
 
   useEffect(() => {
-    const refresh = () => setRefreshKey((value) => value + 1)
-    window.addEventListener("sp-operator-refresh", refresh)
-    return () => window.removeEventListener("sp-operator-refresh", refresh)
-  }, [user])
+    if (!user) clearOperatorRealtimeResources()
+  }, [user?.id])
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -110,14 +117,13 @@ export function OperatorDashboard({
   useEffect(() => {
     let active = true
     if (loadedScope !== userScope) setSitesLoading(true)
-    setSitesRefreshing(true)
     setSitesError("")
-    loadOperatorSites(user)
+    loadAssignedOperatorSitesCoordinated(user, { force: refreshKey > 0 })
       .then((sites) => {
         if (active) {
           setAllLots(sites)
           setLoadedScope(userScope)
-          setSitesRevision(value => value + 1)
+          setLayoutSyncState("synced")
         }
       })
       .catch((error) => {
@@ -127,7 +133,10 @@ export function OperatorDashboard({
         }
       })
       .finally(() => {
-        if (active) { setSitesLoading(false); setSitesRefreshing(false) }
+        if (active) {
+          setSitesLoading(false)
+          setCoordinatorReads(getOperatorRealtimeMetrics().totalReadsStarted)
+        }
       })
     return () => {
       active = false
@@ -146,33 +155,107 @@ export function OperatorDashboard({
 
   const selectedLotRef = useRef(selectedLot)
   selectedLotRef.current = selectedLot
+  const prevWatchedSiteIdRef = useRef<string | null>(null)
+  const reportSiteIds = accessRole === "financial" ? ownerLots.map((site) => site.id) : []
+  const reportSiteIdsKey = reportSiteIds.join(",")
+  const reportSiteIdsRef = useRef(reportSiteIds)
+  reportSiteIdsRef.current = reportSiteIds
+
   useEffect(() => {
     const siteId = selectedLot?.id
     if (!siteId) return
     let active = true
-    const stop = watchOperatorLayout(siteId, async (refreshBookings) => {
-      const site = selectedLotRef.current
-      if (!active || site?.id !== siteId) return
-      if (refreshBookings) {
-        setCheckoutRevision(value => value + 1)
-        if (accessRole === "financial") setSitesRevision(value => value + 1)
-        else setBookingRevision(value => value + 1)
+    const unsubscribe = subscribeOperatorLayout(siteId, (snapshot) => {
+      if (!active) return
+      setCoordinatorReads(getOperatorRealtimeMetrics().totalReadsStarted)
+      if (snapshot.lastOutcome === "error") {
+        setLayoutSyncState("error")
+        setSitesError(requestError(snapshot.lastError, "Could not refresh this parking site's layout."))
+        return
       }
-      try {
-        const updated = await refreshOperatorSite(site)
-        if (active) {
-          setAllLots(current => current.map(item => item.id === siteId ? updated : item))
-        }
-      } catch (error) {
-        if (active) setSitesError(requestError(error, "Could not refresh this parking site's layout."))
+      if (snapshot.lastOutcome === "synced" && snapshot.data) {
+        setAllLots((current) => current.map((item) => (item.id === siteId ? snapshot.data! : item)))
+        setSitesError("")
+        setLayoutSyncState("synced")
+        if (snapshot.lastSyncedAt > 0) setLastLayoutSyncedAt(snapshot.lastSyncedAt)
       }
-    }, state => { if (active) setLayoutConnectionState(state) })
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [selectedLot?.id, userScope])
+
+  useEffect(() => {
+    const siteId = selectedLot?.id
+    if (!siteId) {
+      prevWatchedSiteIdRef.current = null
+      return
+    }
+    let active = true
+    if (prevWatchedSiteIdRef.current !== null && prevWatchedSiteIdRef.current !== siteId) {
+      setLastLayoutSyncedAt(0)
+      setLayoutSyncState("pending")
+    }
+    prevWatchedSiteIdRef.current = siteId
+    const stop = watchOperatorLayout(
+      siteId,
+      (refreshBookings, details) =>
+        reconcileOperatorSiteSnapshot({
+          expectedSiteId: siteId,
+          isActive: () => active,
+          getCurrentSite: () => selectedLotRef.current,
+          refreshSite: async (currentSite) => {
+            const reason = details?.refreshReason ?? "invalidation"
+            const snap = await reconcileOperatorLayout(currentSite.id, reason)
+            if (snap.lastOutcome === "error") {
+              throw snap.lastError instanceof Error
+                ? snap.lastError
+                : new Error("Could not refresh this parking site's layout.")
+            }
+            if (snap.lastOutcome === "stale" || !snap.data) {
+              return null
+            }
+            return snap.data
+          },
+          applySite: (updated) => {
+            setAllLots(current => current.map(item => item.id === siteId ? updated : item))
+          },
+          onError: (error) => {
+            setLayoutSyncState("error")
+            setSitesError(requestError(error, "Could not refresh this parking site's layout."))
+          },
+          onClearError: () => {
+            setSitesError("")
+          },
+          onBookingsInvalidated: () => {
+            setCheckoutRevision(value => value + 1)
+            if (accessRole === "financial") {
+              for (const id of reportSiteIdsRef.current) invalidateOperatorBookings(id, "invalidation")
+            } else {
+              invalidateOperatorBookings(siteId, "invalidation")
+              invalidateOperatorParkingSessions(siteId, "invalidation")
+            }
+          },
+          onSyncSuccess: (syncedAt) => {
+            if (active) setLastLayoutSyncedAt(syncedAt)
+          },
+          refreshBookings,
+          details,
+        }),
+      state => { if (active) setLayoutConnectionState(state) },
+      diag => {
+        if (!active) return
+        setLayoutSyncState(diag.lastSyncOutcome)
+        if (diag.lastSyncedAt > 0) setLastLayoutSyncedAt(diag.lastSyncedAt)
+        setCoordinatorReads(getOperatorRealtimeMetrics().totalReadsStarted)
+      },
+    )
     return () => { active = false; stop() }
   }, [selectedLot?.id, userScope, accessRole, layoutConnectionAttempt])
 
-  const resourceScope = `${userScope}:${selectedLot?.id ?? ""}:${refreshKey}`
-  const reportSiteIds = accessRole === "financial" ? ownerLots.map((site) => site.id) : []
-  const reportScope = `${userScope}:${reportSiteIds.join(",")}`
+  const resourceScope = `${userScope}:${selectedLot?.id ?? ""}`
+  const reportScope = `${userScope}:${reportSiteIdsKey}`
   const currentLotBookings = bookingsState.scope === resourceScope ? bookingsState.data : []
   const tickets = ticketsState.scope === resourceScope ? ticketsState.data : []
   const notifications = notificationsState.scope === resourceScope ? notificationsState.data : []
@@ -189,14 +272,29 @@ export function OperatorDashboard({
   useEffect(() => {
     if (!selectedLot || accessRole !== "operation") return
     let active = true
-    setBookingsState(current => ({ ...current, scope: resourceScope, loading: true }))
-    reservationApi.list(selectedLot.id).then(data => {
-      if (active) setBookingsState({ scope: resourceScope, data, loading: false, error: "" })
-    }).catch(error => {
-      if (active) setBookingsState({ scope: resourceScope, data: [], loading: false, error: requestError(error, "Could not load reservations.") })
+    const siteId = selectedLot.id
+    setBookingsState(current => ({ ...current, scope: resourceScope, loading: current.scope !== resourceScope }))
+    const unsubscribe = subscribeOperatorBookings(siteId, (snapshot) => {
+      if (!active) return
+      if (snapshot.lastOutcome === "error") {
+        setBookingsState((current) => ({
+          scope: resourceScope,
+          data: current.scope === resourceScope ? current.data : [],
+          loading: false,
+          error: requestError(snapshot.lastError, "Could not load reservations."),
+        }))
+        return
+      }
+      if (snapshot.lastOutcome === "synced" && snapshot.data) {
+        setBookingsState({ scope: resourceScope, data: snapshot.data, loading: false, error: "" })
+      }
     })
-    return () => { active = false }
-  }, [accessRole, resourceScope, bookingRevision])
+    invalidateOperatorBookings(siteId, "initial")
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [accessRole, resourceScope, selectedLot?.id])
 
   useEffect(() => {
     const initialState = { scope: resourceScope, data: [], loading: Boolean(selectedLot && accessRole === "operation"), error: "" }
@@ -234,27 +332,52 @@ export function OperatorDashboard({
       : { scope: reportScope, data: [], loading: reportSiteIds.length > 0, error: "" })
     if (accessRole !== "financial" || !reportSiteIds.length) return
     let active = true
-    Promise.allSettled(reportSiteIds.map((siteId) => reservationApi.list(siteId)))
-      .then((results) => {
+    const bySite = new Map<string, { synced: boolean; data: Booking[]; error?: string }>()
+    const unsubs = reportSiteIds.map((siteId) =>
+      subscribeOperatorBookings(siteId, (snapshot) => {
         if (!active) return
-        const failure = results.find((result) => result.status === "rejected")
+        if (snapshot.lastOutcome === "error") {
+          bySite.set(siteId, {
+            synced: true,
+            data: [],
+            error: requestError(snapshot.lastError, "Could not load reservation reports."),
+          })
+        } else if (snapshot.lastOutcome === "synced" && snapshot.data) {
+          bySite.set(siteId, { synced: true, data: snapshot.data })
+        }
+        const entries = reportSiteIds.map((id) => bySite.get(id))
+        const anyError = entries.find((item) => item?.error)?.error ?? ""
+        const allSettled = entries.every((item) => item?.synced)
         setReportsState({
           scope: reportScope,
-          data: failure ? [] : results.flatMap((result) => result.status === "fulfilled" ? result.value : []),
-          loading: false,
-          error: failure && failure.status === "rejected"
-            ? requestError(failure.reason, "Could not load reservation reports.")
-            : "",
+          data: anyError ? [] : entries.flatMap((item) => item?.data ?? []),
+          loading: !allSettled,
+          error: anyError,
         })
-      })
+      }),
+    )
+    for (const siteId of reportSiteIds) invalidateOperatorBookings(siteId, "initial")
     return () => {
       active = false
+      for (const unsub of unsubs) unsub()
     }
-  }, [accessRole, reportScope, sitesRevision])
+  }, [accessRole, reportScope])
 
   // Cashier role shortcut view
   if (accessRole === "cashier") {
-    return <CashierPOS key={selectedLot?.id ?? "none"} lot={selectedLot} realtimeRevision={checkoutRevision} sitesLoading={sitesLoading} sitesError={sitesError} onDataChanged={() => setRefreshKey((value) => value + 1)} />
+    return (
+      <CashierPOS
+        key={selectedLot?.id ?? "none"}
+        lot={selectedLot}
+        realtimeRevision={checkoutRevision}
+        sitesLoading={sitesLoading}
+        sitesError={sitesError}
+        onDataChanged={() => {
+          if (selectedLot) invalidateOperatorGateResources(selectedLot.id, "mutation")
+          else setRefreshKey((value) => value + 1)
+        }}
+      />
+    )
   }
 
   // Financial reconciliation metrics
@@ -367,17 +490,41 @@ export function OperatorDashboard({
 
   return (
     <DashboardSidebar groups={sidebarGroups}>
-      <main className="min-w-0 overflow-y-auto p-4 sm:p-7">
+      <main
+        className="min-w-0 overflow-y-auto p-4 sm:p-7"
+        data-layout-connection={selectedLot ? layoutConnectionState : undefined}
+        data-layout-sync-state={selectedLot ? layoutSyncState : undefined}
+        data-last-synced-at={lastLayoutSyncedAt > 0 ? String(lastLayoutSyncedAt) : undefined}
+        data-coordinator-reads={String(coordinatorReads)}
+      >
         {selectedLot && layoutConnectionState === "unavailable" && (
           <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-[var(--fg)]">
             <span>Live updates are unavailable. Showing the last loaded parking layout.</span>
             <button type="button" className="btn-outline" onClick={() => setLayoutConnectionAttempt(value => value + 1)}>Retry live updates</button>
           </div>
         )}
+        {selectedLot && layoutConnectionState === "connected" && layoutSyncState === "error" && !sitesError && (
+          <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-[var(--fg)]">
+            <span>Latest parking layout synchronization failed. Showing the last synchronized layout.</span>
+            <button type="button" className="btn-outline" onClick={() => void reconcileOperatorLayout(selectedLot.id, "mutation", { force: true })}>
+              Retry sync
+            </button>
+          </div>
+        )}
         {sitesError && (
           <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600">
             <span>{sitesError}</span>
-            <button type="button" className="btn-outline" onClick={() => setRefreshKey((value) => value + 1)}>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => {
+                if (selectedLot) {
+                  void reconcileOperatorLayout(selectedLot.id, "mutation", { force: true })
+                } else {
+                  setRefreshKey((value) => value + 1)
+                }
+              }}
+            >
               Retry
             </button>
           </div>
@@ -401,7 +548,17 @@ export function OperatorDashboard({
         )}
         {tab === "status" && (
           <div className="mb-4 flex justify-end">
-            <button type="button" className="btn-outline px-3 py-1.5 text-xs" disabled={sitesLoading} onClick={() => setRefreshKey((value) => value + 1)}>Refresh sites and slots</button>
+            <button
+              type="button"
+              className="btn-outline px-3 py-1.5 text-xs"
+              disabled={sitesLoading}
+              onClick={() => {
+                if (selectedLot) void reconcileOperatorLayout(selectedLot.id, "mutation", { force: true })
+                else setRefreshKey((value) => value + 1)
+              }}
+            >
+              Refresh sites and slots
+            </button>
           </div>
         )}
 
@@ -434,7 +591,7 @@ export function OperatorDashboard({
         {/* Tab View Container */}
         <div key={tab} className="animate-in">
           {/* TAB 1: OVERVIEW */}
-          {accessRole === "operation" && tab === "overview" && !sitesLoading && !sitesError && (
+          {accessRole === "operation" && tab === "overview" && !sitesLoading && (Boolean(selectedLot) || !sitesError) && (
             <OperatorOverview
               lot={selectedLot}
               allLots={ownerLots}
@@ -454,13 +611,23 @@ export function OperatorDashboard({
               lot={selectedLot}
               initialPlateQuery={targetPlateQuery}
               realtimeRevision={checkoutRevision}
-              onDataChanged={() => setRefreshKey((value) => value + 1)}
+              onDataChanged={() => {
+                if (selectedLot) invalidateOperatorGateResources(selectedLot.id, "mutation")
+                else setRefreshKey((value) => value + 1)
+              }}
             />
           )}
 
           {/* TAB 3: LOT STATUS & 3D STRUCTURE */}
           {accessRole === "operation" && tab === "status" && (
-            <LotStatus key={(selectedLot?.id ?? "none") + ":" + targetSlotStatus} lot={selectedLot} initialStatusFilter={targetSlotStatus} refreshOnResume={false} />
+            <LotStatus
+              key={(selectedLot?.id ?? "none") + ":" + targetSlotStatus}
+              lot={selectedLot}
+              initialStatusFilter={targetSlotStatus}
+              refreshOnResume={false}
+              connectionState={layoutConnectionState}
+              syncState={layoutSyncState}
+            />
           )}
 
           {/* TAB 5: TICKETS */}
@@ -592,8 +759,13 @@ function CashierPOS({
     const current = bookingRef.current
     if (!lot || !current || current.lotId !== lot.id) return
     let active = true
-    reservationApi.lookup(lot.id, current.id).then(updated => {
-      if (active && bookingRef.current?.id === current.id) setBooking(updated)
+    reconcileOperatorBookingLookup(lot.id, current.id, "invalidation").then(snapshot => {
+      if (!active || bookingRef.current?.id !== current.id) return
+      if (snapshot.lastOutcome === "synced" && snapshot.data) {
+        setBooking(snapshot.data)
+      } else if (snapshot.lastOutcome === "error") {
+        setFeedback({ type: "error", message: requestError(snapshot.lastError, "Could not refresh this session.") })
+      }
     }).catch(error => {
       if (active && bookingRef.current?.id === current.id) setFeedback({ type: "error", message: requestError(error, "Could not refresh this session.") })
     })
@@ -602,7 +774,7 @@ function CashierPOS({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (sitesLoading || sitesError) return
+    if (sitesLoading) return
     if (!lot) {
       setFeedback({ type: "error", message: "No assigned parking site is available." })
       return
@@ -630,7 +802,7 @@ function CashierPOS({
   }
 
   async function completeCheckout() {
-    if (readOnly || !lot || !booking || booking.lotId !== lot.id || busy || sitesLoading || sitesError) return
+    if (readOnly || !lot || !booking || booking.lotId !== lot.id || busy || sitesLoading) return
     setBusy(true)
     setFeedback(null)
     try {
@@ -683,15 +855,15 @@ function CashierPOS({
               onChange={(event) => setPlate(event.target.value)}
               placeholder="e.g. 51A-123.45"
               required
-              disabled={!lot || busy || sitesLoading || Boolean(sitesError)}
+              disabled={!lot || busy || sitesLoading}
             />
           </label>
-          <button type="submit" className="btn-primary w-full justify-center py-2.5 text-sm mt-2" disabled={!lot || busy || sitesLoading || Boolean(sitesError)}>
+          <button type="submit" className="btn-primary w-full justify-center py-2.5 text-sm mt-2" disabled={!lot || busy || sitesLoading}>
             <UntitledIcon name="search" size={16} /> {busy ? "Checking…" : "Find active session"}
           </button>
         </form>
 
-        {booking && !sitesLoading && !sitesError && booking.lotId === lot?.id && (
+        {booking && !sitesLoading && booking.lotId === lot?.id && (
           <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong className="font-mono text-lg text-[var(--fg)]">{booking.licensePlate}</strong>

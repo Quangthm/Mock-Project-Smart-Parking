@@ -20,6 +20,7 @@ import {
 } from "../../../lib/operationalLayout"
 import { SlotInspectionModal } from "./SlotInspectionModal"
 import type { OperatorSite } from "../../../lib/operatorApi"
+import type { LayoutConnectionState, LayoutSyncOutcome } from "../../../lib/operatorLayoutLive"
 import { SlotManagement } from "../parking-slots/SlotManagement"
 import { useLotStatus, floorKeyFor, type LotVisualFilter } from "./useLotStatus"
 
@@ -30,6 +31,8 @@ interface LotStatusProps {
   layout?: OperationalLayoutProjection | null
   onRefreshLayout?: () => Promise<OperationalLayoutProjection | null | void>
   refreshOnResume?: boolean
+  connectionState?: LayoutConnectionState
+  syncState?: LayoutSyncOutcome | "pending"
 }
 
 const KPI_ORDER: SlotVisualState[] = [
@@ -120,6 +123,8 @@ export function LotStatus({
   layout: layoutProp,
   onRefreshLayout,
   refreshOnResume,
+  connectionState,
+  syncState,
 }: LotStatusProps) {
   const [slotOperations, setSlotOperations] = useState(initialStatusFilter === "maintenance" ? "maintenance" : "backup")
   const {
@@ -133,6 +138,8 @@ export function LotStatus({
     layout: layoutProp,
     refreshLayout: onRefreshLayout,
     refreshOnResume,
+    connectionState,
+    syncState,
   })
 
   // A live status change can move a slot out of the current filter while its

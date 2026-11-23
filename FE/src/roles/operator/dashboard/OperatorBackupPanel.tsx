@@ -1,5 +1,5 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { showUiToast } from "../../../lib/uiToast"
 
 import { request } from "../../../lib/authApi"
@@ -10,10 +10,15 @@ import {
 } from "../../../lib/parkingApi"
 import {
   formatSlotLabel,
-  type OperationalLayoutEnvelope,
   type OperationalLayoutProjection,
   type SlotVisualStateDto,
 } from "../../../lib/operationalLayout"
+import {
+  invalidateOperatorLayout,
+  reconcileOperatorLayout,
+  registerOperatorSiteMeta,
+  subscribeOperatorLayout,
+} from "../../../lib/operatorRealtimeResources"
 
 const server = (
   import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045"
@@ -38,7 +43,8 @@ export function OperatorBackupPanel() {
   const [reason, setReason] = useState("")
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
-  const [reload, setReload] = useState(0)
+  const sitesRef = useRef(sites)
+  sitesRef.current = sites
 
   useEffect(() => {
     let active = true
@@ -64,25 +70,33 @@ export function OperatorBackupPanel() {
   useEffect(() => {
     let active = true
     setLayout(null)
-    if (site)
-      request<OperationalLayoutEnvelope>(
-        `/${site}/operational-layout`,
-        "GET",
-        undefined,
-        "/api/parking-lots",
-        server,
-      )
-        .then((r) => {
-          if (active) setLayout(r.data)
-        })
-        .catch((e) => {
-          if (active)
-            setMessage(e instanceof Error ? e.message : "Cannot load slots.")
-        })
+    if (!site) return () => { active = false }
+    const assignment = sitesRef.current.find((item) => item.siteId === site)
+    if (assignment) {
+      registerOperatorSiteMeta(site, {
+        tenantId: assignment.tenantId,
+        permissions: assignment.permissions,
+      })
+    }
+    const unsubscribe = subscribeOperatorLayout(site, (snapshot) => {
+      if (!active) return
+      if (snapshot.lastOutcome === "error") {
+        setMessage(
+          snapshot.lastError instanceof Error ? snapshot.lastError.message : "Cannot load slots.",
+        )
+        return
+      }
+      const nextLayout = snapshot.data?.operationalLayout ?? null
+      if (snapshot.lastOutcome === "synced" && nextLayout) {
+        setLayout(nextLayout)
+      }
+    })
+    void reconcileOperatorLayout(site, "initial")
     return () => {
       active = false
+      unsubscribe()
     }
-  }, [site, reload])
+  }, [site])
 
   async function mark(id: string) {
     if (busy) return
@@ -98,7 +112,7 @@ export function OperatorBackupPanel() {
         "/api/parking-lots",
         server,
       )
-      setReload((n) => n + 1)
+      invalidateOperatorLayout(site, "mutation")
       setMessage("Slot marked as backup.")
       showUiToast("Backup slot updated", "Slot marked as backup.")
     } catch (e) {

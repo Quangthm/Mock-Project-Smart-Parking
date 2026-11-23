@@ -12,6 +12,11 @@ import {
   type WalkInParkingSession,
   paymentApi,
 } from "../../../lib/operatorApi"
+import {
+  invalidateOperatorParkingSessions,
+  subscribeOperatorParkingSessions,
+} from "../../../lib/operatorRealtimeResources"
+import { filterPendingCheckInsOnCheckout } from "../parking-lot/useLotStatus"
 import { PlateScanPanel } from "./PlateScanPanel"
 import type { Booking } from "../../../lib/types"
 
@@ -29,6 +34,7 @@ function notifyDemoSlotScan(
   imageUrl?: string,
   session?: {
     id: string
+    reservationId?: string | null
     entryTime: string
     entryImageUrl: string | null
     vehicleType: string
@@ -36,6 +42,7 @@ function notifyDemoSlotScan(
     originalPlate?: string
     normalizedPlate?: string
     status?: string
+    slotId?: string | null
   },
 ) {
   if (action === "check-in" && typeof window !== "undefined") {
@@ -44,10 +51,41 @@ function notifyDemoSlotScan(
       plate: string
       imageUrl?: string
       vehicleType?: string
+      slotId?: string | null
       session?: object
     }>
-    pending.push({ plate, imageUrl, vehicleType: session?.vehicleType, session })
+    pending.push({
+      plate,
+      imageUrl,
+      vehicleType: session?.vehicleType,
+      slotId: session?.slotId,
+      session,
+    })
     window.localStorage.setItem(storageKey, JSON.stringify(pending))
+  } else if (action === "check-out" && typeof window !== "undefined") {
+    const storageKey = `smartpark:demo-pending-checkins:${siteId}`
+    try {
+      const pending = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as Array<{
+        plate: string
+        slotId?: string | null
+        session?: {
+          id?: string
+          reservationId?: string | null
+          originalPlate?: string
+          normalizedPlate?: string
+        }
+      }>
+      const filtered = filterPendingCheckInsOnCheckout(pending, {
+        siteId,
+        plate,
+        sessionId: session?.id,
+        reservationId: session?.reservationId,
+        slotId: session?.slotId,
+      })
+      window.localStorage.setItem(storageKey, JSON.stringify(filtered))
+    } catch {
+      // ignore parse errors
+    }
   }
   window.dispatchEvent(new CustomEvent(
     action === "check-in" ? "smartpark:demo-check-in" : "smartpark:demo-check-out",
@@ -57,9 +95,13 @@ function notifyDemoSlotScan(
         plate,
         imageUrl,
         vehicleType: session?.vehicleType,
+        sessionId: session?.id,
+        reservationId: session?.reservationId,
+        slotId: session?.slotId,
         session: session
           ? {
               id: session.id,
+              reservationId: session.reservationId,
               originalPlate: session.originalPlate ?? plate,
               normalizedPlate: session.normalizedPlate ?? plate.replace(/[^a-zA-Z0-9]/g, "").toUpperCase(),
               vehicleType: session.vehicleType,
@@ -97,8 +139,6 @@ export function CheckInOut({
   const [quickError, setQuickError] = useState("")
   const [latestScanImage, setLatestScanImage] = useState("")
   const [latestImageIsUpload, setLatestImageIsUpload] = useState(false)
-
-  const [historyRefresh, setHistoryRefresh] = useState(0)
 
   // Confirmation modal state for check-in / check-out
   const [confirmingAction, setConfirmingAction] = useState<{
@@ -143,28 +183,42 @@ export function CheckInOut({
   useEffect(() => {
     if (!lot) {
       setSessions([])
+      setSessionsLoading(false)
+      setSessionsError("")
       return
     }
     let active = true
-    setSessions(current => current.filter(session => session.siteId === lot.id))
+    const siteId = lot.id
+    setSessions(current => current.filter(session => session.siteId === siteId))
     setSessionsLoading(true)
     setSessionsError("")
-    reservationApi
-      .listParkingSessions(lot.id)
-      .then((items) => {
-        if (active) setSessions(items)
-      })
-      .catch((error) => {
-        if (active)
-          setSessionsError(error instanceof Error ? error.message : "Could not load parking history.")
-      })
-      .finally(() => {
-        if (active) setSessionsLoading(false)
-      })
+    const unsubscribe = subscribeOperatorParkingSessions(siteId, (snapshot) => {
+      if (!active) return
+      if (snapshot.data) {
+        setSessions(snapshot.data)
+      }
+      if (snapshot.lastOutcome === "error") {
+        setSessionsError(
+          snapshot.lastError instanceof Error
+            ? snapshot.lastError.message
+            : "Could not load parking history.",
+        )
+        setSessionsLoading(false)
+        return
+      }
+      if (snapshot.lastOutcome === "synced") {
+        setSessionsError("")
+        setSessionsLoading(false)
+        return
+      }
+      setSessionsLoading(snapshot.inFlight && !snapshot.data)
+    })
+    invalidateOperatorParkingSessions(siteId, "initial")
     return () => {
       active = false
+      unsubscribe()
     }
-  }, [lot?.id, historyRefresh, realtimeRevision])
+  }, [lot?.id])
 
   useEffect(() => {
     if (!lot) return
@@ -319,7 +373,7 @@ export function CheckInOut({
         ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
         : booking
 
-      setHistoryRefresh((current) => current + 1)
+      if (!onDataChanged) invalidateOperatorParkingSessions(lot.id, "mutation")
       setActionFeedback({
         type: "success",
         message: `${action === "check-in" ? "Check-in" : "Check-out"} completed for ${updatedBooking.licensePlate} (${slotLabel(updatedBooking)}).`,
@@ -330,15 +384,15 @@ export function CheckInOut({
       setQuickInput("")
       setLatestScanImage("")
       setLatestImageIsUpload(false)
-      notifyDemoSlotScan(lot.id, action, updatedBooking.licensePlate, imageData, action === "check-in"
-        ? {
-            id: updatedBooking.id,
-            entryTime: updatedBooking.startTime,
-            entryImageUrl: updatedBooking.entryImageUrl ?? null,
-            vehicleType: "CAR",
-            originalPlate: updatedBooking.licensePlate,
-          }
-        : undefined)
+      notifyDemoSlotScan(lot.id, action, updatedBooking.licensePlate, imageData, {
+        id: updatedBooking.id,
+        reservationId: updatedBooking.id,
+        entryTime: updatedBooking.startTime,
+        entryImageUrl: updatedBooking.entryImageUrl ?? null,
+        vehicleType: updatedBooking.vehicleType ?? "CAR",
+        originalPlate: updatedBooking.licensePlate,
+        slotId: updatedBooking.slotId,
+      })
       onDataChanged?.()
     } catch (error) {
       showUiToast("Gate action failed", error instanceof Error ? error.message : "Failed to execute gate action.", "error")
@@ -483,7 +537,7 @@ export function CheckInOut({
         if (settlement === "PENDING") return
         session = result.session
       }
-      setHistoryRefresh((current) => current + 1)
+      if (!onDataChanged) invalidateOperatorParkingSessions(lot.id, "mutation")
       setActionFeedback({
         type: "success",
         message: action === "check-in"
@@ -495,16 +549,15 @@ export function CheckInOut({
       setQuickInput("")
       setLatestScanImage("")
       setLatestImageIsUpload(false)
-      notifyDemoSlotScan(lot.id, action, session.licensePlate, imageData, action === "check-in"
-        ? {
-            id: session.id,
-            entryTime: session.entryTime,
-            entryImageUrl: session.entryImageUrl,
-            vehicleType: session.vehicleType,
-            ticketReference: `WALKIN-${session.id.slice(0, 8).toUpperCase()}`,
-            originalPlate: session.licensePlate,
-          }
-        : undefined)
+      notifyDemoSlotScan(lot.id, action, session.licensePlate, imageData, {
+        id: session.id,
+        entryTime: session.entryTime,
+        entryImageUrl: session.entryImageUrl,
+        vehicleType: session.vehicleType,
+        ticketReference: `WALKIN-${session.id.slice(0, 8).toUpperCase()}`,
+        originalPlate: session.licensePlate,
+        slotId: session.slotId,
+      })
       onDataChanged?.()
     } catch (error) {
       showUiToast("Walk-in action failed", error instanceof Error ? error.message : "Failed to execute walk-in gate action.", "error")
@@ -845,7 +898,9 @@ export function CheckInOut({
         loading={sessionsLoading}
         quietLoading
         error={sessionsError}
-        onRetry={() => setHistoryRefresh(current => current + 1)}
+        onRetry={() => {
+          if (lot) invalidateOperatorParkingSessions(lot.id, "mutation")
+        }}
         showVehicleFilter
       />
       {/* MODAL 2: Action Confirmation Dialog */}
