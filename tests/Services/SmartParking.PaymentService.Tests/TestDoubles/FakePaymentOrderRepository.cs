@@ -12,12 +12,12 @@ public class FakePaymentOrderRepository : IPaymentOrderRepository
 
     public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.Id == id));
+        return Task.FromResult(Orders.FirstOrDefault(x => x.Id == id && !x.IsProvisioningFence));
     }
 
     public Task<PaymentOrder?> GetByOrderCodeAsync(string orderCode, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.OrderCode == orderCode));
+        return Task.FromResult(Orders.FirstOrDefault(x => x.OrderCode == orderCode && !x.IsProvisioningFence));
     }
 
     public Task<PaymentOrder?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
@@ -32,7 +32,7 @@ public class FakePaymentOrderRepository : IPaymentOrderRepository
     }
 
     public Task<Guid?> FindReviewedOrderIdAsync(string orderCode, CancellationToken ct) =>
-        Task.FromResult(Orders.SingleOrDefault(o => o.OrderCode == orderCode && o.ReviewedMethod != null)?.Id);
+        Task.FromResult(Orders.SingleOrDefault(o => o.OrderCode == orderCode && o.ReviewedMethod != null && !o.IsProvisioningFence)?.Id);
 
     public Task<bool> HasReviewedReservationAsync(Guid reservationId, CancellationToken ct) =>
         Task.FromResult(Orders.Any(o => o.ReferenceId == reservationId && o.ReviewedMethod != null));

@@ -75,6 +75,14 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
                 "This order has no amount due, so a PayOS checkout cannot be created.");
         }
 
+        if (order.ReviewedMethod is not null)
+        {
+            if (request.PaymentMethod != PaymentMethod.PAYOS)
+                throw new PaymentDomainException("UNSUPPORTED_PAYMENT_METHOD", "This method has no supported reservation checkout.");
+            if (order.ReviewedCurrency != "VND")
+                throw new PaymentDomainException("UNSUPPORTED_PAYMENT_CURRENCY", "PayOS checkout requires VND.");
+        }
+
         // 1. Idempotency replay by IdempotencyKey if provided
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {

@@ -17,14 +17,14 @@ public class PaymentOrderRepository : IPaymentOrderRepository
     {
         return await _dbContext.PaymentOrders
             .Include(x => x.Transactions)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsProvisioningFence, cancellationToken);
     }
 
     public async Task<PaymentOrder?> GetByOrderCodeAsync(string orderCode, CancellationToken cancellationToken = default)
     {
         return await _dbContext.PaymentOrders
             .Include(x => x.Transactions)
-            .FirstOrDefaultAsync(x => x.OrderCode == orderCode, cancellationToken);
+            .FirstOrDefaultAsync(x => x.OrderCode == orderCode && !x.IsProvisioningFence, cancellationToken);
     }
 
     public async Task<PaymentOrder?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
@@ -41,7 +41,7 @@ public class PaymentOrderRepository : IPaymentOrderRepository
     }
 
     public Task<Guid?> FindReviewedOrderIdAsync(string orderCode, CancellationToken ct) =>
-        _dbContext.PaymentOrders.Where(o => o.OrderCode == orderCode && o.ReviewedMethod != null)
+        _dbContext.PaymentOrders.Where(o => o.OrderCode == orderCode && o.ReviewedMethod != null && !o.IsProvisioningFence)
             .Select(o => (Guid?)o.Id).SingleOrDefaultAsync(ct);
 
     public Task<bool> HasReviewedReservationAsync(Guid reservationId, CancellationToken ct) =>

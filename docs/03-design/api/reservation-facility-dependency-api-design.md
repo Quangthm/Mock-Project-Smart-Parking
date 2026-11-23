@@ -17,7 +17,7 @@ Operations obtains immutable Facility resource facts with a durable configuratio
 | Traceability | Reference |
 | --- | --- |
 | Booking use case / related contracts | [Reservation API](reservation-first-slice-api-design.md) |
-| Approved direction and recovery | [Current reservation workflow](../../02-architecture/architecture-decisions/reservation-workflow-target.md), [durable dependency](../../05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md) |
+| Approved direction and recovery | [Current reservation workflow](../../02-architecture/architecture-decisions/reservation-workflow-target.md), [durable dependency](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-facility-durable-dependency.md) |
 | Classification / security | [Operation matrix](../../01-requirements/srs/authorization-operation-classification.md); no fabricated human actor |
 
 ## API specification
@@ -118,7 +118,7 @@ A timeout is an unknown result. Operations owns durable retries and sends exact 
 - [ ] Complete Operations commercial recovery and Payment producers before enabling paid reservations.
 - [ ] SignalR relay and post-confirmation allocation/refund/maintenance enforcement remain teammate/next-phase work.
 
-See [the deployment cases and durable event handoff](../../05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
+See [the deployment cases and durable event handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
 
 ## 11 November 2026 — conditional confirmation dependency retirement (design note)
 
@@ -154,4 +154,4 @@ Facility resolves the selected GUID via its repository independently during admi
 
 ### Protected claim verification
 
-Treat mismatched review/admission/protection context as changed terms or ineligibility. Keep acquire/complete/abort, exact-token replay and unknown resolution where needed for admission and confirmation. Perform external calls outside the protected Operations transaction. Verify competing structure changes, Gate claims, maintenance, lost acknowledgements and invalidation lag before considering any retirement. Use the [owner handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#facilityservice--quote-and-admission-slices) and [QA scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md); review and runtime checks remain pending.
+Treat mismatched review/admission/protection context as changed terms or ineligibility. Keep acquire/complete/abort, exact-token replay and unknown resolution where needed for admission and confirmation. Perform external calls outside the protected Operations transaction. Verify competing structure changes, Gate claims, maintenance, lost acknowledgements and invalidation lag before considering any retirement. Use the [owner handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#facilityservice--quote-and-admission-slices) and [QA scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md); review and runtime checks remain pending.

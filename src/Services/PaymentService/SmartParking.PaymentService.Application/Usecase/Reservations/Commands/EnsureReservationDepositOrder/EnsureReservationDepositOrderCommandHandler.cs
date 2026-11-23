@@ -63,7 +63,7 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                     "operationId");
             }
 
-            if (existingOrder.Status == PaymentOrderStatus.CANCELLED || existingOrder.IsExpired(now))
+            if (existingOrder.IsProvisioningFence || existingOrder.Status == PaymentOrderStatus.CANCELLED || existingOrder.IsExpired(now))
             {
                 _logger.LogInformation("OperationId: {OperationId} was closed with no order (Tombstone / Expired).", req.OperationId);
                 return new EnsureReservationDepositOrderResponseDto("CLOSED_NO_ORDER", null,
@@ -96,7 +96,8 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                 TermsVersion = req.TermsVersion,
                 Amount = req.Amount,
                 FinalAmount = req.Amount,
-                Status = PaymentOrderStatus.CANCELLED,
+                IsProvisioningFence = true,
+                Status = null,
                 IdempotencyKey = opKey,
                 ExpiresAt = req.ExpiresAt,
                 CreatedAt = now,
@@ -240,7 +241,7 @@ public sealed class EnsureReservationDepositOrderCommandHandler
                 QuoteId = proof.QuoteId, TermsVersion = proof.QuoteVersion, Amount = proof.DepositAmount,
                 FinalAmount = proof.DepositAmount, ReviewedMethod = binding.PaymentMethod, ReviewedCurrency = proof.Currency,
                 ExpiresAt = request.ExpiresAt.ToUniversalTime(), CreatedAt = now, UpdatedAt = now,
-                IsProvisioningFence = closed, Status = closed ? PaymentOrderStatus.CANCELLED : PaymentOrderStatus.PENDING
+                IsProvisioningFence = closed, Status = closed ? null : PaymentOrderStatus.PENDING
             };
             if (zero && !closed)
             {

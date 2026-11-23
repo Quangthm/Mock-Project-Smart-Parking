@@ -30,6 +30,11 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
             .HasForeignKey(x => x.PaymentOrderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<PaymentTransaction>()
+            .WithOne()
+            .HasForeignKey<RefundRequest>(x => x.CollectionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(x => x.PaymentOrderId).HasDatabaseName("idx_refund_requests_order");
         builder.HasIndex(x => x.Status).HasDatabaseName("idx_refund_requests_status");
     }

@@ -61,8 +61,8 @@ public sealed class ReconcileReservationCollectionCommandHandler
 
         if (order.ReviewedMethod != null)
         {
-            if (tx.CollectionEventId == null || tx.TransactionType != TransactionType.PAYMENT ||
-                req.ReservationId != order.ReferenceId || tx.Amount != req.Amount || tx.Amount <= 0)
+            if (!tx.HasVerifiedProviderCollection() || tx.TenantId != order.TenantId ||
+                tx.PaymentMethod.ToString() != order.ReviewedMethod || req.ReservationId != order.ReferenceId || tx.Amount != req.Amount)
                 throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Disposition does not match verified funds.");
             return await _unitOfWork.WithLocksAsync([tx.Id], async () =>
             {
@@ -70,8 +70,7 @@ public sealed class ReconcileReservationCollectionCommandHandler
                 var disposition = refunds.SingleOrDefault(r => r.CollectionId == tx.Id);
                 if (disposition == null)
                 {
-                    disposition = new RefundRequest { CollectionId = tx.Id, PaymentOrderId = order.Id,
-                        TenantId = order.TenantId, Amount = tx.Amount, Reason = req.Reason };
+                    disposition = RefundRequest.ForVerifiedCollection(tx, req.Reason);
                     await _refundRepository.AddAsync(disposition, cancellationToken);
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
                 }

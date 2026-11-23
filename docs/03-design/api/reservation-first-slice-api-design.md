@@ -7,7 +7,7 @@
 | Owning service / author | Operations / SmartPark architecture |
 | Jira design / implementation / verification | [SPARK-273](https://mangamanagement.atlassian.net/browse/SPARK-273) / follow-on slices / [QA](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md) |
 | Requirements baseline | SRS v1.1 and [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) |
-| Implementation | Operations plate review and Facility slot resolution implemented. Payment issuance, proof and booking cutover pending. See the [Payment quote handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md). |
+| Historical Slice 1 checkpoint | Operations plate review and Facility slot resolution were implemented at this checkpoint. For subsequent Payment and admission delivery, see the [current owner handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md). See the [historical Payment quote handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md). |
 
 ## Overview
 
@@ -160,7 +160,7 @@ See the [HTTP, MassTransit and SignalR sequence and state table](../../02-archit
 
 ## Cross-owner interfaces to agree
 
-[Facility API](reservation-facility-dependency-api-design.md) · [Service handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md) · [Payment paid/covered owner gates](../../05-project-management/handoffs/2026-11-18-SPARK-273-payment-confirmation-handoff.md)
+[Facility API](reservation-facility-dependency-api-design.md) · [Service handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md) · [Payment paid/covered owner gates](../../05-project-management/handoffs/2026-11-19-SPARK-273-payment-authority.md#owner-agreement-and-wire-contracts)
 
 ## Open questions and deferred items
 

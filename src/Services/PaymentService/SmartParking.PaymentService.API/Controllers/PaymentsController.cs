@@ -204,6 +204,7 @@ public class PaymentsController : ControllerBase
     [AllowAnonymous]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ProcessPayOsWebhook(CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(Request.Body);
@@ -233,12 +234,13 @@ public class PaymentsController : ControllerBase
 
         if (!result.Success)
         {
-            return BadRequest(new
+            var failure = new
             {
                 success = false,
                 errorCode = result.ErrorCode ?? "WEBHOOK_PROCESSING_FAILED",
                 message = result.Message
-            });
+            };
+            return result.Retryable ? StatusCode(StatusCodes.Status503ServiceUnavailable, failure) : BadRequest(failure);
         }
 
         return Ok(new
