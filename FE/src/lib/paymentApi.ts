@@ -30,7 +30,26 @@ export interface PaymentStatusResponse {
   isAuthoritative: boolean
 }
 
-type Envelope<T> = { success: boolean; data?: T; errorCode?: string; message?: string }
+type Envelope<T> = { success: boolean; data?: T; errorCode?: string; traceId?: string }
+
+const paymentErrorMessages = new Map<string, string>([
+  ["ORDER_NOT_FOUND", "This payment order was not found. Check the order ID."],
+  ["ORDER_NOT_READY", "The payment order is still being prepared. Wait for it to become ready."],
+  ["ORDER_ALREADY_PAID", "This order has already been paid. Check your reservation status."],
+  ["ORDER_EXPIRED", "This payment order has expired. Check the reservation before starting a new booking."],
+  ["QUOTE_HOLD_EXPIRED", "The reservation payment deadline has passed. Check the reservation status."],
+  ["PAYMENT_RETRY_LIMIT_EXCEEDED", "This order has reached its payment attempt limit."],
+  ["ZERO_AMOUNT_ORDER", "This order has no amount due and does not require a QR code."],
+  ["PAYOS_CREDENTIALS_NOT_CONFIGURED", "Live payOS is not configured on Payment Service. Ask the administrator to check its configuration."],
+  ["PAYOS_CHECKOUT_LINK_UNAVAILABLE", "The existing payment request has no checkout link yet. Check its status before trying again."],
+  ["PAYMENT_TRANSACTION_AMBIGUOUS", "A payment attempt is still unresolved. Check its status before trying again."],
+  ["UNKNOWN_TRANSACTION_EXISTS", "A payment attempt is still unresolved. Check its status before trying again."],
+  ["IDEMPOTENCY_CONFLICT", "There is already a checkout attempt for this order. Check its status before trying again."],
+  ["IDEMPOTENCY_PAYLOAD_MISMATCH", "This order has an earlier checkout attempt with different details. Check its status before trying again."],
+  ["QUOTE_BINDING_CONFLICT", "The payment order no longer matches the reservation quote. Check the reservation status."],
+  ["GATEWAY_INITIATION_FAILED", "payOS could not create a payment link. Check this order before trying again."],
+  ["GATEWAY_TIMEOUT", "payOS timed out. The payment result is unknown. Check this order before trying again."],
+])
 
 export interface DriverInvoice {
   invoiceIdentity: { invoiceId: string; invoiceNumber: string; issuedAt: string }
@@ -79,14 +98,18 @@ async function paymentRequest<T>(path: string, init: RequestInit): Promise<T> {
   }
   const payload = await response.json().catch(() => null) as Envelope<T> | null
   if (!response.ok || !payload?.success || !payload.data) {
-    const errors: Record<string, string> = {
-      ORDER_NOT_FOUND: "This payment order was not found. Check the order ID.",
-      ORDER_ALREADY_PAID: "This order has already been paid.",
-      ORDER_EXPIRED: "This payment order has expired.",
-      PAYMENT_RETRY_LIMIT_EXCEEDED: "This order has reached its payment attempt limit.",
-      GATEWAY_TIMEOUT: "The gateway timed out. The result is unknown; do not start another payment until it is checked.",
-    }
-    throw new Error(errors[payload?.errorCode ?? ""] ?? "Payment Service could not complete this request. Please try again later.")
+    const code = typeof payload?.errorCode === "string" && /^[A-Z0-9_]{1,64}$/i.test(payload.errorCode)
+      ? payload.errorCode.toUpperCase() : ""
+    const trace = typeof payload?.traceId === "string" && /^[a-zA-Z0-9:_-]{1,96}$/.test(payload.traceId)
+      ? payload.traceId : ""
+    const message = paymentErrorMessages.get(code) ??
+      (response.status === 401 ? "Your session has expired. Sign in again to continue." :
+        response.status === 403 ? "Your account cannot access this payment order." :
+        code.startsWith("PAYOS_") ? "payOS rejected the request to create a payment link." :
+        response.status >= 500 ? "Payment Service could not finish checkout. Check this order before trying again." :
+        "Payment Service did not accept this request.")
+    const reference = [code || (response.status ? `HTTP ${response.status}` : ""), trace].filter(Boolean).join(" · ")
+    throw new Error(reference ? `${message} Reference: ${reference}.` : message)
   }
   return payload.data
 }

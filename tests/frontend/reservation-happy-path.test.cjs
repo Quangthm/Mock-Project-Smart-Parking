@@ -20,6 +20,11 @@ function load(file, mocks, globals = {}) {
 }
 const selection = { vehicleId: 'vehicle', siteId: 'site', requestedSlotId: 'slot', start: '2026-12-01T03:00:00.000Z', end: '2026-12-01T05:00:00.000Z', paymentMethod: 'PAYOS' };
 const terms = { termsId: 'terms', termsVersion: 'v2', validUntil: '2099-01-01T00:00:00Z', commercial: { bookedAmount: 40000, depositAmount: 20000, disclosure: 'Reviewed price', prepaymentMode: 'PARTIAL' }, operationalPolicy: { values: {} } };
+const quoteSelection = { licensePlate: '51A12345', requestedSlotId: selection.requestedSlotId, start: selection.start, end: selection.end, paymentMethod: 'PAYOS' };
+const quoteIntent = { ...quoteSelection, quoteId: 'quote', quoteVersion: 'v3' };
+const quote = { ...quoteIntent, canonicalPlate: quoteSelection.licensePlate, siteId: selection.siteId,
+  validUntil: terms.validUntil, bookedAmount: 40000, depositAmount: 20000, currency: 'VND',
+  disclosure: 'Reviewed quote', operationalPolicy: { values: {} } };
 
 test('reservation adapter sends the reviewed intent and stable idempotency key to Operations', async () => {
   const calls = [];
@@ -36,6 +41,11 @@ test('reservation adapter sends the reviewed intent and stable idempotency key t
   assert.equal(calls[2][5]['Idempotency-Key'], calls[3][5]['Idempotency-Key']);
   await api.receipt('receipt'); await api.booking('booking'); await api.list(); await api.requestForOrder('order');
   assert.deepEqual(calls.slice(4).map(call => call[0]), ['/reservation-requests/receipt', '/me/reservations/booking', '/me/reservations?pageSize=100', '/me/reservations/by-order/order/request']);
+  await api.reviewQuote(quoteSelection);
+  await api.submitQuote(quoteIntent, 'quote-key');
+  assert.deepEqual(calls[8].slice(0, 3), ['/reservation-quotes', 'POST', quoteSelection]);
+  assert.deepEqual(calls[9].slice(0, 3), ['/reservation-requests', 'POST', quoteIntent]);
+  assert.equal(calls[9][5]['Idempotency-Key'], 'quote-key');
 });
 
 test('reservation adapter propagates failed requests without fabricating a booking', async () => {
@@ -58,10 +68,11 @@ function checkout(api = {}, storage = new Map()) {
     },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '../../../lib/authApi': { getSessionGeneration: () => generation },
-    '../../../lib/reservationsApi': { reservationsApi: { review: async () => terms, ...api } },
-    '../../../lib/driverReservationApi': { driverReservationApi: { create: api.submit } },
+    '../../../lib/reservationsApi': { reservationsApi: { reviewQuote: async () => quote, submitQuote: api.submit } },
+    '../../../lib/driverReservationApi': { driverReservationApi: { create: api.legacySubmit } },
     '../../../lib/reservationProgress': { useReservationProgress: () => ({ snapshot, connected: true }) },
     '../../../lib/formatStatus': { formatStatus: value => value },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'UntitledIcon' },
     '../payments/PaymentCheckout': { PaymentCheckout: 'PaymentCheckout' },
   }, {
     sessionStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
@@ -69,7 +80,7 @@ function checkout(api = {}, storage = new Map()) {
     window: { dispatchEvent() {}, setInterval() {} }, Event: class {},
   }).ReservationCheckout;
   let tree;
-  function render() { index = 0; tree = component({ selection, storageKey: 'driver-account', onDone() {} }); return tree; }
+  function render() { index = 0; tree = component({ selection: quoteSelection, storageKey: 'driver-account', onDone() {} }); return tree; }
   function walk(node) {
     if (Array.isArray(node)) return node.flatMap(walk);
     if (!node || typeof node !== 'object') return [];
@@ -102,6 +113,7 @@ test('ambiguous submission survives remount and retries exactly the same intent/
   let sent;
   const f = checkout({ submit: async (...args) => { sent = JSON.parse(JSON.stringify(args)); throw new Error('Network unavailable'); } });
   await f.accept();
+  assert.deepEqual(sent, [quoteIntent, 'stable-key']);
   const resumed = checkout({ submit: async (...args) => { assert.deepEqual(JSON.parse(JSON.stringify(args)), sent); return { requestId: 'request', state: 'PREPARING' }; } }, f.storage);
   assert.ok(resumed.button('Retry same request'));
   await resumed.click('Retry same request');
@@ -181,7 +193,7 @@ test('payment return schedules status checks only for standalone orders', async 
       useRef(initial) { const i = index++; return slots[i] ?? (slots[i] = {current: initial}); },
     };
     const jsx = (type, props) => ({type, props});
-    const search = '?orderId=' + order + (route === 'reservation' ? '&requestId=' + requestId : '');
+    const search = '?orderId=' + order + (route === 'reservation' ? '&requestId=' + order : '');
     const { PaymentResultPage } = load('roles/driver/payments/PaymentResultPage.tsx', {
       react, 'react/jsx-runtime': { jsx, jsxs: jsx },
       'react-router-dom': {useNavigate() {}}, '../../../components/brand/BrandLogo': {},
@@ -196,7 +208,7 @@ test('payment return schedules status checks only for standalone orders', async 
       '../../../lib/reservationsApi': { reservationsApi: {requestForOrder: async id => {
         assert.equal(id, order); lookups++;
         if (route === 'lookup-unavailable') throw new Error('Unavailable');
-        return {requestId: route === 'legacy-reservation' ? requestId : null};
+        return {requestId: route.endsWith('reservation') ? requestId : null};
       }}},
       '../../../lib/reservationProgress': {useReservationProgress: id => {
         subscribed = id; return {snapshot, connected:true};
@@ -210,7 +222,7 @@ test('payment return schedules status checks only for standalone orders', async 
       await new Promise(resolve => setImmediate(resolve));
     } while (changed);
     assert.equal(reads, 1, route);
-    assert.equal(lookups, route.startsWith('legacy-') || route === 'lookup-unavailable' ? 1 : 0, route);
+    assert.equal(lookups, route === 'standalone' ? 0 : 1, route);
     assert.equal(subscribed ?? null, route.endsWith('reservation') ? requestId : null, route);
     assert.equal(timers, route.endsWith('standalone') ? 1 : 0, route);
     if (route === 'reservation') {

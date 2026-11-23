@@ -48,16 +48,16 @@ function AccountPaymentResult() {
   const [reservationError, setReservationError] = useState("")
 
   const boundOrder = orderId || detail?.orderId || ""
-  const scopedHint = user?.role === "driver" && hint && isPaymentOrderId(hint) ? hint.toLowerCase() : null
   const remembered = paymentApi.rememberedCheckout(boundOrder)
   const knownStandalone = remembered?.standalone === true &&
     (!transactionId || transactionId.toLowerCase() === remembered.paymentTransactionId.toLowerCase())
-  const requestId = scopedHint ?? (lookup?.orderId === boundOrder ? lookup.requestId : null)
+  // The order binding from Operations is authoritative; the query string can be edited.
+  const requestId = lookup?.orderId === boundOrder ? lookup.requestId : null
   const progress = useReservationProgress(requestId)
   const reservation = progress.snapshot?.orderId?.toLowerCase() === boundOrder.toLowerCase() ? progress.snapshot : null
   const reservationState = reservation?.reservationState
   useEffect(() => {
-    if (scopedHint || knownStandalone || user?.role !== "driver" || !isPaymentOrderId(boundOrder)) return
+    if ((knownStandalone && !hint) || user?.role !== "driver" || !isPaymentOrderId(boundOrder)) return
     let active = true
     const generation = getSessionGeneration()
     const current = () => active && generation === getSessionGeneration()
@@ -73,7 +73,7 @@ function AccountPaymentResult() {
       if (current()) setReservationError("Could not load the reservation confirmation. Check Current Booking.")
     })
     return () => { active = false }
-  }, [boundOrder, knownStandalone, scopedHint, user?.role])
+  }, [boundOrder, knownStandalone, hint, user?.role])
 
   // Payment status is independent of reservation confirmation.
   useEffect(() => {
@@ -172,7 +172,8 @@ function AccountPaymentResult() {
   const closed = reservationState && closedReservations.has(reservationState)
   const orderClosed = reservation?.paymentReadiness === "CLOSED"
   const title = confirmed ? "Reservation confirmed" : closed ? `Reservation ${formatStatus(reservationState).toLowerCase()}`
-    : orderClosed ? "Reservation payment order closed" : paymentTitle
+    : orderClosed ? "Reservation payment order closed"
+    : requestId && result === "success" ? "Payment received. Awaiting reservation confirmation." : paymentTitle
   const description = confirmed ? "Operations confirmed your booking. You can view it in Current Booking."
     : closed || orderClosed ? "Check Current Booking for the reservation details." : paymentDescription
   const iconState = confirmed ? "success" : closed || orderClosed ? "failed" : result

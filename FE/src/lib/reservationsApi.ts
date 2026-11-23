@@ -22,6 +22,28 @@ export interface ReservationTerms {
   commercial: ReservationPreview & { disclosure: string; prepaymentMode: string; coverageVersion: string }
   operationalPolicy: { values: Record<string, number>; arrivalLateToleranceEnabled: boolean; cancellationTimezone: string }
 }
+export interface ReviewedReservationSelection {
+  licensePlate: string
+  requestedSlotId: string
+  start: string
+  end: string
+  paymentMethod: "PAYOS"
+}
+export interface ReviewedReservationIntent extends ReviewedReservationSelection {
+  quoteId: string
+  quoteVersion: string
+}
+export interface ReviewedReservationQuote extends Omit<ReviewedReservationIntent, "licensePlate"> {
+  canonicalPlate: string
+  siteId: string
+  validUntil: string
+  bookedAmount: number
+  coveredAmount: number
+  depositAmount: number
+  currency: string
+  disclosure: string
+  operationalPolicy: ReservationTerms["operationalPolicy"]
+}
 export interface ReservationReceipt {
   requestId: string
   state: string
@@ -81,6 +103,10 @@ async function call<T>(path: string, method = "GET", body?: unknown, headers?: R
   return response.data
 }
 export const reservationsApi = {
+  reviewQuote: (selection: ReviewedReservationSelection) =>
+    call<ReviewedReservationQuote>("/reservation-quotes", "POST", selection),
+  submitQuote: (intent: ReviewedReservationIntent, key: string) =>
+    call<ReservationReceipt>("/reservation-requests", "POST", intent, { "Idempotency-Key": key }),
   preview: (selection: Omit<ReservationSelection, "vehicleId" | "paymentMethod"> & { vehicleId?: string; paymentMethod?: string }) =>
     call<ReservationPreview>("/reservation-price-previews", "POST", selection),
   review: (selection: ReservationSelection) => call<ReservationTerms>("/reservation-terms", "POST", selection),

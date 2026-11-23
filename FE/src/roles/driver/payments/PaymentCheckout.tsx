@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { classifyPaymentStatus, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
 import { useServerRefresh } from "../../../lib/serverRefresh"
@@ -32,6 +32,7 @@ export function PaymentCheckout({
   const orderId = providedOrderId ?? manualOrderId
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
+  const submitting = useRef(false)
   const [error, setError] = useState("")
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null)
   const [status, setStatus] = useState<"pending" | "success" | "failed">("pending")
@@ -63,11 +64,12 @@ export function PaymentCheckout({
 
   async function pay(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selected || !isPaymentOrderId(orderId) || busy) return
+    if (!selected || !isPaymentOrderId(orderId) || submitting.current) return
     if (holdExpiresAt && Date.parse(holdExpiresAt) <= Date.now()) {
       setError("The reservation payment deadline has passed. Refresh the reservation status.")
       return
     }
+    submitting.current = true
     setBusy(true)
     setError("")
     try {
@@ -94,6 +96,7 @@ export function PaymentCheckout({
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Payment could not be started.")
     } finally {
+      submitting.current = false
       setBusy(false)
     }
   }
@@ -140,7 +143,7 @@ export function PaymentCheckout({
             if (result.orderId.toLowerCase() !== orderId.trim().toLowerCase()) throw new Error("Payment Service returned a different order.")
             setStatus(classifyPaymentStatus(result))
             setError("")
-          } catch { setError("Could not check payment status. Please try again.") }
+          } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not check payment status. Please try again.") }
         }}>Check payment status</button>
       </div>
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}

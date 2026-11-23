@@ -101,6 +101,22 @@ test('checkout rejects a non-payOS redirect and the backend demo gateway', async
   await assert.rejects(fixture({ accountNumber: '0123456789', accountName: 'SMARTPARKING CORP' }).api.paymentApi.checkout(orderId), /demo gateway/);
 });
 
+test('checkout provides safe error references and keeps the same retry key for an unresolved payment', async () => {
+  const f = fixture({}, { ok: false, status: 409, json: async () => ({
+    success: false, errorCode: 'PAYMENT_TRANSACTION_AMBIGUOUS', traceId: 'checkout:42', message: 'Internal provider details',
+  }) });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await assert.rejects(f.api.paymentApi.checkout(orderId), error => {
+      assert.match(error.message, /still unresolved.*PAYMENT_TRANSACTION_AMBIGUOUS.*checkout:42/);
+      assert.doesNotMatch(error.message, /Internal provider details/);
+      return true;
+    });
+  }
+  assert.equal(f.calls[0].init.headers['Idempotency-Key'], f.calls[1].init.headers['Idempotency-Key']);
+  const unknown = fixture({}, { ok: false, status: 502, json: async () => null });
+  await assert.rejects(unknown.api.paymentApi.checkout(orderId), /HTTP 502/);
+});
+
 test('reservation checkout carries its request reference through both provider returns', async () => {
   const f = fixture();
   const requestId = '3a584ece-c27b-481d-9e92-4e9bb64a5a6a';
