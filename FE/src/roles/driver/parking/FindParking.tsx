@@ -123,6 +123,8 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   // Guards against duplicate operational-layout fetches while one is in flight.
   const resolvingLotsRef = useRef(new Set<string>())
   const layoutRetryAfterRef = useRef(new Map<string, number>())
+  const reconciledDetailSiteRef = useRef(new Map<string, string>())
+  const [detailOpenSeq, setDetailOpenSeq] = useState(0)
   const [layoutRevision, setLayoutRevision] = useState(0)
   const mountedRef = useRef(true)
   const [selected, setSelected] = useState<ParkingLot | null>(null)
@@ -249,45 +251,51 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
-  // Fetch the full slot layout only when opening a site's details; map markers
-  // do not need an individual layout request for every stored site.
   useEffect(() => {
-    const unresolved = sourceLots.filter((lot) =>
-      detailsOpen && lot.id === selected?.id && (!Array.isArray(lot.slots) || lot.slots.length === 0) &&
-      !resolvingLotsRef.current.has(lot.id) && (layoutRetryAfterRef.current.get(lot.id) ?? 0) <= Date.now(),
-    ).slice(0, Math.max(0, 3 - resolvingLotsRef.current.size))
-    if (!unresolved.length) return
-    unresolved.forEach((lot) => {
-      if (resolvingLotsRef.current.has(lot.id) || (layoutRetryAfterRef.current.get(lot.id) ?? 0) > Date.now()) return
-      resolvingLotsRef.current.add(lot.id)
-      const generation = getSessionGeneration()
-      void (async () => {
-        try {
-          const layout = await parkingApi.operationalLayout(lot.id)
-          if (!mountedRef.current || generation !== getSessionGeneration()) return
-          const mappedSlots = mapOperationalLayoutSlots(layout.slots)
-          layoutRetryAfterRef.current.set(lot.id, Date.now() + 30_000)
-          if (!mappedSlots.length) return
-          const updatedLot: ParkingLot = {
-            ...lot,
-            slots: mappedSlots,
-            totalSlots: layout.metrics?.totalPhysicalCapacity ?? mappedSlots.length,
-          }
-          store.saveLot(updatedLot)
-          setSourceLots((previous) => previous.map((item) => (item.id === lot.id ? updatedLot : item)))
-        } catch (error) {
-          // Missing/inaccessible sites must not be retried on every store notification.
-          const permanent = error instanceof AuthApiError && [400, 403, 404].includes(error.status)
-          layoutRetryAfterRef.current.set(lot.id, Date.now() + (permanent ? 300_000 : 30_000))
-          // Offline, fixture mode or an unavailable service: keep the existing
-          // (empty) slots and never throw or overwrite them.
-        } finally {
-          resolvingLotsRef.current.delete(lot.id)
-          if (mountedRef.current && generation === getSessionGeneration()) setLayoutRevision(value => value + 1)
+    if (detailsOpen && selected?.id) {
+      setDetailOpenSeq(value => value + 1)
+    }
+  }, [detailsOpen, selected?.id])
+  // Reconcile the selected site's authoritative layout whenever details open (even if persisted
+  // store slots are already non-empty or synthetic discovery counts exist), without fetching map-wide.
+  useEffect(() => {
+    if (!detailsOpen || !selected?.id) return
+    const targetLot = lots.find((lot) => lot.id === selected.id)
+    if (!targetLot) return
+    const generation = getSessionGeneration()
+    const reconcileToken = `${generation}:${targetLot.id}:${detailOpenSeq}`
+    if (reconciledDetailSiteRef.current.get(targetLot.id) === reconcileToken) return
+    if (resolvingLotsRef.current.has(targetLot.id) || (layoutRetryAfterRef.current.get(targetLot.id) ?? 0) > Date.now()) return
+
+    resolvingLotsRef.current.add(targetLot.id)
+    void (async () => {
+      try {
+        const layout = await parkingApi.operationalLayout(targetLot.id)
+        if (!mountedRef.current || generation !== getSessionGeneration()) return
+        const mappedSlots = mapOperationalLayoutSlots(layout.slots)
+        reconciledDetailSiteRef.current.set(targetLot.id, reconcileToken)
+        layoutRetryAfterRef.current.set(targetLot.id, Date.now() + 30_000)
+        if (!mappedSlots.length) return
+        const updatedLot: ParkingLot = {
+          ...targetLot,
+          slots: mappedSlots,
+          totalSlots: layout.metrics?.totalPhysicalCapacity ?? mappedSlots.length,
         }
-      })()
-    })
-  }, [sourceLots, layoutRevision, detailsOpen, selected?.id])
+        store.saveLot(updatedLot)
+        setSourceLots((previous) => previous.map((item) => (item.id === targetLot.id ? updatedLot : item)))
+        setDiscoveryLots((previous) => previous ? previous.map((item) => (item.id === targetLot.id ? updatedLot : item)) : null)
+      } catch (error) {
+        // Missing/inaccessible sites must not be retried on every store notification.
+        const permanent = error instanceof AuthApiError && [400, 403, 404].includes(error.status)
+        layoutRetryAfterRef.current.set(targetLot.id, Date.now() + (permanent ? 300_000 : 30_000))
+        // Offline, fixture mode or an unavailable service: keep the existing
+        // slots and never throw or overwrite them.
+      } finally {
+        resolvingLotsRef.current.delete(targetLot.id)
+        if (mountedRef.current && generation === getSessionGeneration()) setLayoutRevision(value => value + 1)
+      }
+    })()
+  }, [lots, layoutRevision, detailsOpen, selected?.id, detailOpenSeq])
   useEffect(() => {
     if (!selected) return
     const latest = lots.find((lot) => lot.id === selected.id)
