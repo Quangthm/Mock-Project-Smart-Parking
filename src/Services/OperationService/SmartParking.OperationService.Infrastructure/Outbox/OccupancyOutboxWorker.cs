@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,8 @@ namespace SmartParking.OperationService.Infrastructure.Outbox;
 
 public sealed class OccupancyOutboxWorker(
     IServiceScopeFactory scopeFactory,
-    ILogger<OccupancyOutboxWorker> logger) : BackgroundService
+    ILogger<OccupancyOutboxWorker> logger,
+    IConfiguration? configuration = null) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(60);
@@ -62,14 +64,18 @@ public sealed class OccupancyOutboxWorker(
         var batch = await store.ClaimBatchAsync(BatchSize, LeaseDuration, stoppingToken);
         if (batch.Count == 0) return 0;
 
+        var layoutRelayEnabled = configuration?.GetValue<bool>("Messaging:LayoutRelayEnabled") == true;
         var publishedIds = new List<Guid>(batch.Count);
         foreach (var message in batch)
         {
             // A publisher failure propagates and leaves the message unconfirmed; the lease
             // expires so the row becomes claimable again for retry (at-least-once delivery).
-            // SnapshotRequired is a UI invalidation, not a Facility occupancy delta.
-            if (message.EventType != "SnapshotRequired") await publisher.PublishAsync(message, stoppingToken);
-            if (broadcaster is not null)
+            // SnapshotRequired is an Operations-owned UI invalidation (e.g., ["bookings"]), not a
+            // Facility occupancy delta. When Facility layout relay is active, delta events publish to
+            // Facility only so SignalR pushes follow post-projection Facility commits without a race.
+            var isLayoutDeltaEvent = message.EventType != "SnapshotRequired";
+            if (isLayoutDeltaEvent) await publisher.PublishAsync(message, stoppingToken);
+            if (broadcaster is not null && (!isLayoutDeltaEvent || !layoutRelayEnabled))
             {
                 try
                 {

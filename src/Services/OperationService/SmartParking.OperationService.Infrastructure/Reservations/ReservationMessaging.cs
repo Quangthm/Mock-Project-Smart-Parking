@@ -81,6 +81,10 @@ public static class ReservationMessaging
         var admissionEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var auditEnabled = configuration.GetValue<bool>("Messaging:AuditEnabled");
         var gateCheckoutEnabled = configuration.GetValue<bool>("Messaging:Enabled");
+        var layoutRelayEnabled = configuration.GetValue<bool>("Messaging:LayoutRelayEnabled");
+        var layoutRelayQueueName = configuration["Messaging:LayoutRelayQueueName"];
+        if (string.IsNullOrWhiteSpace(layoutRelayQueueName))
+            layoutRelayQueueName = FacilityLayoutInvalidationTopology.QueueName;
         if (auditEnabled) services.AddScoped<IOperationsAuditPublisher, OperationsAuditPublisher>();
         else services.AddScoped<IOperationsAuditPublisher, UnconfiguredOperationsAuditPublisher>();
         if (!admissionEnabled && !auditEnabled)
@@ -89,7 +93,7 @@ public static class ReservationMessaging
             // fail closed even if an internal caller attempts dispatch without the HTTP gate.
             services.TryAddScoped<IAccountAccessRequester, DisabledAccountAccessRequester>();
             services.TryAddScoped<IReservationFactsPublisher, DisabledReservationFactsPublisher>();
-            if (!gateCheckoutEnabled) return services;
+            if (!gateCheckoutEnabled && !layoutRelayEnabled) return services;
         }
         else
         {
@@ -97,13 +101,15 @@ public static class ReservationMessaging
             services.AddScoped<IReservationFactsPublisher, ReservationFactsPublisher>();
         }
         var restrictedBroker = admissionEnabled || auditEnabled;
+        var amqp = configuration["RabbitMq:ConnectionString"] ?? configuration.GetConnectionString("RabbitMq");
+        var hasUri = !restrictedBroker && !string.IsNullOrWhiteSpace(amqp) && Uri.TryCreate(amqp, UriKind.Absolute, out _);
         var brokerUser = (restrictedBroker && !string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerUser"]))
             ? configuration["ReservationAdmission:BrokerUser"]
             : configuration["SMARTPARK_RABBITMQ_USER"] ?? "smartpark";
         var brokerPassword = (restrictedBroker && !string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerPassword"]))
             ? configuration["ReservationAdmission:BrokerPassword"]
             : configuration["SMARTPARK_RABBITMQ_PASSWORD"];
-        if (string.IsNullOrWhiteSpace(brokerUser) || string.IsNullOrWhiteSpace(brokerPassword))
+        if (!hasUri && (string.IsNullOrWhiteSpace(brokerUser) || string.IsNullOrWhiteSpace(brokerPassword)))
             throw new InvalidOperationException("Configure Operations broker credentials for enabled messaging.");
         services.AddMassTransit(registration =>
         {
@@ -117,6 +123,10 @@ public static class ReservationMessaging
             {
                 registration.AddConsumer<PaymentSucceededConsumer>();
             }
+            if (layoutRelayEnabled)
+            {
+                registration.AddConsumer<LayoutInvalidatedConsumer>();
+            }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
                 outbox.UsePostgres();
@@ -128,14 +138,22 @@ public static class ReservationMessaging
             });
             registration.UsingRabbitMq((context, bus) =>
             {
-                bus.Host(configuration["SMARTPARK_RABBITMQ_HOST"] ?? "127.0.0.1",
-                    configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
-                    configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark", host =>
-                    {
-                        host.Username(brokerUser);
-                        host.Password(brokerPassword);
-                    });
+                if (hasUri)
+                {
+                    bus.Host(new Uri(amqp!));
+                }
+                else
+                {
+                    bus.Host(configuration["SMARTPARK_RABBITMQ_HOST"] ?? "127.0.0.1",
+                        configuration.GetValue<ushort?>("SMARTPARK_RABBITMQ_PORT") ?? 5672,
+                        configuration["SMARTPARK_RABBITMQ_VHOST"] ?? "smartpark", host =>
+                        {
+                            host.Username(brokerUser!);
+                            host.Password(brokerPassword!);
+                        });
+                }
                 bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
+                bus.Message<FacilityLayoutInvalidatedMessage>(message => message.SetEntityName(FacilityLayoutInvalidationTopology.ExchangeName));
                 if (gateCheckoutEnabled)
                 {
                     bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
@@ -143,6 +161,15 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<PaymentSucceededConsumer>(context);
+                    });
+                }
+                if (layoutRelayEnabled)
+                {
+                    bus.ReceiveEndpoint(layoutRelayQueueName, endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<LayoutInvalidatedConsumer>(context);
                     });
                 }
                 if (admissionEnabled)

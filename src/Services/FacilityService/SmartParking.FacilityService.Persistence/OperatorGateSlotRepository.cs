@@ -79,7 +79,7 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
         return slot;
     }
 
-    public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
+    public async Task<bool> ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
     {
         var (db, tx) = OwningTransaction();
         await ReservationDependencyGuard.RequireAvailableAsync(db, tx, siteId, ct);
@@ -92,7 +92,7 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
         command.Parameters.AddWithValue(tenantId);
         command.Parameters.AddWithValue(siteId);
         command.Parameters.AddWithValue(slotId);
-        await command.ExecuteNonQueryAsync(ct);
+        return await command.ExecuteNonQueryAsync(ct) > 0;
     }
 
     private (NpgsqlConnection, NpgsqlTransaction) OwningTransaction()

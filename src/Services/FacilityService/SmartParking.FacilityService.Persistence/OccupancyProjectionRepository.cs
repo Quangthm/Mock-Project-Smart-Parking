@@ -1,5 +1,7 @@
 using Npgsql;
+using SmartParking.Contracts.Facility;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Services;
 
 namespace SmartParking.FacilityService.Persistence;
 
@@ -8,12 +10,16 @@ namespace SmartParking.FacilityService.Persistence;
 // processed_events deduplicates by eventId, slot_sequence_watermarks rejects stale sequence
 // numbers for the same slot, and occupancy_release_ledger guarantees a session is released
 // at most once even if release events are redelivered.
-public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOccupancyProjectionRepository
+public sealed class OccupancyProjectionRepository(
+    NpgsqlDataSource source,
+    ParkingDbContext? context = null,
+    ILayoutInvalidationPublisher? layoutInvalidations = null) : IOccupancyProjectionRepository
 {
     public async Task<bool> ApplyAsync(OccupancyProjectionEvent projectionEvent, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(ct);
+        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
+        var db = txScope.Connection;
+        var tx = txScope.Transaction;
 
         // G5 rule 1: a duplicate eventId is recorded once and never re-applied.
         await using (var mark = new NpgsqlCommand("""
@@ -27,36 +33,51 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
             mark.Parameters.AddWithValue(projectionEvent.EventType);
             if (await mark.ExecuteScalarAsync(ct) is null)
             {
-                await tx.RollbackAsync(ct);
+                await txScope.RollbackAsync(ct);
                 return false;
             }
         }
 
         var applied = false;
+        Guid? mutatedTenantId = null;
         if (projectionEvent.SlotId is { } slot)
         {
             // G5 rules 2-4: apply only when the sequence number advances the slot watermark.
             if (!await IsFreshAsync(db, tx, slot, projectionEvent.SequenceNumber, ct))
             {
-                await tx.CommitAsync(ct);
+                await txScope.CommitWithoutStagingAsync(ct);
                 return false;
             }
 
-            switch (projectionEvent.EventType)
+            mutatedTenantId = projectionEvent.EventType switch
             {
-                case "SlotStateChanged":
-                    await ApplySlotStateAsync(db, tx, slot, projectionEvent.SiteId, projectionEvent.PhysicalState, ct);
-                    break;
-                case "OccupancyReleased":
-                    await ApplyReleaseAsync(db, tx, projectionEvent.EventId, slot, projectionEvent.SiteId, projectionEvent.OccurredAt, projectionEvent.SessionId, ct);
-                    break;
-            }
+                "SlotStateChanged" => await ApplySlotStateAsync(
+                    db, tx, slot, projectionEvent.SiteId, projectionEvent.PhysicalState, ct),
+                "OccupancyReleased" => await ApplyReleaseAsync(
+                    db, tx, projectionEvent.EventId, slot, projectionEvent.SiteId,
+                    projectionEvent.OccurredAt, projectionEvent.SessionId, ct),
+                _ => null
+            };
 
             await AdvanceWatermarkAsync(db, tx, slot, projectionEvent.SequenceNumber, ct);
             applied = true;
         }
 
-        await tx.CommitAsync(ct);
+        if (mutatedTenantId is { } tenantId)
+        {
+            await txScope.StageAndCommitAsync(
+                layoutInvalidations,
+                tenantId,
+                projectionEvent.SiteId,
+                [LayoutInvalidationResources.FullLayout, LayoutInvalidationResources.CapacitySummary],
+                ct,
+                eventId: projectionEvent.EventId);
+        }
+        else
+        {
+            await txScope.CommitWithoutStagingAsync(ct);
+        }
+
         return applied;
     }
 
@@ -70,7 +91,7 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
         return last is null || Convert.ToInt64(last) < sequenceNumber;
     }
 
-    private static async Task ApplySlotStateAsync(
+    private static async Task<Guid?> ApplySlotStateAsync(
         NpgsqlConnection db, NpgsqlTransaction tx, Guid slotId, Guid siteId, string? physicalState, CancellationToken ct)
     {
         var state = string.IsNullOrWhiteSpace(physicalState) ? "OCCUPIED" : physicalState;
@@ -78,16 +99,18 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
             UPDATE parking_slots
             SET physical_state = $2, updated_at = now()
             WHERE id = $1 AND site_id = $3 AND deleted_at IS NULL
+              AND physical_state IS DISTINCT FROM $2
+            RETURNING tenant_id
             """, db, tx);
         command.Parameters.AddWithValue(slotId);
         command.Parameters.AddWithValue(state);
         command.Parameters.AddWithValue(siteId);
-        await command.ExecuteNonQueryAsync(ct);
+        return await command.ExecuteScalarAsync(ct) as Guid?;
     }
 
     // Release-once (G3): the ledger insert decides whether the slot may be freed. A replay of the
     // same session finds the ledger row already present and the UPDATE matches no rows.
-    private static async Task ApplyReleaseAsync(
+    private static async Task<Guid?> ApplyReleaseAsync(
         NpgsqlConnection db,
         NpgsqlTransaction tx,
         Guid eventId,
@@ -97,7 +120,7 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
         Guid? sessionId,
         CancellationToken ct)
     {
-        if (sessionId is not { } session) return;
+        if (sessionId is not { } session) return null;
         await using var command = new NpgsqlCommand("""
             WITH ledger AS (
                 INSERT INTO occupancy_release_ledger (event_id, session_id, slot_id, released_at, processed_at)
@@ -110,13 +133,14 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
             FROM ledger
             WHERE slot.id = $3 AND slot.site_id = $5
               AND slot.physical_state = 'OCCUPIED' AND slot.deleted_at IS NULL
+            RETURNING slot.tenant_id
             """, db, tx);
         command.Parameters.AddWithValue(eventId);
         command.Parameters.AddWithValue(session);
         command.Parameters.AddWithValue(slotId);
         command.Parameters.AddWithValue(occurredAt);
         command.Parameters.AddWithValue(siteId);
-        await command.ExecuteNonQueryAsync(ct);
+        return await command.ExecuteScalarAsync(ct) as Guid?;
     }
 
     private static async Task AdvanceWatermarkAsync(

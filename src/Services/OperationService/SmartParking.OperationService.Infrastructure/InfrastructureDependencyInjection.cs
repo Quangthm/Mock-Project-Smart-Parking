@@ -29,6 +29,18 @@ public static class InfrastructureDependencyInjection
         services.AddScoped<IOperatorIdentityClient>(provider =>
             provider.GetRequiredService<OperatorIdentityClient>());
 
+        services.AddHttpClient("RealtimeUserAuthority", client =>
+        {
+            client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddHttpClient("RealtimeFacilityAuthority", client =>
+        {
+            client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddScoped<IRealtimeRoleSubscriptionAuthorizer, RealtimeRoleSubscriptionAuthorizer>();
+
         services.AddHttpClient<OwnerIdentityClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");

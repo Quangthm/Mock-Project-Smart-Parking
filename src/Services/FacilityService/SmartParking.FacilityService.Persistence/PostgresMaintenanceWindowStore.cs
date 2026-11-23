@@ -1,5 +1,7 @@
 using Npgsql;
+using SmartParking.Contracts.Facility;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Services;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Persistence;
@@ -7,7 +9,10 @@ namespace SmartParking.FacilityService.Persistence;
 // Maintenance windows are recorded, never claimed effective: enforcement_state stays 'pending'
 // until an external acknowledgement arrives (DE-13). The column is `service_window` because WINDOW
 // is a reserved keyword in PostgreSQL; the wire keeps start/end.
-public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IMaintenanceWindowStore
+public sealed class PostgresMaintenanceWindowStore(
+    NpgsqlDataSource source,
+    ParkingDbContext? context = null,
+    ILayoutInvalidationPublisher? layoutInvalidations = null) : IMaintenanceWindowStore
 {
     private const string Columns = "id, tenant_id, site_id, unit_id, slot_id, lower(service_window), upper(service_window), " +
         "reason, created_by, created_at, cancelled_at, enforcement_state, enforcement_ref, acknowledged_at";
@@ -49,8 +54,9 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
     public async Task<MaintenanceWindow> CreateAsync(
         OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(ct);
+        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
+        var db = txScope.Connection;
+        var tx = txScope.Transaction;
         await EnsureSiteAsync(db, tx, owner, siteId, ct);
         try
         {
@@ -67,7 +73,12 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
                     throw new StructureException("SITE_NOT_FOUND", "Parking site was not found in this tenant.");
                 window = Window(reader);
             }
-            await tx.CommitAsync(ct);
+            await txScope.StageAndCommitAsync(
+                layoutInvalidations,
+                owner.TenantId,
+                siteId,
+                [LayoutInvalidationResources.Structure],
+                ct);
             return window;
         }
         catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.ExclusionViolation)
@@ -91,10 +102,11 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
     public async Task<MaintenanceWindow> ExtendAsync(
         OwnerScope owner, Guid siteId, Guid windowId, DateTime newEnd, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(ct);
+        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
+        var db = txScope.Connection;
+        var tx = txScope.Transaction;
         await EnsureSiteAsync(db, tx, owner, siteId, ct);
-        _ = await LockAsync(db, tx, owner, siteId, windowId, ct);
+        var current = await LockAsync(db, tx, owner, siteId, windowId, ct);
         try
         {
             MaintenanceWindow window;
@@ -111,7 +123,20 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
                     throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
                 window = Window(reader);
             }
-            await tx.CommitAsync(ct);
+            if (window.End != current.End ||
+                !string.Equals(window.EnforcementState, current.EnforcementState, StringComparison.Ordinal))
+            {
+                await txScope.StageAndCommitAsync(
+                    layoutInvalidations,
+                    owner.TenantId,
+                    siteId,
+                    [LayoutInvalidationResources.Structure],
+                    ct);
+            }
+            else
+            {
+                await txScope.CommitWithoutStagingAsync(ct);
+            }
             return window;
         }
         catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.ExclusionViolation)
@@ -122,8 +147,9 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
 
     public async Task CancelAsync(OwnerScope owner, Guid siteId, Guid windowId, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(ct);
+        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
+        var db = txScope.Connection;
+        var tx = txScope.Transaction;
         await EnsureSiteAsync(db, tx, owner, siteId, ct);
         _ = await LockAsync(db, tx, owner, siteId, windowId, ct);
         // Reopening early must never bypass another closure that still covers now.
@@ -136,11 +162,25 @@ public sealed class PostgresMaintenanceWindowStore(NpgsqlDataSource source) : IM
             if (await other.ExecuteScalarAsync(ct) is not null)
                 throw new StructureException("STRUCTURE_IN_USE", "Another maintenance window still covers this period.");
         }
+        int affected;
         await using (var command = Command(db, tx,
             "UPDATE structure_maintenance_windows SET cancelled_at=now() WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL",
             windowId, owner.TenantId, siteId))
-            await command.ExecuteNonQueryAsync(ct);
-        await tx.CommitAsync(ct);
+            affected = await command.ExecuteNonQueryAsync(ct);
+
+        if (affected > 0)
+        {
+            await txScope.StageAndCommitAsync(
+                layoutInvalidations,
+                owner.TenantId,
+                siteId,
+                [LayoutInvalidationResources.Structure],
+                ct);
+        }
+        else
+        {
+            await txScope.CommitWithoutStagingAsync(ct);
+        }
     }
 
     private static async Task<MaintenanceWindow> LockAsync(

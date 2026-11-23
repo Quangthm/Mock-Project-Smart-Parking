@@ -45,8 +45,9 @@ public sealed class SimulatePaidGateDepartureCommandHandler(
             }
             await GateDeparture.RecordAsync(session, allocations, session.CheckoutPaidAt!.Value, null, ct);
         }
-        // The consumer may own the outer transaction; the existing outbox broadcasts after its commit.
-        realtimeOutbox.AddSnapshotRequired(request.SiteId, request.OccurredAt);
+        // The consumer may own the outer transaction; emit Operations booking/session invalidation only
+        // so checkout UI refreshes session state even if Facility slot release fails or is a no-op.
+        realtimeOutbox.AddSnapshotRequired(request.SiteId, request.OccurredAt, ["bookings"]);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         await GateDeparture.ReleaseScannedSlotAsync(session, gateSlots, ct);

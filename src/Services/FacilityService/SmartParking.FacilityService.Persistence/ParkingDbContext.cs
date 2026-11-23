@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SmartParking.FacilityService.Domain.Entities;
 
@@ -23,6 +24,7 @@ public sealed class ParkingDbContext(DbContextOptions<ParkingDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.AddTransactionalOutboxEntities();
         modelBuilder.Entity<ReservationDependency>(e =>
         {
             e.ToTable("reservation_dependencies"); e.HasKey(x => x.Id);

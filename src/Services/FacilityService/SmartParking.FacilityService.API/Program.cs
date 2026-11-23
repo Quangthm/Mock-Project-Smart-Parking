@@ -9,6 +9,7 @@ using SmartParking.FacilityService.Application.DTOs;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Infrastructure;
+using SmartParking.FacilityService.Infrastructure.Messaging;
 using SmartParking.FacilityService.Application.Reservations;
 
 namespace SmartParking.FacilityService.API;
@@ -71,6 +72,7 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorOperationsService>();
         builder.Services.AddScoped<IOperatorGateSlotRepository, OperatorGateSlotRepository>();
         builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
+        builder.Services.AddFacilityMessaging(builder.Configuration);
 
         // Application Layer CQRS & Pipeline Behaviors
         builder.Services.AddApplicationServices();
