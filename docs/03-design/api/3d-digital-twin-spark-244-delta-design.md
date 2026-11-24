@@ -304,3 +304,13 @@ All 6 gaps closed at design level. Open items that are **not** gaps but follow-u
 | AC-8 (stale/reconnect) | — (228) | TC-244-06 |
 | AC-9 (duplicate/replay no duplicate effect) | G5 | TC-244-08 |
 | AC-10 (no client mutation authority) | — | add during delta (gap noted in 244 doc §12) |
+
+---
+
+## 16. Additive `serviceAvailability` and emergency-restriction projection (`feat/SPARK-244`)
+
+This section records two backward-compatible additions implemented on `feat/SPARK-244-realtime-monitoring`; neither changes the `v1.2.0` envelope for existing consumers.
+
+**Optional `serviceAvailability` block.** `OperationalLayoutProjection` gains an optional `serviceAvailability` object (state, `closedUntil`, `reason`, `activeWindows[]`). It is marked `[JsonIgnore(WhenWritingNull)]`, so a projection produced without the block serializes exactly as `v1.2.0` did — no new key, no shape change. Older clients ignore the property when present; newer clients use it to render the Operator Maintenance tab.
+
+**Operator emergency-restriction projection.** Active site-, floor/zone-, and single-bay emergency restrictions are projected onto the affected slots as `UNAVAILABLE` (mode `EMERGENCY`) or `MAINTENANCE` (mode `FORCED_MAINTENANCE`). The projection never rewrites `OCCUPIED`: a vehicle already parked stays `OCCUPIED` and must still be able to check out, so withdrawal from sale applies only to unoccupied capacity. Releasing a restriction restores the prior physical state; Operations reconciles conflicting future bookings separately.
