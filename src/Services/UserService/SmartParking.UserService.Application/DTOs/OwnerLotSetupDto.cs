@@ -35,6 +35,8 @@ public sealed class OwnerLotSetupDto : IValidatableObject
         if (ModelFileName != expected && !(LotType == "outdoor" && ModelFileName == "outdoor_parking_lot_.glb"))
             yield return new("Select a supported model matching the lot type.");
         if (LotType == "outdoor" && Floors != 1) yield return new("Outdoor lots must have one floor.");
+        if (LotType == "basement" && Floors > 2) yield return new("Basement lots support at most 2 floors.");
+        if (LotType == "multi-storey" && Floors > 3) yield return new("Multi-storey lots support at most 3 floors.");
         if (Devices is null) yield break;
         if (Devices.Any(d => d is null || d.Type is not ("camera" or "rfid" or "ev-charger" or "sensor" or "barrier") || string.IsNullOrWhiteSpace(d.Label) || d.Label.Length > 100))
             yield return new("Invalid device configuration.");
