@@ -1,8 +1,10 @@
 using MassTransit.EntityFrameworkCoreIntegration;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Domain.Reservations;
@@ -13,33 +15,40 @@ namespace SmartParking.OperationService.Tests;
 public sealed partial class QuoteBookingDatabaseTests
 {
     [QuoteDatabaseFact]
-    public async Task SpecificSlotAdmissionRefusesUnprovenScopedCapacityButIgnoresExpiredScopedHolds()
+    public Task OrdinarySlotAdmitsWithDynamicBackupCountAndUnlocatedWalkIn() => CheckBackupAdmissionAsync(fixedBackup: false);
+
+    [QuoteDatabaseFact]
+    public Task DesignatedBackupSlotRemainsUnavailableForOrdinaryAdmission() => CheckBackupAdmissionAsync(fixedBackup: true);
+
+    private async Task CheckBackupAdmissionAsync(bool fixedBackup)
     {
         await using var services = Services();
-        var first = await Prepare(services, Guid.NewGuid());
+        var request = await Prepare(services, Guid.NewGuid());
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
-        var quota = await db.Set<OperationalCapacityConfig>().SingleAsync(q => q.SiteId == site);
-        quota.TotalPhysicalCapacity = quota.MaxReservationQuota = 3;
-        var scoped = new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
-            AccountId = Guid.NewGuid(), TargetSpatialUnitId = unit, VehicleType = "CAR",
-            ExpectedStartTime = start, ExpectedEndTime = start.AddHours(1), CreatedAt = DateTimeOffset.UtcNow,
-            Status = "PENDING_PAYMENT", HoldExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5) };
-        db.Add(scoped);
-        await db.SaveChangesAsync();
-        await Send(services, new CommitQuoteHoldCommand(first));
-        Assert.Equal("SCOPED_CAPACITY_EVIDENCE_REQUIRED",
-            await db.ReservationRequests.Where(r => r.Id == first).Select(r => r.Code).SingleAsync());
-        Assert.False(await db.Reservations.AnyAsync(r => r.RequestId == first));
-
-        scoped.HoldExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var now = DateTimeOffset.UtcNow;
+        var token = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.WorkflowId == request);
+        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, facilityVersion, true, true),
+            [new(slot, unit, "CAR", true, true, fixedBackup, [unit], ["CAR"])], [new(null, "CAR", 1)], true);
+        var json = FacilityDependencyProtocol.SerializeSnapshot(snapshot, FacilityDependencyProtocol.Intent(token));
+        db.Entry(token).Property(t => t.SnapshotJson).CurrentValue = json;
+        db.Entry(token).Property(t => t.SnapshotFingerprint).CurrentValue = FacilityDependencyProtocol.Fingerprint(json);
+        db.Add(new ParkingSessionRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, VehicleType = "CAR",
+            EntryTime = now, SessionStatus = "ACTIVE", CreatedAt = now });
         db.Add(new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
             AccountId = Guid.NewGuid(), TargetSlotId = slot, NormalizedPlate = plate, VehicleType = "CAR",
-            Status = "CANCELLED", ExpectedStartTime = start, ExpectedEndTime = start.AddHours(1), CreatedAt = DateTimeOffset.UtcNow });
+            Status = "CANCELLED", ExpectedStartTime = start, ExpectedEndTime = start.AddHours(1), CreatedAt = now });
         await db.SaveChangesAsync();
-        var next = await Prepare(services, Guid.NewGuid());
-        await Send(services, new CommitQuoteHoldCommand(next));
-        Assert.Equal("PENDING_PAYMENT", await db.Reservations.Where(r => r.Id == next).Select(r => r.Status).SingleAsync());
+        await Send(services, new CommitQuoteHoldCommand(request));
+        if (fixedBackup)
+        {
+            Assert.Equal("SLOT_UNAVAILABLE",
+                await db.ReservationRequests.Where(r => r.Id == request).Select(r => r.Code).SingleAsync());
+            Assert.False(await db.Reservations.AnyAsync(r => r.RequestId == request));
+        }
+        else
+            Assert.Equal("PENDING_PAYMENT", await db.Reservations.Where(r => r.Id == request).Select(r => r.Status).SingleAsync());
+        Assert.False(await db.SlotAllocations.AnyAsync(a => a.SiteId == site));
     }
 
     [QuoteDatabaseFact]
@@ -132,29 +141,25 @@ public sealed partial class QuoteBookingDatabaseTests
     }
 
     [QuoteDatabaseFact]
-    public Task CompetingNamedSlotHoldsHaveOneWinner() => RaceCapacityAsync(sharedSlot: true, rollBackFirst: false);
+    public Task CompetingNamedSlotHoldsHaveOneWinner() => RaceCapacityAsync(sharedSlot: true);
 
     [QuoteDatabaseFact]
-    public Task DifferentSlotsCompeteForLastCompatibleUnit() => RaceCapacityAsync(sharedSlot: false, rollBackFirst: false);
+    public Task IndependentNamedSlotHoldsBothCommit() => RaceCapacityAsync();
 
     [QuoteDatabaseFact]
-    public Task RolledBackHoldReturnsLastCompatibleUnitToWaitingWriter() => RaceCapacityAsync(sharedSlot: false, rollBackFirst: true);
+    public Task RolledBackNamedHoldLetsWaitingWriterCommit() => RaceCapacityAsync(sharedSlot: true, rollBackFirst: true);
 
     [QuoteDatabaseFact]
-    public Task StaggeredEarlyWriterCommits() => RaceCapacityAsync(false, false, staggered: true);
+    public Task CompetingSameSitePlateHoldsHaveOneWinnerAcrossSlots() => RaceCapacityAsync(sharedPlate: true);
 
     [QuoteDatabaseFact]
-    public Task StaggeredLateWriterCommitsFirst() => RaceCapacityAsync(false, false, staggered: true, lateFirst: true);
+    public Task AdjacentNamedHoldsBothCommitOnTheSameSlot() => RaceCapacityAsync(sharedSlot: true, adjacent: true);
 
     [QuoteDatabaseFact]
-    public Task StaggeredWriterRollsBack() => RaceCapacityAsync(false, true, staggered: true);
+    public Task SiteCommercialQuotaStillSerializesIndependentSlots() => RaceCapacityAsync(quota: 1);
 
-    [QuoteDatabaseFact]
-    public Task BothStaggeredWritersCanCommitWithAContinuousSpare() =>
-        RaceCapacityAsync(false, false, staggered: true, ordinarySpare: true);
-
-    private async Task RaceCapacityAsync(bool sharedSlot, bool rollBackFirst, bool staggered = false,
-        bool lateFirst = false, bool ordinarySpare = false)
+    private async Task RaceCapacityAsync(bool sharedSlot = false, bool rollBackFirst = false,
+        bool sharedPlate = false, bool adjacent = false, int quota = 2)
     {
         await using var services = Services();
         using var first = services.CreateScope();
@@ -163,22 +168,15 @@ public sealed partial class QuoteBookingDatabaseTests
         var secondDb = second.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var otherSlot = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        // Controlled supply only. Demand, advisory locks, accepted quotes, holds and outbox are real PostgreSQL rows.
-        var resources = new[] { new CapacityResource(slot, unit, [], true, false),
-            new CapacityResource(otherSlot, unit, [], true, false), new CapacityResource(Guid.NewGuid(), unit, [], true, !ordinarySpare) };
         firstDb.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
-            VehicleType = "CAR", IsActive = true, TotalPhysicalCapacity = 3, MaxReservationQuota = 3,
+            VehicleType = "CAR", IsActive = true, TotalPhysicalCapacity = 2, MaxReservationQuota = quota,
             CreatedAt = now, UpdatedAt = now });
-        if (!sharedSlot)
-            firstDb.Add(new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
-                AccountId = Guid.NewGuid(), TargetSpatialUnitId = unit, ExpectedStartTime = start,
-                ExpectedEndTime = start.AddHours(1), CreatedAt = now, Status = "CONFIRMED", VehicleType = "CAR" });
         await firstDb.SaveChangesAsync();
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = timeout.Token;
-        var attemptIds = new List<Guid>();
-        async Task<AvailabilityDecision> TryHold(IServiceProvider provider, string canonicalPlate, Guid selected)
+        async Task<(Guid RequestId, string? Rejection)> TryHold(IServiceProvider provider, string canonicalPlate, Guid selected,
+            DateTimeOffset from, DateTimeOffset until)
         {
             var db = provider.GetRequiredService<ReservationDbContext>();
             var guards = provider.GetRequiredService<IOperationsConcurrency>();
@@ -190,19 +188,21 @@ public sealed partial class QuoteBookingDatabaseTests
             var bookings = provider.GetRequiredService<IReservationBookingRepository>();
             var at = await bookings.DatabaseNowAsync(ct);
             var request = ReservationRequest.AdmitQuote(Guid.NewGuid(), account, Guid.NewGuid(), "{}", "test", at);
-            attemptIds.Add(request.Id);
-            var from = staggered && selected == otherSlot ? start.AddMinutes(30) : start;
-            var until = staggered && selected == slot ? start.AddMinutes(30) : start.AddHours(1);
             var row = ReservationRow.PrepareQuote(request.Id, account, canonicalPlate, tenant, site, selected,
                 "PAYOS", from, until, until, at, at.AddMinutes(5), 100, 0, 100, "VND",
-                "{}", Guid.NewGuid(), "q1", start, "tariff", "none", false);
-            await bookings.RequirePlateAvailableAsync(row, at, ct);
-            var facts = await availability.ReadAsync(row, at, ct);
-            static CapacityDemand Demand(ReservationRow r) => new(r.Id, r.ActiveClaimSlotId ?? r.TargetSlotId,
-                r.TargetSpatialUnitId, r.ExpectedStartTime, r.ClaimEndTime ?? r.ExpectedEndTime);
-            var decision = ReservationAvailability.Evaluate(Demand(row), facts.Reservations.Select(Demand).ToArray(),
-                [], resources, [], facts.Quotas, at, TimeSpan.Zero, hasScopedCapacityEvidence: true);
-            if (!decision.Allowed) return decision;
+                """{"Values":{"OCCUPANCY_VALIDITY_TIMESPAN":240}}""", Guid.NewGuid(), "q1", start, "tariff", "none", false);
+            // Supply the real admission handler with only the selected slot's owner evidence.
+            var snapshot = new FacilityResourceSnapshot(new(tenant, site, selected, facilityVersion, true, true),
+                [new(selected, unit, "CAR", true, true, false, [unit], ["CAR"])], [], true);
+            try
+            {
+                await bookings.RequirePlateAvailableAsync(row, at, ct);
+                await provider.GetRequiredService<IMediator>().Send(new RequireReservationAvailabilityCommand(row, snapshot, at), ct);
+            }
+            catch (ReservationGateException error)
+            {
+                return (request.Id, error.Code);
+            }
 
             request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), at, true, at);
             request.RecordPlate(true, canonicalPlate, 1, at);
@@ -214,33 +214,45 @@ public sealed partial class QuoteBookingDatabaseTests
                 request.Id, row.Id, account, tenant, site, selected, from, row.ClaimEndTime!.Value,
                 row.HoldExpiresAt!.Value, row.Status, row.Version), ct);
             await provider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(ct);
-            return decision;
+            return (request.Id, null);
         }
 
         await using var tx1 = await firstDb.Database.BeginTransactionAsync(ct);
-        Assert.True((await TryHold(first.ServiceProvider, "51A10001", lateFirst ? otherSlot : slot)).Allowed);
+        var end = start.AddHours(1);
+        var firstResult = await TryHold(first.ServiceProvider, "51A10001", slot, start, end);
+        Assert.Null(firstResult.Rejection);
         await using var tx2 = await secondDb.Database.BeginTransactionAsync(ct);
         var pid = ((NpgsqlConnection)secondDb.Database.GetDbConnection()).ProcessID;
-        var waiter = TryHold(second.ServiceProvider, "51B10002", sharedSlot || lateFirst ? slot : otherSlot);
+        var waiter = TryHold(second.ServiceProvider, sharedPlate ? "51A10001" : "51B10002", sharedSlot ? slot : otherSlot,
+            adjacent ? end : start, adjacent ? end.AddHours(1) : end);
         // Observe actual database contention before deciding the first transaction.
         while (!await firstDb.Database.SqlQuery<bool>(
             $"SELECT pg_backend_pid() = ANY(pg_blocking_pids({pid})) AS \"Value\"").SingleAsync(ct))
         {
-            Assert.False(waiter.IsCompleted, "The competing writer bypassed the site guard.");
+            Assert.False(waiter.IsCompleted, "The competing writer bypassed the plate or site guard.");
             await Task.Delay(10, ct);
         }
         if (rollBackFirst) await tx1.RollbackAsync(ct);
         else await tx1.CommitAsync(ct);
         var result = await waiter;
-        Assert.Equal(rollBackFirst || ordinarySpare, result.Allowed);
-        if (!result.Allowed) Assert.Equal(sharedSlot ? "SLOT_TIME_CONFLICT" : "CAPACITY_UNAVAILABLE", result.Rejection);
+        var expected = (rollBackFirst, adjacent, sharedPlate, sharedSlot, quota) switch
+        {
+            (true, _, _, _, _) or (_, true, _, _, _) => null,
+            (_, _, true, _, _) => "VEHICLE_TIME_CONFLICT",
+            (_, _, _, true, _) => "SLOT_TIME_CONFLICT",
+            (_, _, _, _, 1) => "RESERVATION_QUOTA_EXCEEDED",
+            _ => null
+        };
+        Assert.Equal(expected, result.Rejection);
         await tx2.CommitAsync(ct);
 
         var winners = await secondDb.Reservations.AsNoTracking().Where(r => r.SiteId == site && r.QuoteId != null).ToArrayAsync(ct);
-        if (ordinarySpare) Assert.Equal(2, winners.Length);
-        else Assert.Equal(rollBackFirst ? "51B10002" : "51A10001", Assert.Single(winners).NormalizedPlate);
+        var expectedHoldIds = new[] { (Id: firstResult.RequestId, Kept: !rollBackFirst),
+            (Id: result.RequestId, Kept: expected is null) }.Where(h => h.Kept).Select(h => h.Id).Order().ToArray();
+        Assert.Equal(expectedHoldIds, winners.Select(w => w.Id).Order().ToArray());
+        Guid?[] attemptIds = [firstResult.RequestId, result.RequestId];
         var messages = await secondDb.Set<OutboxMessage>().Where(m => m.MessageType.Contains("ReservationHoldChangedV1") &&
-            m.CorrelationId.HasValue && attemptIds.Contains(m.CorrelationId.Value)).Select(m => m.CorrelationId).ToListAsync(ct);
+            attemptIds.Contains(m.CorrelationId)).Select(m => m.CorrelationId).ToListAsync(ct);
         Assert.Equal(winners.Select(w => (Guid?)w.Id).Order().ToArray(), messages.Order().ToArray());
         Assert.False(await secondDb.SlotAllocations.AnyAsync(a => a.SiteId == site, ct));
     }

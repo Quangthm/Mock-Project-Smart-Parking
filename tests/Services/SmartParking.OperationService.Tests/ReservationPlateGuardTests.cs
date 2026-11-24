@@ -79,22 +79,27 @@ public sealed class ReservationPlateGuardTests
         var end = start.AddHours(1);
         var bufferedEnd = end.AddMinutes(5);
         var id = Guid.NewGuid();
+        var slot = Guid.NewGuid();
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO reservations (id, tenant_id, site_id, account_id, normalized_plate, status,
-                expected_start_time, expected_end_time, claim_end_time, hold_expires_at)
-            VALUES ({id}, {tenant}, {site}, {Guid.NewGuid()}, {plate}, 'PENDING_PAYMENT', {start}, {end}, {bufferedEnd}, {h})
+                expected_start_time, expected_end_time, claim_end_time, hold_expires_at, target_slot_id)
+            VALUES ({id}, {tenant}, {site}, {Guid.NewGuid()}, {plate}, 'PENDING_PAYMENT', {start}, {end}, {bufferedEnd}, {h}, {slot})
             """);
         var guards = new OperationsConcurrency(db);
         await guards.LockVehicleAsync(plate, default);
         await guards.LockSiteAsync(site, default);
-        var proposed = new ReservationRow { Id = Guid.NewGuid(), SiteId = site, NormalizedPlate = plate,
+        var proposed = new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, NormalizedPlate = plate, TargetSlotId = slot,
             ExpectedStartTime = end, ExpectedEndTime = end.AddHours(1) };
+        var availability = new ReservationAvailabilityRepository(db, guards);
         Task Check(DateTimeOffset at) => new ReservationRepository(db).RequirePlateAvailableAsync(proposed, at, default);
         Assert.Equal("VEHICLE_TIME_CONFLICT",
             (await Assert.ThrowsAsync<ReservationGateException>(() => Check(h.AddSeconds(-1)))).Code);
+        Assert.Equal(id, Assert.Single((await availability.ReadAsync(proposed, h.AddSeconds(-1), default)).Reservations).Id);
         await Check(h);
+        Assert.Empty((await availability.ReadAsync(proposed, h, default)).Reservations);
         proposed.ExpectedStartTime = bufferedEnd;
         await Check(h.AddSeconds(-1));
+        Assert.Empty((await availability.ReadAsync(proposed, h.AddSeconds(-1), default)).Reservations);
 
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE reservations SET status = 'PARKING' WHERE id = {id}");
         await Check(h);

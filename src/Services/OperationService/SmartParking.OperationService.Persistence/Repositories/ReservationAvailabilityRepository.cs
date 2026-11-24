@@ -30,28 +30,17 @@ public sealed class ReservationAvailabilityRepository(ReservationDbContext db, O
         var end = proposed.ClaimEndTime ?? proposed.ExpectedEndTime;
         var sessions = await db.ParkingSessions.AsNoTracking().Where(s => s.TenantId == proposed.TenantId &&
             s.SiteId == proposed.SiteId && s.ExitTime == null).ToArrayAsync(ct);
-        SlotAllocationRow[] allocations;
-        ReservationRow[] rows;
-        while (true)
-        {
-            allocations = await db.SlotAllocations.AsNoTracking().Where(a => a.TenantId == proposed.TenantId &&
-                a.SiteId == proposed.SiteId && a.AllocatedStartTime < end && a.AllocatedEndTime > start &&
-                (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED")).ToArrayAsync(ct);
-            var owners = allocations.Where(a => a.ReservationId.HasValue).Select(a => a.ReservationId!.Value).Distinct().ToArray();
-            rows = await ReservationRepository.EffectiveCommitments(db, proposed.SiteId, start, end, at, owners)
-                .Where(r => r.TenantId == proposed.TenantId).ToArrayAsync(ct);
-            // Only a flexible booking carries a choice across a time boundary. A fixed blocker is a leaf.
-            var flexible = rows.Where(r => r.ActiveClaimSlotId == null && r.TargetSlotId == null &&
-                r.ExpectedStartTime < end && start < (r.ClaimEndTime ?? r.ExpectedEndTime)).ToArray();
-            var lower = flexible.Select(r => r.ExpectedStartTime).Append(start).Min();
-            var upper = flexible.Select(r => r.ClaimEndTime ?? r.ExpectedEndTime).Append(end).Max();
-            if (lower == start && upper == end) break;
-            start = lower;
-            end = upper;
-        }
+        var allocations = await db.SlotAllocations.AsNoTracking().Where(a => a.TenantId == proposed.TenantId &&
+            a.SiteId == proposed.SiteId && a.AllocatedStartTime < end && a.AllocatedEndTime > start &&
+            (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED")).ToArrayAsync(ct);
+        // An effective assignment can outlast its booking. Include its owner even when the booking window has ended.
+        var owners = allocations.Where(a => a.ReservationId.HasValue).Select(a => a.ReservationId!.Value).Distinct().ToArray();
+        var rows = await ReservationRepository.EffectiveCommitments(db, proposed.SiteId, start, end, at, owners)
+            .Where(r => r.TenantId == proposed.TenantId).ToArrayAsync(ct);
         // Do not silently sum two conflicting representations of capacity.
         var quotas = await db.Set<OperationalCapacityConfig>().AsNoTracking().Where(q =>
-            q.TenantId == proposed.TenantId && q.SiteId == proposed.SiteId && q.VehicleType == proposed.VehicleType).ToArrayAsync(ct);
+            q.TenantId == proposed.TenantId && q.SiteId == proposed.SiteId && q.VehicleType == proposed.VehicleType &&
+            q.SpatialUnitId == null).ToArrayAsync(ct);
         return new(rows, sessions, allocations, quotas);
     }
 }
