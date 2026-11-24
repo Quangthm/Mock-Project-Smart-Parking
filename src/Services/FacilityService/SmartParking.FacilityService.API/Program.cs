@@ -5,6 +5,7 @@ using Npgsql;
 using SmartParking.FacilityService.API.Middleware;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.Common.Interfaces.Services;
 using SmartParking.FacilityService.Application.DTOs;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Persistence;
@@ -72,6 +73,17 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorOperationsService>();
         builder.Services.AddScoped<IOperatorGateSlotRepository, OperatorGateSlotRepository>();
         builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
+        builder.Services.AddScoped<IEmergencyRestrictionStore, PostgresEmergencyRestrictionStore>();
+        // Maintenance enforcement talks to Operations over the same authenticated internal channel
+        // as the structure commitments client; window acknowledgements are retried by the worker.
+        builder.Services.AddHttpClient<IMaintenanceEnforcementClient, MaintenanceEnforcementClient>(c =>
+        {
+            c.BaseAddress = new Uri(builder.Configuration["Services:Reservation"] ?? "http://localhost:5055/");
+            c.Timeout = TimeSpan.FromSeconds(10);
+            c.DefaultRequestHeaders.Add("X-Service-Key", key);
+        });
+        builder.Services.AddHostedService<MaintenanceEnforcementWorker>();
+        builder.Services.AddHostedService<MaintenanceBoundaryTickerWorker>();
         builder.Services.AddFacilityMessaging(builder.Configuration);
 
         // Application Layer CQRS & Pipeline Behaviors

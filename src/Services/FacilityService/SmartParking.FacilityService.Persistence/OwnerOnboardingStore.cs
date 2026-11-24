@@ -12,10 +12,10 @@ public sealed class OwnerOnboardingStore(NpgsqlDataSource source) : IOwnerOnboar
         var payload = JsonSerializer.Serialize(body);
         await using var db = await source.OpenConnectionAsync(ct);
         await using var tx = await db.BeginTransactionAsync(ct);
-        async Task<object?> Execute(string sql, params object[] values)
+        async Task<object?> Execute(string sql, params object?[] values)
         {
             await using var cmd = new NpgsqlCommand(sql, db, tx);
-            foreach (var value in values) cmd.Parameters.Add(new NpgsqlParameter { Value = value });
+            foreach (var value in values) cmd.Parameters.Add(new NpgsqlParameter { Value = value ?? DBNull.Value });
             return await cmd.ExecuteScalarAsync(ct);
         }
         // Serialize requests for this application, including the first insert.
@@ -34,9 +34,26 @@ public sealed class OwnerOnboardingStore(NpgsqlDataSource source) : IOwnerOnboar
             body.TenantId, body.Name, body.Email, body.Phone) is not true)
             throw new StructureException("STRUCTURE_CONFLICT", "Tenant provisioning conflict.");
         // Declared capacity stays in the snapshot. Physical capacity is zero until real slots exist.
-        await Execute("INSERT INTO parking_sites(id,tenant_id,site_code,name,address,total_physical_capacity,status) VALUES ($1,$2,$3,$4,$5,0,'ACTIVE')",
-            applicationId, body.TenantId, "SPK-" + applicationId.ToString("N"), body.Lot.GetProperty("name").GetString()!, body.Lot.GetProperty("address").GetString()!);
+        // lotType/modelFileName are optional: older payloads simply omit them (TryGetProperty), and
+        // the derived floor ceiling matches the create-lot command's mapping.
+        var lotType = OptionalLotString(body.Lot, "lotType");
+        var modelFileName = OptionalLotString(body.Lot, "modelFileName");
+        var maxFloors = ParkingModelFloorCeilings.Resolve(lotType, modelFileName);
+        await Execute("INSERT INTO parking_sites(id,tenant_id,site_code,name,address,total_physical_capacity,status,lot_type,model_file_name,max_floors) VALUES ($1,$2,$3,$4,$5,0,'ACTIVE',$6,$7,$8)",
+            applicationId, body.TenantId, "SPK-" + applicationId.ToString("N"), body.Lot.GetProperty("name").GetString()!, body.Lot.GetProperty("address").GetString()!,
+            lotType, modelFileName, maxFloors);
         await Execute("INSERT INTO owner_onboarding_provisions(application_id,site_id,payload) VALUES ($1,$1,$2::jsonb)", applicationId, payload);
         await tx.CommitAsync(ct);
+    }
+
+    private static string? OptionalLotString(JsonElement lot, string name)
+    {
+        if (lot.ValueKind != JsonValueKind.Object) return null;
+        if (lot.TryGetProperty(name, out var direct) && direct.ValueKind == JsonValueKind.String)
+            return direct.GetString();
+        foreach (var property in lot.EnumerateObject())
+            if (property.Value.ValueKind == JsonValueKind.String && string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                return property.Value.GetString();
+        return null;
     }
 }

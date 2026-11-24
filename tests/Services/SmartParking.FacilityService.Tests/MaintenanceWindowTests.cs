@@ -47,14 +47,16 @@ public sealed class MaintenanceWindowTests
     }
 
     [Fact]
-    public void ScopedWindowsAreRejectedAtTheBoundary()
+    public void ScopedWindowsFollowDe3Rules()
     {
-        Error("INVALID_STRUCTURE", () => MaintenanceWindowRules.ValidateCreate(
-            Guid.NewGuid(), null, "Repaving", Now.AddHours(1), Now.AddHours(2), Now));
+        // DE-3: site-wide, unit-scoped and slot-scoped windows are all valid.
+        MaintenanceWindowRules.ValidateCreate(null, null, "Repaving", Now.AddHours(1), Now.AddHours(2), Now);
+        var unit = Guid.NewGuid();
+        MaintenanceWindowRules.ValidateCreate(unit, null, "Repaving", Now.AddHours(1), Now.AddHours(2), Now);
+        MaintenanceWindowRules.ValidateCreate(unit, Guid.NewGuid(), "Repaving", Now.AddHours(1), Now.AddHours(2), Now);
+        // A slot always belongs to a unit, so a slot-scoped window without a unit is inconsistent.
         Error("INVALID_STRUCTURE", () => MaintenanceWindowRules.ValidateCreate(
             null, Guid.NewGuid(), "Repaving", Now.AddHours(1), Now.AddHours(2), Now));
-        // A site-wide window is accepted.
-        MaintenanceWindowRules.ValidateCreate(null, null, "Repaving", Now.AddHours(1), Now.AddHours(2), Now);
     }
 
     [Fact]

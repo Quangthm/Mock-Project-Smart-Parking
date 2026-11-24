@@ -43,7 +43,9 @@ public sealed class GetParkingStructureQueryHandler(
                     w.Start,
                     w.End,
                     w.Reason,
-                    w.EnforcementState
+                    w.EnforcementState,
+                    w.UnitId,
+                    w.SlotId
                 ))
             )
         );

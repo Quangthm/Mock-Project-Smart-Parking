@@ -45,8 +45,9 @@ public static class MaintenanceWindowRules
     {
         Require(start < end, "Maintenance window start must be before its end.");
         Require(start >= now, "Maintenance window cannot start in the past.");
-        // DE-3: unit/slot-scoped windows cannot be enforced today, so they must not be stored.
-        Require(unitId is null && slotId is null, "Scoped maintenance windows cannot be enforced yet; a window must cover the whole site.");
+        // DE-3: site-wide, unit-scoped and slot-scoped windows are all allowed; a slot always
+        // belongs to a unit, so a slot-scoped window without a unit is inconsistent.
+        Require(slotId is null || unitId is not null, "A slot-scoped maintenance window requires a unit.");
         Require(!string.IsNullOrWhiteSpace(reason) && reason.Trim().Length <= 2000, "Provide a reason (1-2000 characters).");
     }
 

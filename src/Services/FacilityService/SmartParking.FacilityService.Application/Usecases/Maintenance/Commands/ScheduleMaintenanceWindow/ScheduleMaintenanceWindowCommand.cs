@@ -8,4 +8,6 @@ public sealed record ScheduleMaintenanceWindowCommand(
     DateTime Start,
     DateTime End,
     string Reason,
-    Guid? TenantId = null) : IRequest<MaintenanceWindow>;
+    Guid? TenantId = null,
+    Guid? UnitId = null,
+    Guid? SlotId = null) : IRequest<MaintenanceWindow>;

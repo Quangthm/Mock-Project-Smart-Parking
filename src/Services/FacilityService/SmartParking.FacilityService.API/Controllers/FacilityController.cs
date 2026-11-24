@@ -104,7 +104,8 @@ public sealed class FacilityController(
     public async Task<IActionResult> Create(CreateSite body, CancellationToken ct)
     {
         var site = await mediator.Send(new CreateParkingLotCommand(
-            body.Code, body.Name, body.Address, body.Latitude, body.Longitude, body.TenantId), ct);
+            body.Code, body.Name, body.Address, body.Latitude, body.Longitude, body.TenantId,
+            body.LotType, body.ModelFileName, body.MaxFloors), ct);
         return Created($"/api/parking-lots/{site.Id}/structure", new { success = true, data = site });
     }
 
@@ -328,7 +329,7 @@ public sealed class FacilityController(
     public async Task<IActionResult> CreateMaintenanceWindow(Guid id, MaintenanceWindowBody body, CancellationToken ct)
     {
         var window = await mediator.Send(new ScheduleMaintenanceWindowCommand(
-            id, body.Start, body.End, body.Reason, body.TenantId), ct);
+            id, body.Start, body.End, body.Reason, body.TenantId, body.UnitId, body.SlotId), ct);
         return Created($"/api/parking-lots/{id}/maintenance-windows/{window.Id}",
             new { success = true, data = window });
     }

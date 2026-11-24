@@ -17,6 +17,7 @@ public static class FacilityMessaging
         if (!outboxEnabled)
         {
             services.AddScoped<ILayoutInvalidationPublisher, NoOpLayoutInvalidationPublisher>();
+            services.AddScoped<IFacilityCapacityRestrictionPublisher, NoOpFacilityCapacityRestrictionPublisher>();
             return services;
         }
 
@@ -33,6 +34,7 @@ public static class FacilityMessaging
             throw new InvalidOperationException("Configure RabbitMq:ConnectionString or SMARTPARK_RABBITMQ_PASSWORD when Messaging:LayoutOutboxEnabled is true.");
 
         services.AddScoped<ILayoutInvalidationPublisher, MassTransitLayoutInvalidationPublisher>();
+        services.AddScoped<IFacilityCapacityRestrictionPublisher, MassTransitFacilityCapacityRestrictionPublisher>();
         services.AddMassTransit(registration =>
         {
             registration.AddEntityFrameworkOutbox<ParkingDbContext>(outbox =>
@@ -64,6 +66,24 @@ public static class FacilityMessaging
                 bus.Message<LayoutInvalidatedV1>(message =>
                     message.SetEntityName(LayoutInvalidationResources.ExchangeName));
                 bus.Publish<LayoutInvalidatedV1>(publish =>
+                {
+                    publish.Durable = true;
+                    publish.AutoDelete = false;
+                    publish.ExchangeType = "fanout";
+                });
+
+                // Emergency restriction fanout exchanges consumed by OperationService.
+                bus.Message<FacilityCapacityRestrictedV1>(message =>
+                    message.SetEntityName(FacilityCapacityRestrictionTopology.RestrictedExchangeName));
+                bus.Publish<FacilityCapacityRestrictedV1>(publish =>
+                {
+                    publish.Durable = true;
+                    publish.AutoDelete = false;
+                    publish.ExchangeType = "fanout";
+                });
+                bus.Message<FacilityCapacityRestrictionReleasedV1>(message =>
+                    message.SetEntityName(FacilityCapacityRestrictionTopology.ReleasedExchangeName));
+                bus.Publish<FacilityCapacityRestrictionReleasedV1>(publish =>
                 {
                     publish.Durable = true;
                     publish.AutoDelete = false;

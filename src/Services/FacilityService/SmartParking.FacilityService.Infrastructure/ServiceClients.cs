@@ -66,7 +66,11 @@ public sealed class StructureCommitmentsClient(
         try
         {
             using var response = await client.PostAsJsonAsync($"internal/structure/{siteId}/snapshot", new { tenantId }, ct);
-            if (!response.IsSuccessStatusCode) throw Unavailable();
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogDownstreamFailureAsync("snapshot read", siteId, response, ct);
+                throw Unavailable();
+            }
             var snapshot = await response.Content.ReadFromJsonAsync<CommitmentSnapshot>(ct) ?? throw Unavailable();
             if (snapshot.ProtectedSlots is null) throw Unavailable();
             return snapshot;
@@ -88,7 +92,11 @@ public sealed class StructureCommitmentsClient(
                 $"internal/structure/{siteId}/{token}", new { tenantId }, cancellationToken);
             if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
                 throw new StructureException("STRUCTURE_BUSY", "Another edit has a pending hold.");
-            if (!response.IsSuccessStatusCode) throw Unavailable();
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogDownstreamFailureAsync("hold acquire", siteId, response, cancellationToken);
+                throw Unavailable();
+            }
 
             var snapshot = await response.Content.ReadFromJsonAsync<CommitmentSnapshot>(cancellationToken);
             return snapshot?.ProtectedSlots is not null ? snapshot : throw Unavailable();
@@ -111,7 +119,11 @@ public sealed class StructureCommitmentsClient(
                 new { tenantId, outcome }, cancellationToken);
             if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
                 throw new StructureException("STRUCTURE_BUSY", "Another edit has a pending hold.");
-            if (!response.IsSuccessStatusCode) throw Unavailable();
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogDownstreamFailureAsync("hold release", siteId, response, cancellationToken);
+                throw Unavailable();
+            }
         }
         catch (Exception error) when (IsTransportFailure(error, cancellationToken))
         {
@@ -129,13 +141,42 @@ public sealed class StructureCommitmentsClient(
                 $"internal/structure/{siteId}/holds?tenantId={tenantId}", cancellationToken);
             if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
                 throw new StructureException("STRUCTURE_BUSY", "Another edit has a pending hold.");
-            if (!response.IsSuccessStatusCode) throw Unavailable();
+            if (!response.IsSuccessStatusCode)
+            {
+                await LogDownstreamFailureAsync("force release", siteId, response, cancellationToken);
+                throw Unavailable();
+            }
         }
         catch (Exception error) when (IsTransportFailure(error, cancellationToken))
         {
             logger?.LogError(error, "Failed to force release structure commitments holds for SiteId {SiteId}", siteId);
             throw Unavailable();
         }
+    }
+
+    // Reads the downstream response body for diagnostics before failing closed. The body is
+    // truncated and only the operation, site, status code and truncated body are logged; request
+    // headers, service keys and tokens are never logged.
+    private async Task LogDownstreamFailureAsync(
+        string operation, Guid siteId, HttpResponseMessage response, CancellationToken ct)
+    {
+        string body;
+        try
+        {
+            body = await response.Content.ReadAsStringAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            body = "<unreadable response body>";
+        }
+        if (body.Length > 512) body = body[..512];
+        logger?.LogError(
+            "Structure commitments {Operation} for SiteId {SiteId} returned downstream status {StatusCode}. Response body: {ResponseBody}",
+            operation, siteId, (int)response.StatusCode, body);
     }
 
     private static bool IsTransportFailure(Exception error, CancellationToken cancellationToken)

@@ -822,13 +822,14 @@ public sealed class FacilityStructureEndpointTests
                 .ToArray());
 
         public Task<MaintenanceWindow> CreateAsync(
-            OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason, CancellationToken cancellationToken)
+            OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason, CancellationToken cancellationToken,
+            Guid? unitId = null, Guid? slotId = null)
         {
             if (windows.Any(window => window.CancelledAt is null && window.Start < end && start < window.End))
                 throw new StructureException("STRUCTURE_IN_USE", "Another maintenance window already covers this period.");
 
             var window = new MaintenanceWindow(
-                Guid.NewGuid(), owner.TenantId, siteId, null, null, start, end, reason,
+                Guid.NewGuid(), owner.TenantId, siteId, unitId, slotId, start, end, reason,
                 owner.UserId, DateTime.UtcNow, null, "pending", null, null);
             windows.Add(window);
             return Task.FromResult(window);

@@ -93,6 +93,30 @@ internal sealed class FacilityOutboxTransaction : IAsyncDisposable
 
     public Task CommitWithoutStagingAsync(CancellationToken ct) => CommitCoreAsync(ct);
 
+    // Stages without committing so several layout invalidations can share one transaction.
+    public async Task StageAsync(
+        ILayoutInvalidationPublisher? publisher,
+        Guid tenantId,
+        Guid siteId,
+        IReadOnlyList<string> resources,
+        CancellationToken ct)
+    {
+        if (publisher is null || _context is null) return;
+        await publisher.StageAsync(tenantId, siteId, resources, ct);
+        if (_context.ChangeTracker.HasChanges())
+            await _context.SaveChangesAsync(ct);
+    }
+
+    // Runs an arbitrary staging action (layout invalidation and/or an integration event) and
+    // persists the resulting Bus Outbox rows inside the active transaction, without committing.
+    public async Task StageActionAsync(Func<CancellationToken, Task> stage, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        await stage(ct);
+        if (_context is not null && _context.ChangeTracker.HasChanges())
+            await _context.SaveChangesAsync(ct);
+    }
+
     public async Task RollbackAsync(CancellationToken ct)
     {
         if (_completed) return;

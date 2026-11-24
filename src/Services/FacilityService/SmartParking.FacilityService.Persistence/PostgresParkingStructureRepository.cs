@@ -32,8 +32,9 @@ public sealed class PostgresParkingStructureRepository(
         }
     }
     private static SiteProfile Profile(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.GetString(4),
-        r.IsDBNull(5) ? null : r.GetDecimal(5), r.IsDBNull(6) ? null : r.GetDecimal(6), r.GetString(7) == "ACTIVE", r.GetInt32(8), r.GetString(7));
-    private const string SiteColumns = "id, tenant_id, site_code, name, address, latitude, longitude, status, total_physical_capacity";
+        r.IsDBNull(5) ? null : r.GetDecimal(5), r.IsDBNull(6) ? null : r.GetDecimal(6), r.GetString(7) == "ACTIVE", r.GetInt32(8), r.GetString(7),
+        r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10), r.IsDBNull(11) ? null : r.GetInt32(11));
+    private const string SiteColumns = "id, tenant_id, site_code, name, address, latitude, longitude, status, total_physical_capacity, lot_type, model_file_name, max_floors";
     internal static string AuditState(ParkingStructure structure) => System.Text.Json.JsonSerializer.Serialize(new { structure.Site, structure.Units, structure.Slots, structure.Paths, structure.BackupPolicies });
 
     public async Task<IReadOnlyList<SiteProfile>> ListAsync(OwnerScope owner, CancellationToken ct)
@@ -57,9 +58,9 @@ public sealed class PostgresParkingStructureRepository(
         try
         {
             await Execute(db, tx, """
-                INSERT INTO parking_sites(id, tenant_id, site_code, name, address, latitude, longitude)
-                VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::numeric)
-                """, ct, site.Id, site.TenantId, site.Code, site.Name, site.Address, site.Latitude, site.Longitude);
+                INSERT INTO parking_sites(id, tenant_id, site_code, name, address, latitude, longitude, lot_type, model_file_name, max_floors)
+                VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::numeric, $8, $9, $10)
+                """, ct, site.Id, site.TenantId, site.Code, site.Name, site.Address, site.Latitude, site.Longitude, site.LotType, site.ModelFileName, site.MaxFloors);
             await Execute(db, tx, "INSERT INTO structure_change_audit(id,site_id,actor_id,after_state) VALUES ($1,$2,$3,$4::jsonb)", ct, Guid.NewGuid(), site.Id, owner.UserId, AuditState(new ParkingStructure(site)));
             await txScope.StageAndCommitAsync(
                 layoutInvalidations,
@@ -121,7 +122,7 @@ public sealed class PostgresParkingStructureRepository(
         SiteProfile site; DateTime siteUpdatedAt;
         await using (var cmd = Command(db, tx, $"SELECT {SiteColumns}, updated_at FROM parking_sites WHERE id=$1 AND tenant_id=$2 AND deleted_at IS NULL" + (write ? " FOR UPDATE" : ""), siteId, tenantId))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
-        { if (!await r.ReadAsync(ct)) throw new StructureException("SITE_NOT_FOUND", "Parking site was not found in this tenant."); site = Profile(r); siteUpdatedAt = r.GetDateTime(9); }
+        { if (!await r.ReadAsync(ct)) throw new StructureException("SITE_NOT_FOUND", "Parking site was not found in this tenant."); site = Profile(r); siteUpdatedAt = r.GetDateTime(12); }
         // Version tokens for commit-time expectedUpdatedAt rechecks in a batch.
         var versions = new Dictionary<Guid, DateTime> { [site.Id] = siteUpdatedAt };
         var units = new List<SpatialUnit>(); var slots = new List<ParkingSlot>(); var paths = new List<AccessPath>();

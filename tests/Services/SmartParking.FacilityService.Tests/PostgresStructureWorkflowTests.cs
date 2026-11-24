@@ -803,7 +803,7 @@ public sealed class PostgresStructureWorkflowTests
                 throw new StructureException("FORBIDDEN", "Current parking management access is required.");
             (start, end) = (Utc(start), Utc(end));
             MaintenanceWindowRules.ValidateCreate(unitId, slotId, reason, start, end, DateTime.UtcNow);
-            return await store.CreateAsync(owner, siteId, start, end, reason.Trim(), ct);
+            return await store.CreateAsync(owner, siteId, start, end, reason.Trim(), ct, unitId, slotId);
         }
 
         public async Task<ServiceState> StateAsync(

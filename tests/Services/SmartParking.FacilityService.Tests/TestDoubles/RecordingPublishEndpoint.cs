@@ -6,6 +6,8 @@ namespace SmartParking.FacilityService.Tests.TestDoubles;
 internal sealed class RecordingPublishEndpoint : IPublishEndpoint
 {
     public List<LayoutInvalidatedV1> Published { get; } = [];
+    public List<FacilityCapacityRestrictedV1> Restricted { get; } = [];
+    public List<FacilityCapacityRestrictionReleasedV1> Released { get; } = [];
 
     public ConnectHandle ConnectPublishObserver(IPublishObserver observer) => throw new NotSupportedException();
 
@@ -13,6 +15,10 @@ internal sealed class RecordingPublishEndpoint : IPublishEndpoint
     {
         if (message is LayoutInvalidatedV1 evt)
             Published.Add(evt);
+        if (message is FacilityCapacityRestrictedV1 restricted)
+            Restricted.Add(restricted);
+        if (message is FacilityCapacityRestrictionReleasedV1 released)
+            Released.Add(released);
         return Task.CompletedTask;
     }
 

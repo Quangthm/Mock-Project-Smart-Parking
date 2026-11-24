@@ -9,4 +9,7 @@ public sealed record CreateParkingLotCommand(
     string Address,
     decimal? Latitude = null,
     decimal? Longitude = null,
-    Guid? TenantId = null) : IRequest<SiteProfile>;
+    Guid? TenantId = null,
+    string? LotType = null,
+    string? ModelFileName = null,
+    int? MaxFloors = null) : IRequest<SiteProfile>;

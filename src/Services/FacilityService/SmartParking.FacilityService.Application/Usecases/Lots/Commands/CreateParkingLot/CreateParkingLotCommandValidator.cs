@@ -11,5 +11,7 @@ public sealed class CreateParkingLotCommandValidator : AbstractValidator<CreateP
         RuleFor(x => x.Address).NotEmpty().MaximumLength(2000).WithMessage("Site address must be 1-2000 characters.");
         RuleFor(x => x.Latitude).InclusiveBetween(-90m, 90m).When(x => x.Latitude.HasValue);
         RuleFor(x => x.Longitude).InclusiveBetween(-180m, 180m).When(x => x.Longitude.HasValue);
+        RuleFor(x => x.MaxFloors).GreaterThanOrEqualTo(1).When(x => x.MaxFloors.HasValue)
+            .WithMessage("Max floors must be at least 1.");
     }
 }
