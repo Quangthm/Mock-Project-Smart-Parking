@@ -36,11 +36,21 @@ CREATE TABLE IF NOT EXISTS parking_sites (
     longitude DECIMAL(11,8),
     total_physical_capacity INT NOT NULL DEFAULT 0 CHECK (total_physical_capacity >= 0),
     status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('PENDING_APPROVAL', 'ACTIVE', 'INACTIVE', 'MAINTENANCE', 'SUSPENDED')),
+    lot_type TEXT NULL,
+    model_file_name TEXT NULL,
+    max_floors INT NULL CHECK (max_floors IS NULL OR max_floors >= 1),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ NULL,
     UNIQUE (tenant_id, site_code)
 );
+-- SPARK-238 site-model additive
+-- Additive columns for databases provisioned before the model-derived floor ceiling existed.
+-- Idempotent so it is safe on already-current facility-db volumes.
+ALTER TABLE parking_sites ADD COLUMN IF NOT EXISTS lot_type TEXT NULL;
+ALTER TABLE parking_sites ADD COLUMN IF NOT EXISTS model_file_name TEXT NULL;
+ALTER TABLE parking_sites ADD COLUMN IF NOT EXISTS max_floors INT NULL CHECK (max_floors IS NULL OR max_floors >= 1);
+-- END SPARK-238 site-model
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_site_code_ci ON parking_sites(tenant_id, upper(site_code)) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_parking_sites_tenant_id ON parking_sites(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_parking_sites_status ON parking_sites(status);
@@ -216,9 +226,17 @@ CREATE TABLE IF NOT EXISTS structure_maintenance_windows (
         CHECK (enforcement_state IN ('pending', 'acknowledged', 'failed')),
     enforcement_ref UUID NULL,
     acknowledged_at TIMESTAMPTZ NULL,
+    start_notified_at TIMESTAMPTZ NULL,
+    end_notified_at TIMESTAMPTZ NULL,
     CONSTRAINT ck_window_nonempty CHECK (NOT isempty(service_window)),
     CONSTRAINT ck_window_scope CHECK (slot_id IS NULL OR unit_id IS NOT NULL)
 );
+
+-- SPARK-238 maintenance-v2 additive
+ALTER TABLE structure_maintenance_windows
+    ADD COLUMN IF NOT EXISTS start_notified_at TIMESTAMPTZ NULL;
+ALTER TABLE structure_maintenance_windows
+    ADD COLUMN IF NOT EXISTS end_notified_at TIMESTAMPTZ NULL;
 
 CREATE INDEX IF NOT EXISTS idx_maintenance_windows_site_time
     ON structure_maintenance_windows USING gist (site_id, service_window);
@@ -238,6 +256,39 @@ BEGIN
     END IF;
 END
 $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ex_maintenance_windows_unit_overlap'
+          AND conrelid = 'structure_maintenance_windows'::regclass
+    ) THEN
+        ALTER TABLE structure_maintenance_windows
+            ADD CONSTRAINT ex_maintenance_windows_unit_overlap
+            EXCLUDE USING gist (site_id WITH =, unit_id WITH =, service_window WITH &&)
+            WHERE (cancelled_at IS NULL AND unit_id IS NOT NULL AND slot_id IS NULL);
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ex_maintenance_windows_slot_overlap'
+          AND conrelid = 'structure_maintenance_windows'::regclass
+    ) THEN
+        ALTER TABLE structure_maintenance_windows
+            ADD CONSTRAINT ex_maintenance_windows_slot_overlap
+            EXCLUDE USING gist (site_id WITH =, slot_id WITH =, service_window WITH &&)
+            WHERE (cancelled_at IS NULL AND slot_id IS NOT NULL);
+    END IF;
+END
+$$;
+-- END SPARK-238 maintenance-v2
 
 -- 12. CÁC BẢNG QUẢN LÝ VẬN HÀNH DÀNH CHO OPERATOR
 CREATE TABLE IF NOT EXISTS support_tickets (
@@ -316,3 +367,36 @@ CREATE TABLE IF NOT EXISTS owner_onboarding_provisions (
     payload jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 14. PHONG TỎA KHẨN CẤP (OPERATOR EMERGENCY RESTRICTION)
+-- Facility owns the immediate physical closure fact; Operations reconciles affected
+-- commitments. Vehicles already parked (physical_state = 'OCCUPIED') are never displaced.
+-- SPARK-238 emergency-restrictions additive
+CREATE TABLE IF NOT EXISTS structure_emergency_restrictions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL REFERENCES parking_sites(id) ON DELETE CASCADE,
+    mode TEXT NOT NULL DEFAULT 'EMERGENCY' CHECK (mode IN ('EMERGENCY', 'FORCED_MAINTENANCE')),
+    scope TEXT NOT NULL CHECK (scope IN ('SITE', 'UNIT', 'SLOT')),
+    unit_id UUID NULL REFERENCES spatial_units(id) ON DELETE CASCADE,
+    slot_id UUID NULL REFERENCES parking_slots(id) ON DELETE CASCADE,
+    affected_slot_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    reason TEXT NOT NULL,
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_until TIMESTAMPTZ NULL,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    released_at TIMESTAMPTZ NULL,
+    released_by UUID NULL,
+    CONSTRAINT ck_emergency_restriction_scope CHECK (
+        (scope = 'SITE' AND unit_id IS NULL AND slot_id IS NULL) OR
+        (scope = 'UNIT' AND unit_id IS NOT NULL AND slot_id IS NULL) OR
+        (scope = 'SLOT' AND unit_id IS NOT NULL AND slot_id IS NOT NULL)
+    ),
+    CONSTRAINT ck_emergency_restriction_window CHECK (effective_until IS NULL OR effective_until > effective_from)
+);
+
+CREATE INDEX IF NOT EXISTS idx_emergency_restrictions_site_active
+    ON structure_emergency_restrictions(site_id, tenant_id)
+    WHERE released_at IS NULL;
+-- END SPARK-238 emergency-restrictions

@@ -41,8 +41,8 @@ $database = @{ User='smartpark_user'; Parking='smartpark_facility'; Reservation=
 $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-db'; Payment='payment-db'; Notification='notification-db'; Iot='iot-db' }[$Service]
 $required = @{
     User = @('users','accounts','roles','vehicles')
-    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows','processed_events','slot_sequence_watermarks','occupancy_release_ledger')
-    Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts','outbox_events')
+    Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows','processed_events','slot_sequence_watermarks','occupancy_release_ledger','structure_emergency_restrictions')
+    Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts','outbox_events','structure_maintenance_closures','structure_emergency_closures','facility_event_receipts')
     Payment = @()
     Notification = @()
     Iot = @()
@@ -105,6 +105,25 @@ foreach ($feature in $features) {
     if ($LASTEXITCODE -ne 0) { throw "Feature migration failed for $Service at $feature." }
 }
 
+function Invoke-CanonicalSqlSection {
+    param(
+        [Parameter(Mandatory)][string]$ScriptRelativePath,
+        [Parameter(Mandatory)][string]$StartMarker,
+        [Parameter(Mandatory)][string]$EndMarker,
+        [Parameter(Mandatory)][string]$Label
+    )
+    $rawSql = Get-Content -LiteralPath (Join-Path $codeRoot $ScriptRelativePath) -Raw
+    $startIdx = $rawSql.IndexOf($StartMarker, [StringComparison]::Ordinal)
+    $endIdx = $rawSql.IndexOf($EndMarker, [StringComparison]::Ordinal)
+    if ($startIdx -lt 0 -or $endIdx -le $startIdx) {
+        throw "Canonical $Label SQL section is missing or invalid in $ScriptRelativePath."
+    }
+    $rawSql.Substring($startIdx, $endIdx - $startIdx) | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label upgrade failed; preserve data and reconcile before retrying."
+    }
+}
+
 # Verify required relations for both paths: after applying to an empty database,
 # and when skipping because the schema is already current.
 if ($Service -eq 'User') {
@@ -120,7 +139,14 @@ if ($Service -eq 'User') {
     Get-Content -LiteralPath (Join-Path $codeRoot 'scripts/database/test/verify-user-media-schema.sql') -Raw | & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1
     if ($LASTEXITCODE -ne 0) { throw 'User media post-upgrade verification failed.' }
 }
+if ($Service -eq 'Parking') {
+    Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/02-facility-service-db.sql' -StartMarker '-- SPARK-238 site-model additive' -EndMarker '-- END SPARK-238 site-model' -Label 'Facility site-model'
+    Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/02-facility-service-db.sql' -StartMarker '-- SPARK-238 maintenance-v2 additive' -EndMarker '-- END SPARK-238 maintenance-v2' -Label 'Facility maintenance-v2'
+    Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/02-facility-service-db.sql' -StartMarker '-- SPARK-238 emergency-restrictions additive' -EndMarker '-- END SPARK-238 emergency-restrictions' -Label 'Facility emergency-restrictions'
+}
 if ($Service -eq 'Reservation') {
+    Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/03b-reservation-operations-service-db.sql' -StartMarker '-- SPARK-393 masstransit-outbox additive' -EndMarker '-- END SPARK-393 masstransit-outbox' -Label 'Operation masstransit-outbox'
+    Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/03b-reservation-operations-service-db.sql' -StartMarker '-- SPARK-238 closures-and-receipts additive' -EndMarker '-- END SPARK-238 closures-and-receipts' -Label 'Operation closures-and-receipts'
     $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT COUNT(*) = 3 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name IN ('location_scanned_at', 'checkout_payment_order_id', 'checkout_paid_at')"
     if ($LASTEXITCODE -ne 0 -or ($columnExists -join '').Trim() -ne 't') {
         throw 'Operation schema is missing parking session scan or checkout settlement columns. Use a separately reviewed migration or an explicitly authorized clean database rebuild.'
