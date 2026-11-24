@@ -373,7 +373,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
 
     [QuoteDatabaseFact]
-    public async Task CompetingPhysicalSessionAfterExpirySendsPaidMoneyToReconciliation()
+    public async Task CompetingSameSiteReservationAfterExpirySendsPaidMoneyToReconciliation()
     {
         await using var services = Services();
         var id = await SeedTimedHold(services, true, false);
@@ -384,7 +384,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         await db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO parking_sessions (id,tenant_id,site_id,normalized_plate) VALUES ({Guid.NewGuid()},{tenant},{Guid.NewGuid()},{plate})");
+            $"INSERT INTO reservations (tenant_id,site_id,account_id,normalized_plate,status,target_slot_id,expected_start_time,expected_end_time) VALUES ({tenant},{site},{Guid.NewGuid()},{plate},'CONFIRMED',{Guid.NewGuid()},{start},{start.AddHours(1)})");
         await Send(services, new ConfirmPaidReservationCommand(id, payment.CollectionId));
         var row = await db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
         Assert.Equal("EXPIRED", row.Status);

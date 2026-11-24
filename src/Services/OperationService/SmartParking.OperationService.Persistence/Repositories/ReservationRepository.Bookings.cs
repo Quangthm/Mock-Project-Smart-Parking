@@ -16,16 +16,20 @@ public sealed partial class ReservationRepository
         if (db.Database.CurrentTransaction is null || string.IsNullOrWhiteSpace(proposed.NormalizedPlate))
             throw new InvalidOperationException("Plate acceptance requires a transaction and canonical identity.");
         var plate = proposed.NormalizedPlate;
-        var claimEnd = proposed.ClaimEndTime ?? proposed.ExpectedEndTime;
-        if (await db.ParkingSessions.AsNoTracking().AnyAsync(s => s.NormalizedPlate == plate && s.ExitTime == null &&
-            s.ReservationId != proposed.Id, ct) || await db.Reservations.AsNoTracking().AnyAsync(r =>
-            r.Id != proposed.Id && r.NormalizedPlate == plate &&
-            (r.Status == "PARKING" ||
-                r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now) ||
-                r.Status == "CONFIRMED" || r.Status == "ALLOCATED") &&
-            (r.Status == "PARKING" || r.SiteId == proposed.SiteId && r.ExpectedStartTime < claimEnd &&
-                (r.ClaimEndTime ?? r.ExpectedEndTime) > proposed.ExpectedStartTime), ct))
-            throw new ReservationGateException(409, "VEHICLE_TIME_CONFLICT", "This plate already has a conflicting booking or physical visit.");
+        if (await EffectiveCommitments(db, proposed.SiteId, proposed.ExpectedStartTime,
+            proposed.ClaimEndTime ?? proposed.ExpectedEndTime, now).AnyAsync(r =>
+                r.Id != proposed.Id && r.NormalizedPlate == plate, ct))
+            throw new ReservationGateException(409, "VEHICLE_TIME_CONFLICT", "This plate already has an overlapping reservation at this site.");
+    }
+
+    internal static IQueryable<ReservationRow> EffectiveCommitments(ReservationDbContext db, Guid siteId,
+        DateTimeOffset start, DateTimeOffset end, DateTimeOffset now, Guid[]? allocationOwners = null)
+    {
+        return db.Reservations.AsNoTracking().Where(r => r.SiteId == siteId &&
+            (r.ExpectedStartTime < end && (r.ClaimEndTime ?? r.ExpectedEndTime) > start ||
+             allocationOwners != null && allocationOwners.Contains(r.Id)) &&
+            (r.Status == "CONFIRMED" || r.Status == "ALLOCATED" || r.Status == "PARKING" ||
+             r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now)));
     }
 
     public async Task<BookingReadResult?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct)

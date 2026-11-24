@@ -8,11 +8,11 @@ namespace SmartParking.OperationService.Tests;
 
 public sealed class ReservationPlateGuardTests
 {
-    [ReservationTransportFact]
-    public async Task RacingSlotsSerializeByPlateAndSiteWhileAnOpenVisitBlocksAcrossSites()
+    [QuoteDatabaseFact]
+    public async Task SameSiteOverlapsSerializeAndPhysicalVisitsDoNotCreateReservationConflicts()
     {
         var options = new DbContextOptionsBuilder<ReservationDbContext>()
-            .UseNpgsql(Environment.GetEnvironmentVariable("SMARTPARK_SAGA_TEST_DB")).Options;
+            .UseNpgsql(Environment.GetEnvironmentVariable("SMARTPARK_QUOTE_TEST_DB")).Options;
         var site = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var otherSite = Guid.NewGuid();
@@ -51,6 +51,57 @@ public sealed class ReservationPlateGuardTests
         await using var visits = new ReservationDbContext(options);
         await visits.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO parking_sessions (id, tenant_id, site_id, normalized_plate) VALUES ({Guid.NewGuid()}, {tenant}, {site}, {plate})");
-        Assert.False(await Reserve(otherSite, end.AddDays(7)));
+        Assert.True(await Reserve(otherSite, end.AddDays(7)));
+        Assert.False(await Reserve(site, start));
+        var existing = await visits.Reservations.FirstAsync(r => r.SiteId == site && r.NormalizedPlate == plate);
+        await visits.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE parking_sessions SET reservation_id = {existing.Id} WHERE site_id = {site} AND normalized_plate = {plate}");
+        Assert.True(await Reserve(site, end.AddDays(8)));
+        Assert.False(await Reserve(site, start));
+        await visits.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE parking_sessions SET exit_time = entry_time + interval '1 minute' WHERE site_id = {site} AND normalized_plate = {plate}");
+        Assert.True(await Reserve(site, end.AddDays(9)));
+        Assert.False(await Reserve(site, start));
+    }
+
+    [QuoteDatabaseFact]
+    public async Task PlatePredicateUsesAcceptedBufferAndStopsCountingUnpaidHoldAtH()
+    {
+        var options = new DbContextOptionsBuilder<ReservationDbContext>()
+            .UseNpgsql(Environment.GetEnvironmentVariable("SMARTPARK_QUOTE_TEST_DB")).Options;
+        await using var db = new ReservationDbContext(options);
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var site = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        const string plate = "51A12345";
+        var h = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds()).AddMinutes(5);
+        var start = h.AddDays(1);
+        var end = start.AddHours(1);
+        var bufferedEnd = end.AddMinutes(5);
+        var id = Guid.NewGuid();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO reservations (id, tenant_id, site_id, account_id, normalized_plate, status,
+                expected_start_time, expected_end_time, claim_end_time, hold_expires_at)
+            VALUES ({id}, {tenant}, {site}, {Guid.NewGuid()}, {plate}, 'PENDING_PAYMENT', {start}, {end}, {bufferedEnd}, {h})
+            """);
+        var guards = new OperationsConcurrency(db);
+        await guards.LockVehicleAsync(plate, default);
+        await guards.LockSiteAsync(site, default);
+        var proposed = new ReservationRow { Id = Guid.NewGuid(), SiteId = site, NormalizedPlate = plate,
+            ExpectedStartTime = end, ExpectedEndTime = end.AddHours(1) };
+        Task Check(DateTimeOffset at) => new ReservationRepository(db).RequirePlateAvailableAsync(proposed, at, default);
+        Assert.Equal("VEHICLE_TIME_CONFLICT",
+            (await Assert.ThrowsAsync<ReservationGateException>(() => Check(h.AddSeconds(-1)))).Code);
+        await Check(h);
+        proposed.ExpectedStartTime = bufferedEnd;
+        await Check(h.AddSeconds(-1));
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE reservations SET status = 'PARKING' WHERE id = {id}");
+        await Check(h);
+        proposed.ExpectedStartTime = start;
+        Assert.Equal("VEHICLE_TIME_CONFLICT", (await Assert.ThrowsAsync<ReservationGateException>(() => Check(h))).Code);
+        proposed.SiteId = Guid.NewGuid();
+        await guards.LockSiteAsync(proposed.SiteId, default);
+        await Check(h);
     }
 }
