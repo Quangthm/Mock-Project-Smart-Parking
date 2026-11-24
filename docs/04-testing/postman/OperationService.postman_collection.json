@@ -17,13 +17,18 @@
       "type": "string"
     },
     {
+      "key": "paymentBaseUrl",
+      "value": "http://localhost:5065",
+      "type": "string"
+    },
+    {
       "key": "ownerEmail",
       "value": "owner@smartpark.local",
       "type": "string"
     },
     {
       "key": "ownerPassword",
-      "value": "Aa1!RKJ7NEyy",
+      "value": "",
       "type": "string"
     },
     {
@@ -2140,6 +2145,56 @@
         {
           "name": "2.10 A4 Enable Monthly After Financial Terms (200 OK)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure PaymentService has active financial terms matching the latest published passPlanRevision from 2.5.",
+                  "const paymentBaseUrl = pm.variables.get(\"paymentBaseUrl\");",
+                  "const siteId = pm.variables.get(\"passSiteId\");",
+                  "const planId = pm.variables.get(\"passPlanId\");",
+                  "const planRevision = Number(pm.variables.get(\"passPlanRevision\"));",
+                  "const token = pm.variables.get(\"ownerToken\");",
+                  "if (paymentBaseUrl && siteId && planId && planRevision > 0 && token) {",
+                  "    pm.sendRequest({",
+                  "        url: `${paymentBaseUrl}/api/v1/pricing/lots/${siteId}/pass-plans/${planId}/financial-terms`,",
+                  "        method: 'PUT',",
+                  "        header: {",
+                  "            'Content-Type': 'application/json',",
+                  "            'Accept': 'application/json',",
+                  "            'Authorization': `Bearer ${token}`,",
+                  "            'Idempotency-Key': pm.variables.replaceIn('{{$guid}}')",
+                  "        },",
+                  "        body: {",
+                  "            mode: 'raw',",
+                  "            raw: JSON.stringify({",
+                  "                productType: 'MONTHLY',",
+                  "                planRevision: planRevision,",
+                  "                currency: 'VND',",
+                  "                vehiclePrices: [",
+                  "                    { vehicleType: 'CAR', fullPeriodPrice: 1500000 },",
+                  "                    { vehicleType: 'MOTORCYCLE', fullPeriodPrice: 180000 }",
+                  "                ],",
+                  "                refundPolicy: {",
+                  "                    voluntaryBeforeStartPercent: 100,",
+                  "                    voluntaryInPeriodPercent: 50,",
+                  "                    facilityClosurePercent: 100,",
+                  "                    roundingMode: 'HALF_UP_THOUSAND'",
+                  "                }",
+                  "            })",
+                  "        }",
+                  "    }, function (err, res) {",
+                  "        if (err) {",
+                  "            console.error('Auto-sync financial terms failed:', err);",
+                  "        } else {",
+                  "            console.log(`Synced financial terms in PaymentService for planRevision=${planRevision} (HTTP ${res.code}).`);",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {

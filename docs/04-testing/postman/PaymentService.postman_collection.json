@@ -273,7 +273,7 @@
     },
     {
       "key": "passPlanId",
-      "value": "",
+      "value": "d1000000-0000-4000-8000-000000000001",
       "type": "string"
     },
     {
@@ -312,6 +312,11 @@
       "type": "string"
     },
     {
+      "key": "reservationServiceToken",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "passClosureId",
       "value": "c1000000-0000-4000-8000-000000000001",
       "type": "string"
@@ -328,6 +333,11 @@
     },
     {
       "key": "passClosureIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentWebhookBody",
       "value": "",
       "type": "string"
     }
@@ -3228,20 +3238,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3288,20 +3298,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3347,20 +3357,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3419,20 +3429,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3459,14 +3469,14 @@
           }
         },
         {
-          "name": "4.10 S2S Ensure Deposit Order - Regular Driver Token Forbidden S2S (Expected 403)",
+          "name": "4.10 S2S Ensure Deposit Order - Regular Driver Token Rejected S2S (Expected 401/403)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));"
+                  "pm.test('Status code is 401 or 403', () => pm.expect([401, 403]).to.include(pm.response.code));"
                 ]
               }
             }
@@ -3832,18 +3842,17 @@
           ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
-                "type": "text"
-              }
-            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/internal/reservation-deposit-orders/{{spark273OrderId}}/collections",
               "host": [
@@ -3880,20 +3889,20 @@
           ],
           "request": {
             "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3937,20 +3946,20 @@
           ],
           "request": {
             "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
