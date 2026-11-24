@@ -99,6 +99,12 @@ public sealed class PaymentPassTermsHttpAdapter(
                 throw Unavailable();
             }
 
+            var signingKey = new RsaSecurityKey(rsa.ExportParameters(true));
+            var signingCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.RsaSha256)
+            {
+                CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
+            };
+
             var now = DateTime.UtcNow;
             var token = new JwtSecurityToken(
                 Issuer,
@@ -113,7 +119,7 @@ public sealed class PaymentPassTermsHttpAdapter(
                 ],
                 now,
                 now.AddMinutes(1),
-                new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256));
+                signingCredentials);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
