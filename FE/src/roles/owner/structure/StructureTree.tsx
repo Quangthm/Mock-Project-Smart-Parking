@@ -24,6 +24,7 @@ export function StructureTree({
   slots,
   paths,
   modelUrl,
+  maxFloors = null,
   onChanged,
 }: {
   siteId: string
@@ -31,6 +32,7 @@ export function StructureTree({
   slots: Slot[]
   paths: AccessPath[]
   modelUrl: string
+  maxFloors?: number | null
   onChanged: () => void
 }) {
   const [dialog, setDialog] = useState<UnitDialogModel | null>(null)
@@ -189,6 +191,7 @@ export function StructureTree({
           siteId={siteId}
           units={units}
           modelUrl={modelUrl}
+          maxFloors={maxFloors}
           model={dialog}
           onClose={() => setDialog(null)}
           onSaved={() => {

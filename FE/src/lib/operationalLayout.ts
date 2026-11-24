@@ -98,6 +98,28 @@ export interface FloorProjection {
   maxCapacity: number
 }
 
+/**
+ * Owner-planned maintenance window carried on the operational projection.
+ * `enforcementState` is `pending` until Operations acknowledges the closure;
+ * only `acknowledged` windows override slot visuals to `MAINTENANCE`.
+ */
+export interface OperationalMaintenanceWindow {
+  id: string
+  unitId?: string | null
+  slotId?: string | null
+  start: string
+  end: string
+  reason: string
+  enforcementState: string
+}
+
+export interface OperationalServiceAvailability {
+  state: string
+  closedUntil?: string | null
+  reason?: string | null
+  activeWindows: OperationalMaintenanceWindow[]
+}
+
 export interface OperationalLayoutProjection {
   siteId: string
   siteCode: string
@@ -109,6 +131,8 @@ export interface OperationalLayoutProjection {
   metrics: LayoutMetrics
   floors: FloorProjection[]
   slots: SlotVisualStateDto[]
+  /** Absent on v1.2.0 responses from a site without any maintenance windows. */
+  serviceAvailability?: OperationalServiceAvailability | null
 }
 
 export interface OperationalLayoutEnvelope {

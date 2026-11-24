@@ -553,8 +553,8 @@ export function OperatorDashboard({
               className="btn-outline px-3 py-1.5 text-xs"
               disabled={sitesLoading}
               onClick={() => {
+                setRefreshKey((value) => value + 1)
                 if (selectedLot) void reconcileOperatorLayout(selectedLot.id, "mutation", { force: true })
-                else setRefreshKey((value) => value + 1)
               }}
             >
               Refresh sites and slots
@@ -637,12 +637,22 @@ export function OperatorDashboard({
 
           {/* TAB 6: EMERGENCY */}
           {accessRole === "operation" && tab === "emergency" && (
-            <EmergencyPanel siteId={selectedLot?.id ?? ""} />
+            <EmergencyPanel
+              siteId={selectedLot?.id ?? ""}
+              lot={selectedLot}
+              onRestrictionsChanged={() => {
+                if (selectedLot) void reconcileOperatorLayout(selectedLot.id, "mutation", { force: true })
+              }}
+            />
           )}
 
           {/* TAB 7: ASSIGNMENTS */}
           {accessRole === "operation" && tab === "assignments" && (
-            <OperatorAssignments currentLot={selectedLot} sites={ownerLots} />
+            <OperatorAssignments
+              currentLot={selectedLot}
+              sites={ownerLots}
+              onRefreshSites={() => setRefreshKey((value) => value + 1)}
+            />
           )}
 
           {/* TAB 8: FINANCIAL REPORTS */}

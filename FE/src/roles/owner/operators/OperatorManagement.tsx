@@ -76,7 +76,9 @@ export function OperatorManagement({
     setLoading(true)
     setError("")
     setMessage("")
-    Promise.all([liveOperators === undefined ? operatorsApi.list() : Promise.resolve(null), parkingApi.list()])
+    // A live list is only used for the initial paint; an explicit Refresh (reload > 0) must always
+    // re-read the roster, otherwise the button would silently do nothing.
+    Promise.all([liveOperators === undefined || reload > 0 ? operatorsApi.list() : Promise.resolve(null), parkingApi.list()])
       .then(([accounts, parkingSites]) => {
         if (!current) return
         if (accounts) setOperators(accounts)
@@ -172,7 +174,10 @@ export function OperatorManagement({
             type="button"
             className="btn-outline text-xs px-3 py-2"
             disabled={loading}
-            onClick={() => setReload((v) => v + 1)}
+            onClick={() => {
+              setReload((v) => v + 1)
+              onOperatorsChanged()
+            }}
           >
             Refresh
           </button>

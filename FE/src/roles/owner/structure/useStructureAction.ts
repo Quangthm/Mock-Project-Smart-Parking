@@ -13,25 +13,29 @@ export function useStructureAction(onChanged?: () => void) {
   const changedRef = useRef(onChanged)
   changedRef.current = onChanged
 
-  const run = useCallback(async (action: () => Promise<unknown>, success?: string) => {
-    if (busyRef.current) return false
-    busyRef.current = true
-    setBusy(true)
-    setError(null)
-    setNotice("")
-    try {
-      await action()
-      if (success) setNotice(success)
-      changedRef.current?.()
-      return true
-    } catch (cause) {
-      setError(cause)
-      return false
-    } finally {
-      busyRef.current = false
-      setBusy(false)
-    }
-  }, [])
+  const run = useCallback(
+    async (action: () => Promise<unknown>, success?: string | ((result: unknown) => string)) => {
+      if (busyRef.current) return false
+      busyRef.current = true
+      setBusy(true)
+      setError(null)
+      setNotice("")
+      try {
+        const result = await action()
+        if (typeof success === "function") setNotice(success(result))
+        else if (success) setNotice(success)
+        changedRef.current?.()
+        return true
+      } catch (cause) {
+        setError(cause)
+        return false
+      } finally {
+        busyRef.current = false
+        setBusy(false)
+      }
+    },
+    [],
+  )
 
   return {
     busy,

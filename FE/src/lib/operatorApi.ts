@@ -12,6 +12,7 @@ import { isSlotBookable } from "./operationalLayout"
 import { ALLOWED_PARKING_MODELS, inferLotType } from "./3d/parking3DConfig"
 import type {
   OperationalLayoutProjection,
+  OperationalServiceAvailability,
   PhysicalState,
   ReservationState,
 } from "./operationalLayout"
@@ -159,6 +160,8 @@ export interface OperatorSite {
   assignmentPermissions?: string[]
   operationalLayout?: OperationalLayoutProjection | null
   layout?: OperationalLayoutProjection | null
+  /** Read-only service availability projected by the backend for this site. */
+  serviceAvailability?: OperationalServiceAvailability | null
   slots: OperatorSlot[]
   units: Structure["units"]
 }
@@ -239,6 +242,37 @@ export interface OperatorAuditEvent {
   timestamp: string
 }
 
+export type EmergencyRestrictionMode = "EMERGENCY" | "FORCED_MAINTENANCE"
+
+export type EmergencyRestrictionScope = "SITE" | "UNIT" | "SLOT"
+
+export interface EmergencyRestriction {
+  id: string
+  tenantId: string
+  siteId: string
+  mode: EmergencyRestrictionMode
+  scope: EmergencyRestrictionScope
+  unitId: string | null
+  slotId: string | null
+  affectedSlotIds: string[]
+  reason: string
+  effectiveFrom: string
+  effectiveUntil: string | null
+  createdBy: string
+  createdAt: string
+  releasedAt: string | null
+  releasedBy: string | null
+}
+
+export interface CreateEmergencyRestrictionInput {
+  mode: EmergencyRestrictionMode
+  scope: EmergencyRestrictionScope
+  unitId?: string | null
+  slotId?: string | null
+  reason: string
+  effectiveUntil?: string | null
+}
+
 function siteFromStructure(structure: Structure): OperatorSite {
   const ownerModel = store.getLots().find(lot => lot.id === structure.site.id)
   const floorUnits = structure.units.filter((unit) => unit.type === "FLOOR")
@@ -304,7 +338,7 @@ function siteFromStructure(structure: Structure): OperatorSite {
  * The projection's freshness triple is carried through so the screen never has to
  * fetch a second response just to decide staleness.
  */
-function siteFromOperationalLayout(
+export function siteFromOperationalLayout(
   projection: OperationalLayoutProjection,
   tenantId: string,
 ): OperatorSite {
@@ -363,6 +397,7 @@ function siteFromOperationalLayout(
     lotType: inferredType,
     operationalLayout: projection,
     layout: projection,
+    serviceAvailability: projection.serviceAvailability ?? null,
     modelUrl: ALLOWED_PARKING_MODELS[inferredType]?.path,
     modelFileName: ALLOWED_PARKING_MODELS[inferredType]?.fileName,
     units,
@@ -861,5 +896,18 @@ export const operatorOperationsApi = {
       siteId,
       `/notifications/${encodeURIComponent(notificationId)}/read`,
       "PATCH",
+    ),
+
+  listEmergencyRestrictions: (siteId: string) =>
+    operationsRequest<EmergencyRestriction[]>(siteId, "/emergency-restrictions"),
+
+  createEmergencyRestriction: (siteId: string, body: CreateEmergencyRestrictionInput) =>
+    operationsRequest<EmergencyRestriction>(siteId, "/emergency-restrictions", "POST", body),
+
+  releaseEmergencyRestriction: (siteId: string, restrictionId: string) =>
+    operationsRequest<EmergencyRestriction>(
+      siteId,
+      `/emergency-restrictions/${encodeURIComponent(restrictionId)}`,
+      "DELETE",
     ),
 }

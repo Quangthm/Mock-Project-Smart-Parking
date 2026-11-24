@@ -17,6 +17,7 @@ import {
 } from "../../../lib/operatorRealtimeResources"
 import type { LotType, SlotStatus } from "../../../lib/types"
 import {
+  formatSlotLabel,
   isLayoutStale,
   layoutAgeSeconds,
   mapSlotVisualState,
@@ -551,6 +552,8 @@ export function useLotStatus(
     lastLayoutRef.current = null
     setFetchedLayout(null)
     setRefreshFailed(false)
+    // A zone selection is site-scoped: never carry it across a site switch.
+    setSelectedZone("all")
   }, [site?.id])
 
   useEffect(() => {
@@ -596,7 +599,7 @@ export function useLotStatus(
           lastLayoutRef.current = next
         }
       } else if (site) {
-        const snapshot = await reconcileOperatorLayout(site.id, "mutation")
+        const snapshot = await reconcileOperatorLayout(site.id, "mutation", { force: true })
         if (snapshot.lastOutcome === "error") {
           throw snapshot.lastError instanceof Error
             ? snapshot.lastError
@@ -648,6 +651,14 @@ export function useLotStatus(
         return isOutdoor || selectedFloor === "all" || floor === selectedFloor
       })
   }, [site, isOutdoor, selectedFloor])
+
+  // Keep the zone filter valid for the current site/floor: if the selected zone
+  // is no longer offered, fall back to "all" instead of showing zero slots.
+  useEffect(() => {
+    if (selectedZone === "all") return
+    if (availableZones.some((zone) => zone.id === selectedZone)) return
+    setSelectedZone("all")
+  }, [availableZones, selectedZone])
 
   const scanSlots = useCallback(async () => {
     if (!site || isScanning || Object.keys(pendingDemoAssignments).length === 0) return
@@ -866,7 +877,12 @@ export function useLotStatus(
     if (vehicleTypeFilter === "car" && isMoto) return false
     if (vehicleTypeFilter === "motorcycle" && !isMoto) return false
     if (statusFilter !== "all" && !STATUS_FILTER_PREDICATES[statusFilter]?.(slot)) return false
-    if (searchQuery.trim() && !slot.number.toLowerCase().includes(searchQuery.trim().toLowerCase())) return false
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase()
+      const rawMatch = slot.number.toLowerCase().includes(query)
+      const labelMatch = formatSlotLabel(slot.number).toLowerCase().includes(query)
+      if (!rawMatch && !labelMatch) return false
+    }
     return true
   }), [allSlots, isOutdoor, selectedFloor, selectedZone, vehicleTypeFilter, statusFilter, searchQuery, site, STATUS_FILTER_PREDICATES])
 
@@ -915,6 +931,7 @@ export function useLotStatus(
     vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
     site, allSlots, filteredSlots, counts, slotView, layout: activeLayout,
+    serviceAvailability: fetchedLayout?.serviceAvailability ?? site?.serviceAvailability ?? null,
     isStale, staleAgeSeconds, isRefreshing: refreshing, refreshFailed, refreshLayout,
     scanSlots, isScanning, lastScanAt, scanError,
   }

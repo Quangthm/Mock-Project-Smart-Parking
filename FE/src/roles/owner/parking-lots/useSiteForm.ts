@@ -14,11 +14,32 @@ export const LOT_TYPE_INFO: Record<LotType, {
   icon: string
   label: string
   hasFloors: boolean
+  maxFloors: number
   desc: string
 }> = {
-  outdoor: { icon: "leaf", label: "Outdoor Lot", hasFloors: false, desc: "Outdoor ground-level parking" },
-  basement: { icon: "parking", label: "Basement Parking", hasFloors: true, desc: "Underground parking with multiple levels" },
-  "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true, desc: "Multi-storey parking building" },
+  outdoor: { icon: "leaf", label: "Outdoor Lot", hasFloors: false, maxFloors: 1, desc: "Outdoor ground-level parking" },
+  basement: { icon: "parking", label: "Basement Parking", hasFloors: true, maxFloors: 2, desc: "Underground parking with multiple levels" },
+  "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true, maxFloors: 3, desc: "Multi-storey parking building" },
+}
+
+/**
+ * Validates a requested floor count against the lot type's structural ceiling.
+ * The ceiling is the modelled floor count when the 3D model exposes one, and the
+ * static template limit (outdoor 1, basement 2, multi-storey 3) otherwise.
+ * Returns an error message, or null when the count is valid.
+ */
+export function validateFloorCount(lotType: LotType, floors: number, modelFloors?: number): string | null {
+  if (!Number.isInteger(floors) || floors < 1) {
+    return "Enter a valid floor count."
+  }
+  if (lotType === "outdoor" && floors !== 1) {
+    return "Outdoor lots must have one floor."
+  }
+  const ceiling = modelFloors && modelFloors > 0 ? modelFloors : LOT_TYPE_INFO[lotType].maxFloors
+  if (floors > ceiling) {
+    return `This parking type supports at most ${ceiling} floor(s).`
+  }
+  return null
 }
 
 export const DEVICE_OPTIONS = [
@@ -101,6 +122,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
   const modelCapacity = useModelCarCapacity(activeModelUrl)
   const modelStructure = useModelStructure(activeModelUrl)
   const modelFloors = modelStructure.analysis?.floors ?? []
+  const maxFloors = modelFloors.length > 0 ? modelFloors.length : LOT_TYPE_INFO[lotType].maxFloors
 
   useEffect(() => {
     if (!site?.id) return
@@ -311,7 +333,18 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     }
 
     const totalSlotsNum = parseInt(form.totalSlots, 10)
-    const floorsNum = LOT_TYPE_INFO[lotType].hasFloors ? parseInt(form.floors, 10) || 1 : 1
+    const rawFloors = form.floors.trim()
+    const floorsNum = LOT_TYPE_INFO[lotType].hasFloors
+      ? (rawFloors === "" ? Number.NaN : Number(rawFloors))
+      : 1
+
+    if (LOT_TYPE_INFO[lotType].hasFloors) {
+      const floorError = validateFloorCount(lotType, floorsNum, modelFloors.length)
+      if (floorError) {
+        setError(floorError)
+        return
+      }
+    }
 
     const capacityChanged = modelChoiceChangedRef.current || form.totalSlots !== initialCapacity.current[0] ||
       form.floors !== initialCapacity.current[1]
@@ -415,6 +448,9 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
           address: finalAddress,
           latitude: form.latitude,
           longitude: form.longitude,
+          lotType,
+          modelFileName: customModelFileName ?? activeModelDef.fileName,
+          maxFloors,
         })
         if (!createdSite || typeof createdSite.id !== "string" || !createdSite.id.trim()) {
           throw new Error("The server did not return a valid site ID. Please try again.")
@@ -506,6 +542,7 @@ export function useSiteForm(site: Site | undefined, onSaved: (site: Site) => voi
     formId, hasSavedSetup: Boolean(savedLot), lotType, chooseLotType, selectedCity, district, setDistrict, ward, setWard,
     streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
     devices, setDevices, busy, updatingStatus, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
+    maxFloors, modelFloors,
     handleCityChange, handleNameChange, submit, cancel,
   }
 }
