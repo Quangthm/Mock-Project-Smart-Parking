@@ -9,6 +9,7 @@
 
 ## Manual QA and evidence
 
+- [SPARK-238 & SPARK-244 hardening QA test guide](test-plans/SPARK-238-244-hardening-qa-test-guide.md): manual QA scenarios for `SPARK-395`/`394`/`393`, 3D model `maxFloors`, maintenance lifecycle/sync, emergency closures & auto-expiry, and UI refresh actions, including explicit `BLOCKED` caveats for reservation-dependent cases awaiting `SPARK-273`.
 - [SPARK-273 reservation Postman guide](postman/SPARK-273-manual-test-guide.md): hold-terminal receipt, idempotent replay, own reservation/H, conditional real Payment checkout/status, and blocked producer/consumer scenarios.
 - [SPARK-327 JWT/JWKS Postman guide](postman/SPARK-327-JWT-JWKS-guide.md): importable collection and blank local environment, with explicit restart, MFA and expiration checkpoints.
 - [SPARK-327 completed testing and token-handoff resolution](reports/SPARK-327-postman-token-handoff-2026-11-06.md): user acceptance, v1/v2 comparison, diagnostic evidence and prevention guidance; exact original Desktop mechanism remains unproven.
