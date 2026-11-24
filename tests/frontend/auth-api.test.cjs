@@ -18,7 +18,7 @@ function fixture(respond) {
   ]);
   const calls = [], events = [];
   const context = {
-    exports: {}, AbortSignal, Event, FormData,
+    exports: {}, AbortSignal, DOMException, Event, FormData,
     require: name => {
       if (name === './store') return { store: { findUserById: () => undefined } };
       throw new Error(`Unexpected import: ${name}`);
@@ -62,6 +62,28 @@ test('a mutation prevents later reads from joining a pre-mutation snapshot', asy
   release();
   assert.equal((await first).version, 1);
   assert.equal(f.calls.length, 3);
+});
+
+test('same-path GETs with independent cancellation never share a request', async () => {
+  const releases = [];
+  const f = fixture((url, options) => new Promise((resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')));
+    releases.push(() => resolve(response(200, { success: true })));
+  }));
+  const firstController = new AbortController(), secondController = new AbortController();
+  const first = f.request('/chat', 'GET', undefined, '/api/assistant', undefined, undefined,
+    { signal: firstController.signal, expireSessionOnUnauthorized: false });
+  const second = f.request('/chat', 'GET', undefined, '/api/assistant', undefined, undefined,
+    { signal: secondController.signal, expireSessionOnUnauthorized: false });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.calls.length, 2);
+  const rejected = assert.rejects(first, error => error.name === 'AbortError');
+  firstController.abort();
+  await rejected;
+  assert.equal(f.calls[1].options.signal.aborted, false);
+  releases[1]();
+  assert.equal((await second).success, true);
+  assert.equal(f.storage.get('sp_access_token'), 'access-a');
 });
 
 test('failed shared reads are released and different query scopes do not share', async () => {

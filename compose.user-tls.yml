@@ -1,0 +1,15 @@
+# Optional UserService HTTPS listener for the existing app Docker network.
+# Selected by run-app-service.ps1 when SMARTPARK_USER_DOCKER_TLS_ENABLED=true.
+services:
+  user-service:
+    environment:
+      ASPNETCORE_URLS: http://+:8080;https://+:8443
+      Kestrel__Certificates__Default__Path: /run/user-tls/server.pfx
+      Kestrel__Certificates__Default__Password: ${SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PASSWORD:?Configure User TLS certificate password}
+    volumes:
+      - type: bind
+        source: ${SMARTPARK_USER_DOCKER_TLS_CERTIFICATE_PATH:?Configure User TLS certificate path}
+        target: /run/user-tls/server.pfx
+        read_only: true
+        bind:
+          create_host_path: false

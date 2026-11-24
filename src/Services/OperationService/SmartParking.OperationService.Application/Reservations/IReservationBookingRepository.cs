@@ -8,7 +8,7 @@ public interface IReservationBookingRepository : IReservationRepository
 {
     Task<BookingReadResult?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct);
     Task<IReadOnlyList<BookingReadResult>> ListOwnBookingsAsync(Guid accountId, int take,
-        DateTimeOffset? before, Guid? beforeId, CancellationToken ct);
+        DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null);
     Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct);
     Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct);
     Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct);

@@ -465,7 +465,9 @@ select:not([multiple]):not([size]) {
 .find-parking-detail-actions .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .find-parking-detail-actions .btn-outline { font-size: .8rem; }
 .find-parking-map { position: relative; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #dce7ef; }
-.find-parking-map-canvas { position: absolute; inset: 0; }
+/* Keep the map sized to its frame when the lazy-loaded SDK adds
+   .maplibregl-map { position: relative } after the application styles. */
+.find-parking-map > .find-parking-map-canvas { position: absolute; inset: 0; }
 .find-parking-map-style { position: absolute; z-index: 4; top: 12px; right: 12px; display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--fg); box-shadow: 0 2px 10px #0002; font-size: .73rem; font-weight: 600; }
 .find-parking-map-style select { max-width: 110px; padding: 5px 26px 5px 7px; border: 1px solid var(--border); border-radius: 5px; background-color: var(--card); color: var(--fg); font: inherit; cursor: pointer; }
 .find-parking-map .maplibregl-ctrl-top-right { top: 52px; right: 3px; }

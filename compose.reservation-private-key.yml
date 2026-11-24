@@ -1,0 +1,12 @@
+# Optional file-backed reservation identity; selected by run-app-service.ps1.
+services:
+  operation-service:
+    environment:
+      ReservationIntegration__OperationsPrivateKeyPath: /run/keys/operations-private.pem
+    volumes:
+      - type: bind
+        source: ${SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH:?Set an existing reservation private key file}
+        target: /run/keys/operations-private.pem
+        read_only: true
+        bind:
+          create_host_path: false

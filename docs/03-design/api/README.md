@@ -13,6 +13,8 @@ All new API endpoint specifications and refactors must follow the standard templ
 |---|---|---|
 | Reservation admission and first-slice contracts | [reservation-first-slice-api-design.md](reservation-first-slice-api-design.md) | Operations / UserService; finalization gated |
 | Owned avatar and vehicle images | [user-images-api-design.md](user-images-api-design.md) | UserService |
+| Assistant end-to-end S01 (v0.4.1; in review, not implemented) | [assistant-s01-end-to-end-api-design.md](assistant-s01-end-to-end-api-design.md) | IoT + domain service owners |
+| Driver Assistant FAQ (option B; in review) | [iot-assistant-p0-api-design.md](iot-assistant-p0-api-design.md) | IoTService |
 | Partner / Owner Registration & First Lot Setup | [owner-register-api-design.md](owner-register-api-design.md) | UserService |
 | Admin Review & Owner Approval | [admin-approve-owner-api-design.md](admin-approve-owner-api-design.md) | UserService |
 | Driver Registration & Verification | [driver-register-api-design.md](driver-register-api-design.md) | UserService |

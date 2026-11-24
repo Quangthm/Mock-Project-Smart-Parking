@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.API.Middleware;
+using SmartParking.PaymentService.API;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
@@ -88,6 +89,7 @@ builder.Services.AddUserJwtAuthentication(builder.Configuration, builder.Environ
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
+builder.Services.AddDiscoveryPriceReads();
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaymentOutbox(builder.Configuration));
 
@@ -102,9 +104,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseDiscoveryPriceReads();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapDiscoveryPriceReads();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

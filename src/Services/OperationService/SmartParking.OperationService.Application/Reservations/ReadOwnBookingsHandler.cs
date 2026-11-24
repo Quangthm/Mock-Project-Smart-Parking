@@ -10,7 +10,7 @@ public sealed class ReadOwnBookingsHandler(ICurrentActor actor, IReservationBook
     public async Task<IReadOnlyList<BookingView>> Handle(ReadOwnBookingsQuery query, CancellationToken ct)
     {
         var (_, account) = AdmissionActor.RequireDriver(actor);
-        var results = await bookings.ListOwnBookingsAsync(account, query.PageSize, query.Before, query.BeforeId, ct);
+        var results = await bookings.ListOwnBookingsAsync(account, query.PageSize, query.Before, query.BeforeId, ct, query.From, query.To);
         logger.LogDebug("Own reservations returned {ResultCount} bookings for page size {PageSize}.",
             results.Count, query.PageSize);
         return results.Select(BookingContracts.View).ToArray();
