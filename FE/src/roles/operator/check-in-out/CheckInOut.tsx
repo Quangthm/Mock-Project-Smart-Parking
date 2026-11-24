@@ -80,6 +80,7 @@ interface CheckInOutProps {
   mode: "check-in" | "check-out"
   lot: OperatorSite | null
   initialPlateQuery?: string
+  realtimeRevision?: number
   onDataChanged?: () => void
 }
 
@@ -87,6 +88,7 @@ export function CheckInOut({
   mode,
   lot,
   initialPlateQuery = "",
+  realtimeRevision = 0,
   onDataChanged,
 }: CheckInOutProps) {
   // Quick lookup state
@@ -144,7 +146,7 @@ export function CheckInOut({
       return
     }
     let active = true
-    setSessions([])
+    setSessions(current => current.filter(session => session.siteId === lot.id))
     setSessionsLoading(true)
     setSessionsError("")
     reservationApi
@@ -162,28 +164,32 @@ export function CheckInOut({
     return () => {
       active = false
     }
-  }, [lot?.id, historyRefresh])
+  }, [lot?.id, historyRefresh, realtimeRevision])
 
   useEffect(() => {
     if (!lot) return
+    let active = true
     const raw = localStorage.getItem("smartpark.pendingCheckout")
     if (!raw) return
     try {
       const pending = JSON.parse(raw) as { siteId?: string; transactionId?: string }
       if (pending.siteId !== lot.id || !pending.transactionId) return
       void paymentApi.status(pending.transactionId).then((status) => {
+        if (!active) return
         setPaymentMessage(
-          status.status === "SUCCESS"
-            ? "Payment was confirmed while this page was refreshed. Look up the vehicle again to open the gate."
+          status.status === "SUCCESS" && status.isAuthoritative
+            ? "Payment confirmed. Parking history has been updated."
             : "A payment is still pending. The checkout state was restored.",
         )
       }).catch(() => {
+        if (!active) return
         setPaymentMessage("A pending checkout was found. Check payOS status before retrying.")
       })
     } catch {
       localStorage.removeItem("smartpark.pendingCheckout")
     }
-  }, [lot?.id])
+    return () => { active = false }
+  }, [lot?.id, realtimeRevision])
 
   useEffect(() => {
     if (initialPlateQuery && lot) {
@@ -429,12 +435,13 @@ export function CheckInOut({
       await paymentApi.demoPay(order.orderId)
       setPaymentMessage("Demo payOS payment confirmed.")
     } else {
-      const checkout = await paymentApi.initiate(order.orderId, key)
+      const checkout = await paymentApi.initiate(order.orderId, key, lot.id)
       localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
         orderId: order.orderId, transactionId: checkout.paymentTransactionId,
         referenceId: input.referenceId, siteId: lot.id, paymentMethod: isTestPayOs ? "PAYOS" : payment,
       }))
-      window.open(checkout.checkoutUrl, "_blank", "noopener,noreferrer")
+      // Keep the Operator sessionStorage in this tab for the PayOS return navigation.
+      window.location.assign(checkout.checkoutUrl)
       setPaymentMessage("PayOS is pending. You can still choose Confirm to collect cash instead.")
       return "PENDING"
     }
@@ -552,6 +559,7 @@ export function CheckInOut({
   return (
     <div className="min-w-0 space-y-5">
       <PageHeader title={mode === "check-in" ? "Gate Check-In" : "Gate Check-Out"} description={mode === "check-in" ? `Register incoming vehicles for ${lot.name}.` : `Verify outgoing vehicles and compare their entry image for ${lot.name}.`} />
+      {!quickResult && paymentMessage && <p role="status" className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--fg)]">{paymentMessage}</p>}
 
       {/* Action Feedback Banner */}
       {actionFeedback && (

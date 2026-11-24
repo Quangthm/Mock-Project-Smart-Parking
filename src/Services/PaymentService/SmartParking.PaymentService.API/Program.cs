@@ -92,22 +92,11 @@ else
 // Admin payment integration endpoints require a real UserService RS256 token.
 // Registered for every environment; the default scheme above is unchanged.
 builder.Services.AddUserServiceJwtAuthentication(builder.Configuration);
-
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("RequireMachineOrServiceRole", policy =>
-        policy.RequireAssertion(context =>
-            context.User.IsInRole("SERVICE") ||
-            context.User.IsInRole("OPERATIONS_WORKER") ||
-            context.User.IsInRole("INTERNAL_SERVICE") ||
-            context.User.HasClaim("role", "SERVICE") ||
-            context.User.HasClaim("role", "OPERATIONS_WORKER") ||
-            context.User.HasClaim("role", "INTERNAL_SERVICE") ||
-            context.User.HasClaim("scope", "s2s")));
-});
+builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
+builder.Services.AddDiscoveryPriceReads();
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaymentOutbox(builder.Configuration));
 
@@ -122,9 +111,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseDiscoveryPriceReads();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapDiscoveryPriceReads();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

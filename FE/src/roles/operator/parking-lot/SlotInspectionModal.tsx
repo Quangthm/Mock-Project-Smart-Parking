@@ -1,5 +1,6 @@
 import type { OperatorSite, OperatorSlot } from "../../../lib/operatorApi"
 import { Modal } from "../../../components/ui/Modal"
+import { formatStatus } from "../../../lib/formatStatus"
 import {
   formatSlotLabel,
   mapSlotVisualState,
@@ -130,7 +131,7 @@ export function SlotInspectionModal({ lot, inspectedSlot, isOutdoor, onClose }: 
             </div>
             {inspectedSlot.demoSession && (
               <span className="rounded px-2 py-1 text-xs font-bold uppercase text-green-500 bg-green-500/10">
-                {inspectedSlot.demoSession.status}
+                {formatStatus(inspectedSlot.demoSession.status)}
               </span>
             )}
           </div>

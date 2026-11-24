@@ -1,0 +1,22 @@
+# Optional file-backed reservation identity; selected by run-app-service.ps1.
+services:
+  facility-service:
+    environment:
+      ReservationIntegration__OperationsPublicKeyPath: /run/keys/operations-public.pem
+    volumes:
+      - type: bind
+        source: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH:?Set an existing reservation public key file}
+        target: /run/keys/operations-public.pem
+        read_only: true
+        bind:
+          create_host_path: false
+  payment-service:
+    environment:
+      ReservationIntegration__OperationsPublicKeyPath: /run/keys/operations-public.pem
+    volumes:
+      - type: bind
+        source: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH:?Set an existing reservation public key file}
+        target: /run/keys/operations-public.pem
+        read_only: true
+        bind:
+          create_host_path: false

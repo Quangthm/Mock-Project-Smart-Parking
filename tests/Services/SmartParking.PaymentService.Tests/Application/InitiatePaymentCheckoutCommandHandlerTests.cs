@@ -29,6 +29,23 @@ public class InitiatePaymentCheckoutCommandHandlerTests
         );
     }
 
+    [Theory]
+    [InlineData("http://localhost:5173/operator/operation?checkoutReturn=payos")]
+    [InlineData("https://parking.example/operator/cashier?checkoutReturn=payos")]
+    public async Task Handle_ForwardsProvidedReturnUrlsToGateway(string returnUrl)
+    {
+        var orderId = Guid.NewGuid();
+        var cancelUrl = returnUrl + "&cancelled=1";
+        _orderRepo.Orders.Add(new PaymentOrder {
+            Id = orderId, OrderCode = "202611160001", FinalAmount = 2000,
+            Status = PaymentOrderStatus.PENDING, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15)
+        });
+        await CreateHandler().Handle(new InitiatePaymentCheckoutCommand(orderId, "return-url-test",
+            ReturnUrl: returnUrl, CancelUrl: cancelUrl), CancellationToken.None);
+        Assert.Equal(returnUrl, _gatewayPort.LastInitiateRequest!.ReturnUrl);
+        Assert.Equal(cancelUrl, _gatewayPort.LastInitiateRequest.CancelUrl);
+    }
+
     [Fact]
     public async Task Handle_DifferentAccount_ThrowsForbiddenPaymentDomainException()
     {

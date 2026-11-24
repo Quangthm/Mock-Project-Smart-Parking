@@ -1207,7 +1207,7 @@ export function Parking3DViewer({
           style={{ left: hoveredMesh.screenX, top: hoveredMesh.screenY }}
         >
           <div className="font-bold flex items-center gap-1.5">
-            <span>{hoveredMesh.name}</span>
+            <span>{formatSlotLabel(hoveredMesh.name)}</span>
             <span className="w-2 h-2 rounded-full bg-slate-400" />
           </div>
           <div className="text-[10px] text-slate-300">

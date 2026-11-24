@@ -3,7 +3,7 @@ using SmartParking.OperationService.Application.Common.Interfaces.Services;
 
 namespace SmartParking.OperationService.Application.Usecase.Checkout;
 
-public sealed record InitiateCheckoutCommand(Guid OrderId, string IdempotencyKey)
+public sealed record InitiateCheckoutCommand(Guid OrderId, string IdempotencyKey, string? ReturnUrl = null, string? CancelUrl = null)
     : IRequest<CheckoutPaymentCheckout>;
 
 public sealed record ConfirmCashCheckoutCommand(Guid OrderId, string IdempotencyKey)
@@ -19,7 +19,7 @@ public sealed class InitiateCheckoutCommandHandler(ICheckoutPaymentClient paymen
     : IRequestHandler<InitiateCheckoutCommand, CheckoutPaymentCheckout>
 {
     public Task<CheckoutPaymentCheckout> Handle(InitiateCheckoutCommand request, CancellationToken ct) =>
-        payment.InitiateAsync(request.OrderId, request.IdempotencyKey, ct);
+        payment.InitiateAsync(request.OrderId, request.IdempotencyKey, ct, request.ReturnUrl, request.CancelUrl);
 }
 
 public sealed class ConfirmCashCheckoutCommandHandler(ICheckoutPaymentClient payment)

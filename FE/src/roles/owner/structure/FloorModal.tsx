@@ -196,7 +196,7 @@ export function FloorModal({
               }}
             >
               Floor Code (Short Identifier){" "}
-              <span style={{ color: "var(--occupied)" }}>*</span>
+              <span className="required-mark">*</span>
             </label>
             <input
               className="input"
@@ -227,7 +227,7 @@ export function FloorModal({
               }}
             >
               Floor Display Name{" "}
-              <span style={{ color: "var(--occupied)" }}>*</span>
+              <span className="required-mark">*</span>
             </label>
             <input
               className="input"

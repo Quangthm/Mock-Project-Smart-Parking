@@ -3,11 +3,17 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using SmartParking.OperationService.Persistence.Entities;
 
 namespace SmartParking.OperationService.Persistence.Repositories;
 
 public sealed class OccupancyOutboxStore(ReservationDbContext db) : IOccupancyOutboxStore
 {
+    public void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt) => db.OutboxEvents.Add(new OutboxEventRow {
+        EventId = Guid.NewGuid(), EventType = "SnapshotRequired", SiteId = siteId,
+        OccurredAt = occurredAt, SequenceNumber = 0, Payload = "{}"
+    });
+
     // One atomic statement: select + lease in the same transaction, so the row locks are
     // released as soon as this statement finishes. Callers must not wrap network I/O in it.
     private const string ClaimSql = """

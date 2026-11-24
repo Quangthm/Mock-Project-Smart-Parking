@@ -20,9 +20,11 @@ import { formatStatus } from "../../../lib/formatStatus"
 export function OperatorManagement({
   selectedSiteId,
   onOperatorsChanged,
+  liveOperators,
 }: {
   selectedSiteId: string
   onOperatorsChanged: () => void
+  liveOperators?: Operator[]
 }) {
   const { user } = useApp()
   const { confirm, confirmation } = useConfirmation()
@@ -36,7 +38,18 @@ export function OperatorManagement({
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSite, setFilterSite] = useState(selectedSiteId)
   const [inviting, setInviting] = useState<string | null>(null)
-  useEffect(() => watchOperators(() => setReload(value => value + 1)), [user?.id])
+  useEffect(() => {
+    if (liveOperators !== undefined) { setOperators(liveOperators); return }
+    let active = true
+    const stop = watchOperators(() => {
+      void operatorsApi.list().then(accounts => {
+        if (active) setOperators(accounts)
+      }).catch(err => {
+        if (active) setError(err instanceof Error ? err.message : "Cannot refresh operators.")
+      })
+    })
+    return () => { active = false; stop() }
+  }, [user?.id, liveOperators])
 
   async function resendInvitation(id: string) {
     setInviting(id)
@@ -63,10 +76,10 @@ export function OperatorManagement({
     setLoading(true)
     setError("")
     setMessage("")
-    Promise.all([operatorsApi.list(), parkingApi.list()])
+    Promise.all([liveOperators === undefined ? operatorsApi.list() : Promise.resolve(null), parkingApi.list()])
       .then(([accounts, parkingSites]) => {
         if (!current) return
-        setOperators(accounts)
+        if (accounts) setOperators(accounts)
         setSites(
           parkingSites.filter(
             (site) => site.isActive && site.status === "ACTIVE",

@@ -1,0 +1,283 @@
+# SPARK-273 — Reservation / PaymentService Integration Handoff
+
+## 1. Repository and branches
+
+Repository:
+https://github.com/Quangthm/Mock-Project-Smart-Parking
+
+**Original integration branch:**
+`feature/SPARK-273-driver-book-parking-ahead-of-arrival`
+
+Baseline commit:
+`e2f8303d08fa`
+
+**Interrupted fixes branch:**
+`wip/SPARK-273-payment-integration-fixes`
+
+The WIP branch preserves partially completed corrections. It has not been fully reviewed, built or runtime tested.
+
+**Do not merge the WIP branch directly into develop.**
+
+Follow `ai/AGENTS.md`, `ai/rule.md`, the latest `SmartPark-Coding-Skill-v1.0.md` and applicable service architecture conventions.
+
+## 2. Intended final implementation
+
+The objective is to complete the positive-deposit reservation workflow while minimizing changes to PaymentService.
+
+### Step A — Review commercial terms
+
+Driver calls Operations:
+
+- `POST /api/reservation-price-previews`
+- `POST /api/reservation-terms`
+
+Operations uses `ReservationCommercialClient` to call PaymentService:
+
+- `POST /api/v1/pricing/reservations/preview`
+- `POST /api/v1/pricing/reservations/quote`
+
+PaymentService owns pricing, tariff selection, deposit amount and quote issuance.
+
+Operations stores the reviewed commercial terms and corresponding operational policies.
+
+### Step B — Create a reservation hold
+
+Driver calls:
+
+`POST /api/reservation-requests`
+
+with a stable `Idempotency-Key` and accepted terms.
+
+Operations performs authorization, Vehicle and Facility checks, capacity/plate validation and guarded reservation creation.
+
+Expected result:
+
+- Reservation state: `PENDING_PAYMENT`
+- Creation receipt: `HOLD_CREATED`
+- Committed capacity claim
+- Authoritative hold expiry H
+- Published `ReservationHoldChangedV1`
+
+The creation receipt terminates after the committed hold. It does not wait for payment confirmation.
+
+### Step C — Create the Payment order
+
+Operations' hold consumer dispatches `ProvisionReservationOrderCommand`.
+
+The commercial adapter calls:
+
+`PUT /internal/reservation-deposit-orders/{operationId}`
+
+PaymentService must create or replay a single real deposit order, preserving:
+
+- Stable OperationId and ReservationId
+- AccountId, TenantId and SiteId
+- Immutable accepted Payment quote identity/version
+- Deposit amount and currency
+- Exact Operations hold expiry H
+- Idempotent order identity
+
+Operations stores the returned authoritative `PaymentOrderId`.
+
+The reservation remains `PENDING_PAYMENT`.
+
+### Step D — Driver payment
+
+Driver uses the real Payment order through:
+
+`POST /api/v1/payments/orders/{orderId}/checkout`
+
+PaymentService creates the payOS checkout.
+
+Verified payOS settlement reaches PaymentService through its existing callback/webhook implementation.
+
+PaymentService persists the successful transaction and publishes its existing:
+
+`PaymentSucceededV1`
+
+Exchange:
+
+`smartpark.payment.payment-succeeded.v1`
+
+Do not implement a new reservation-specific Payment event.
+
+### Step E — Confirm the reservation
+
+Operations receives `PaymentSucceededV1` through:
+
+`smartpark-operation-reservation-payment-succeeded-v1`
+
+`ReservationPaymentSucceededConsumer` accepts only events with `ReferenceType=RESERVATION`.
+
+The existing parking-session consumer remains responsible for `PARKING_SESSION` events.
+
+Operations validates:
+
+- ReservationId and PaymentOrderId
+- PaymentTransactionId as collection identity
+- AccountId, TenantId and SiteId
+- Accepted amount and currency
+- Previously persisted reservation/order binding
+- Duplicate or contradictory evidence
+
+Then Operations dispatches its existing guarded paid-confirmation workflow.
+
+Confirmation must preserve:
+
+- Facility confirmation dependency
+- Capacity and plate guards
+- Authoritative database evaluation timestamp
+- Strict `evaluatedAt < T` eligibility
+- Idempotent transition and outbox effects
+
+Expected successful outcome:
+
+`PENDING_PAYMENT → CONFIRMED`
+
+A successful Payment event is not by itself proof of a confirmed reservation.
+
+Driver reads the authoritative result through:
+
+`GET /api/me/reservations/{reservationId}`
+
+## 3. Work already implemented in the baseline
+
+The original integration commit includes:
+
+- Operations commercial HTTP client.
+- PaymentService preview, quote and order API mappings.
+- Generic `PaymentSucceededV1` reservation consumer.
+- Separate parking-session and reservation event routing.
+- Existing guarded paid-confirmation workflow.
+- Minimal Payment quote validation adjustments.
+- Initial documentation and Postman integration instructions.
+
+This baseline has not passed live end-to-end verification.
+
+## 4. Interrupted corrections in the WIP branch
+
+The AI agent was fixing the following review findings:
+
+**P0 — Payment HTTP response deserialization**
+
+Correct the double-envelope generic deserialization in `ReservationCommercialClient.cs`.
+
+Payment responses have `{ success, data }`; the adapter must deserialize one envelope only.
+
+**P1 — Operations → Payment machine authentication**
+
+Implement trusted Operations machine credentials for internal Payment APIs without depending on a forwarded Driver token or Development-only header authentication.
+
+Check Payment authentication registration, token audience, signature, issuer, service permission, Compose and configuration.
+
+**P1 — Immutable Payment order/quote binding**
+
+Update the existing PaymentOrder entity and EF mapping with the minimum necessary quote identity/version.
+
+Ensure the Payment `EnsureReservationDepositOrderCommandHandler` rejects contradictory idempotent replays and returns the genuinely persisted accepted binding.
+
+The interrupted implementation introduced a `PersistedAcceptedRequest()` helper. Review it carefully: some response fields may still be taken from the caller's latest request rather than durable order data.
+
+Review accompanying SQL declarations and schema compatibility. Do not apply database migrations or resets without explicit approval.
+
+**P2 — Focused regression tests**
+
+The WIP includes new/modified tests for the commercial adapter, Payment authentication and order provisioning.
+
+Verify that they compile and test the real integration contracts. Tests were not executed by the agent.
+
+**P2 — Deprecated external event wiring**
+
+The approved active integration uses `PaymentSucceededV1`.
+
+Remove obsolete `ReservationDepositCollectedV1` external consumer registration and topology where safe. Preserve the internal normalized evidence and guarded confirmation workflow.
+
+## 5. Exact important files
+
+Operations:
+
+- `Infrastructure/Reservations/ReservationCommercialClient.cs`
+- `Infrastructure/Reservations/ReservationMessaging.cs`
+- `Infrastructure/Messaging/PaymentSucceededConsumer.cs`
+- `Application/Reservations/BookingContracts.cs`
+- `Application/Reservations/BookingReviewHandlers.cs`
+- `Application/Reservations/ReservationConfirmationHandlers.cs`
+- `Infrastructure/InfrastructureDependencyInjection.cs`
+
+PaymentService:
+
+- `API/Program.cs`
+- `API/Authentication/`
+- `API/Controllers/InternalReservationOrdersController.cs`
+- `Application/Usecase/Reservations/Commands/EnsureReservationDepositOrder/EnsureReservationDepositOrderCommandHandler.cs`
+- `Domain/Entities/PaymentOrder.cs`
+- `Persistence/Configurations/PaymentOrderConfiguration.cs`
+
+Configuration and tests:
+
+- `compose.app.yml`
+- `.env.example`
+- `scripts/database/microservices/04-payment-pricing-service-db.sql`
+- `tests/Services/SmartParking.OperationService.Tests/ReservationCommercialClientTests.cs`
+- `tests/Services/SmartParking.PaymentService.Tests/Application/EnsureReservationDepositOrderCommandHandlerTests.cs`
+- `tests/Services/SmartParking.PaymentService.Tests/Authentication/`
+
+Consult the repository's existing implementation-alignment handoff and deployment checklist for the previous decisions.
+
+## 6. Explicitly deferred tasks
+
+These are **not required to finish the first positive-deposit reservation happy path**, and must not be introduced without separate approval.
+
+**BACKLOG A — Durable hold-expiry scheduling**
+
+Replace periodic expiry discovery with an approved durable deadline mechanism at H.
+
+**BACKLOG B — Fully event-driven confirmation continuation/recovery**
+
+Provide durable continuation/restart recovery for paid and genuine zero-price confirmation when services or workers are interrupted.
+
+**BACKLOG C — Remove legacy reservation worker**
+
+Remove `ReservationOrderProvisioningWorker` and obsolete `Due*Async` queries only after A and B are implemented.
+
+**BACKLOG D — Financial reconciliation and confirmation-declined outcomes**
+
+Implement reliable Operations-to-Payment confirmation/decline outcome delivery and idempotent reconciliation/refund processing.
+
+**BACKLOG E — Genuine zero-price reservation integration**
+
+Implement trusted Payment/coverage-owner acceptance for actual zero-price bookings without manufacturing payment orders.
+
+**BACKLOG F — Late/additional collection handling**
+
+Complete collection lookup, additional/late-payment financial handling and recovery. The current Payment lookup lacks full accepted quote/terms binding.
+
+**BACKLOG G — Messaging reliability hardening**
+
+Review EF Inbox, redelivery deduplication, broker ACLs and agreed event-contract ownership for production reliability.
+
+Do not claim these backlog items are complete.
+
+## 7. Teammate responsibilities and acceptance
+
+The immediate goal is to finish the interrupted P0/P1/P2 integration corrections, not refactor the reservation architecture.
+
+Preserve PaymentService ownership of pricing and money and Operations ownership of reservation entitlement and capacity.
+
+Before considering the implementation complete:
+
+- Review every interrupted file for partial edits or syntax errors.
+- Confirm the solution builds.
+- Confirm the commercial adapter matches real Payment API envelopes.
+- Confirm one immutable order/quote binding across idempotent replays.
+- Confirm the actual `PaymentSucceededV1` event route.
+- Confirm existing guards and pre-T confirmation semantics remain intact.
+- Update relevant documentation, Postman and the deferred backlog.
+
+**Runtime verification is still outstanding.**
+
+Do not claim end-to-end success based only on source review or build results.
+
+I will coordinate manual integration and Postman testing separately.
+
+The desired endpoint of this work is a real, successfully paid, positive-deposit reservation becoming `CONFIRMED` through Operations' existing guarded handler, without introducing new Payment events or speculative recovery infrastructure.

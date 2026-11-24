@@ -3,12 +3,33 @@
     [ValidateSet('Local','Team')][string]$CredentialMode = 'Local',
     [string]$TeamEnvPath, [switch]$SkipSonarQube, [switch]$NonInteractive,
     [switch]$WithAiCamera, [switch]$RebuildAi,
+    [switch]$AssistantCheck, [string]$AssistantEnvPath, [switch]$WithAssistant,
     # Deprecated: SonarQube now starts by default; kept so older commands still parse.
     [switch]$WithSonarQube
 )
 # -RecreateDb: DROP schema volumes and re-initialize all 6 DBs from SQL init scripts. Destructive — wipes dev data. Required when DB schema layout changes (e.g., SRS v1.0 hybrid migration).
 $ErrorActionPreference = 'Stop'
+# Read-only Assistant inspection must return before credential generation, secrets
+# synchronization, Docker, restore or any database operation in normal setup.
+if ($AssistantCheck) {
+    if ($RecreateDb -or $WithAiCamera -or $RebuildAi -or $WithSonarQube -or $WithAssistant -or $TeamEnvPath -or $CredentialMode -ne 'Local') {
+        throw '-AssistantCheck cannot be combined with provisioning options.'
+    }
+    if (!$AssistantEnvPath) { $AssistantEnvPath = Join-Path $PSScriptRoot '.env' }
+    & (Join-Path $PSScriptRoot 'scripts/check-assistant-setup.ps1') -EnvPath $AssistantEnvPath
+    return
+}
+if ($AssistantEnvPath) { throw '-AssistantEnvPath requires -AssistantCheck.' }
 if ($RebuildAi -and !$WithAiCamera) { throw '-RebuildAi requires -WithAiCamera.' }
+$envFile = Join-Path $PSScriptRoot '.env'
+if (!$WithAssistant -and !$SkipDatabase -and !$RecreateDb -and (Test-Path -LiteralPath $envFile -PathType Leaf)) {
+    $localSettings = & (Join-Path $PSScriptRoot 'scripts/load-env.ps1') -EnvPath $envFile -NoExport
+    $WithAssistant = $localSettings['SMARTPARK_ASSISTANT_DOCKER_ENABLED'] -ceq 'true'
+}
+if ($WithAssistant) {
+    if ($SkipDatabase -or $RecreateDb) { throw '-WithAssistant cannot be combined with -SkipDatabase or -RecreateDb.' }
+    & (Join-Path $PSScriptRoot 'scripts/setup-assistant-docker.ps1') -EnvPath $envFile -ValidateOnly
+}
 # SonarQube credentials are always prepared (like the database passwords); the
 # stack starts on a full run. -SkipSonarQube disables both; -SkipDatabase still
 # prepares credentials but starts no containers (it must stay Docker-free).
@@ -19,7 +40,6 @@ $taskRoot = $PSScriptRoot
 # Clear inherited aliases before invoking any helper processes.
 Clear-JwtSigningEnvironment
 $composeFile = Join-Path $taskRoot 'compose.schema-integration.yml'
-$envFile = Join-Path $taskRoot '.env'
 $aiModelRoot = 'src/Services/IoTService/python-ai/models'
 $aiModelFiles = @(
     'EDSR_x2.pb', 'ESPCN_x2.pb', 'FSRCNN_x2.pb',
@@ -485,7 +505,7 @@ if (!(Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'Install .NET S
 $sdk = & dotnet --version
 if ($LASTEXITCODE -ne 0 -or $sdk -notmatch '^10\.') { throw 'Setup requires .NET SDK 10.' }
 $envExists = Test-Path -LiteralPath $envFile -PathType Leaf
-if ($envExists -and -not $NonInteractive -and -not [Console]::IsInputRedirected) {
+if ($envExists -and -not $WithAssistant -and -not $NonInteractive -and -not [Console]::IsInputRedirected) {
     Write-Host "  .env already exists: $envFile" -ForegroundColor Yellow
     $answer = Read-Host '  [O]verwrite / [K]eep / [A]bort (Enter = Keep)'
     if ($answer -match '^\s*[Aa]') { Write-Host 'Aborted by user.' -ForegroundColor Red; exit 1 }
@@ -717,6 +737,9 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
             $sourceName = if ($field -eq 'PrivateKeyPem') { 'SMARTPARK_JWT_PRIVATE_KEY_PEM' } else { 'SMARTPARK_JWT_PRIVATE_KEY_PEM_BASE64' }
             if (Test-JwtConfiguredValue $settings[$sourceName]) { $desired['Jwt:' + $field] = $settings[$sourceName] }
         }
+        if ($settings['SMARTPARK_JWT_PRIVATE_KEY_FILE']) {
+            $desired['Jwt:PrivateKeyPem'] = Read-JwtPrivateKeyFile $settings['SMARTPARK_JWT_PRIVATE_KEY_FILE'] $taskRoot
+        }
         $desired['DevelopmentAdmin:Email'] = $settings['SMARTPARK_ADMIN_EMAIL']
         $desired['DevelopmentAdmin:Password'] = $settings['SMARTPARK_ADMIN_PASSWORD']
         $desired['DevelopmentOwner:Email'] = $settings['SMARTPARK_OWNER_EMAIL']
@@ -770,7 +793,7 @@ if (!$SkipUserSecrets) { foreach ($service in @('User','Parking','Reservation','
             $desired['SMARTPARK_RABBITMQ_VHOST'] = $settings['SMARTPARK_RABBITMQ_VHOST']
         }
     }
-    if ($service -in @('Parking', 'Reservation')) {
+    if ($service -in @('Parking', 'Payment', 'Reservation')) {
         $desired['ReservationIntegration:Enabled'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ENABLED']) { $settings['SMARTPARK_RESERVATION_FACILITY_ENABLED'] } else { 'false' }
         if ($service -eq 'Reservation') {
             $desired['ReservationIntegration:AllowHttp'] = if ($settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP']) { $settings['SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP'] } else { 'false' }
@@ -836,7 +859,7 @@ if ($settings['VITE_MAPTILER_API_KEY']) {
 $frontendDefaults = [ordered]@{
     'VITE_AI_API_BASE_URL'      = 'http://localhost:5001'
     'VITE_AI_LIVE_API_BASE_URL' = 'http://localhost:5002'
-    'VITE_PAYMENT_API_BASE_URL'      = 'http://localhost:5065'
+    'VITE_PAYMENT_API_BASE_URL' = 'http://localhost:5065'
     'VITE_NOTIFICATION_API_BASE_URL' = 'http://localhost:5068'
 }
 if ($settings['VITE_AI_API_BASE_URL']) { $frontendDefaults['VITE_AI_API_BASE_URL'] = $settings['VITE_AI_API_BASE_URL'] }
@@ -882,7 +905,10 @@ if (!$SkipRestore) {
     & dotnet restore (Join-Path $taskRoot 'SmartParking.slnx') --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Dependency restore failed.' }
 }
-$setupDone = 'Setup complete. Run scripts/run-schema-service.ps1 in separate terminals for User, Facility, Operation, Payment and Notification.'
+if ($WithAssistant) {
+    & (Join-Path $taskRoot 'scripts/setup-assistant-docker.ps1') -EnvPath $envFile
+}
+$setupDone = 'Setup complete. For Docker, run scripts/run-app-service.ps1 -Service All. For host development, use scripts/run-schema-service.ps1.'
 if ($sonarEnabled -and !$SkipDatabase) { $setupDone += " SonarQube UI: http://localhost:$($settings['SONAR_PORT']) (first login admin/admin)." }
 if ($WithAiCamera -and !$script:AiCameraSkipped) { $setupDone += " AI REST: http://localhost:5001 · Live: http://localhost:5002." }
 Write-Host $setupDone -ForegroundColor Green

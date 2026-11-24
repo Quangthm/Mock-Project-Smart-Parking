@@ -215,7 +215,7 @@ export function ZoneModal({
               }}
             >
               Zone / Area Name{" "}
-              <span style={{ color: "var(--occupied)" }}>*</span>
+              <span className="required-mark">*</span>
             </label>
             <input
               className="input"
