@@ -15,6 +15,9 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<StructureEditHoldRow> StructureEditHolds => Set<StructureEditHoldRow>();
     public DbSet<StructureSiteStateRow> StructureSiteStates => Set<StructureSiteStateRow>();
     public DbSet<StructureReleaseReceiptRow> StructureReleaseReceipts => Set<StructureReleaseReceiptRow>();
+    public DbSet<StructureMaintenanceClosureRow> StructureMaintenanceClosures => Set<StructureMaintenanceClosureRow>();
+    public DbSet<StructureEmergencyClosureRow> StructureEmergencyClosures => Set<StructureEmergencyClosureRow>();
+    public DbSet<FacilityEventReceiptRow> FacilityEventReceipts => Set<FacilityEventReceiptRow>();
     public DbSet<ReservationRequest> ReservationRequests => Set<ReservationRequest>();
     public DbSet<OperationalPolicyDraftRow> OperationalPolicyDrafts => Set<OperationalPolicyDraftRow>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
@@ -54,6 +57,16 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<StructureEditHoldRow>(modelBuilder, "structure_edit_holds");
         Map<StructureSiteStateRow>(modelBuilder, "structure_site_state");
         Map<StructureReleaseReceiptRow>(modelBuilder, "structure_release_receipts");
+        Map<StructureMaintenanceClosureRow>(modelBuilder, "structure_maintenance_closures");
+        modelBuilder.Entity<StructureMaintenanceClosureRow>().HasKey(x => x.WindowId);
+        modelBuilder.Entity<StructureMaintenanceClosureRow>().Property(x => x.ScopedUnitIds).HasColumnType("jsonb");
+        modelBuilder.Entity<StructureMaintenanceClosureRow>().Property(x => x.ScopedSlotIds).HasColumnType("jsonb");
+        Map<StructureEmergencyClosureRow>(modelBuilder, "structure_emergency_closures");
+        modelBuilder.Entity<StructureEmergencyClosureRow>().HasKey(x => x.RestrictionId);
+        modelBuilder.Entity<StructureEmergencyClosureRow>().Property(x => x.AffectedSlotIds).HasColumnType("jsonb");
+        Map<FacilityEventReceiptRow>(modelBuilder, "facility_event_receipts");
+        modelBuilder.Entity<FacilityEventReceiptRow>().HasKey(x => x.EventId);
+        modelBuilder.Entity<FacilityEventReceiptRow>().Property(x => x.EventType).HasMaxLength(120);
         Map<OutboxEventRow>(modelBuilder, "outbox_events");
         modelBuilder.Entity<StructureEditHoldRow>().HasKey(x => x.SiteId);
         modelBuilder.Entity<StructureEditHoldRow>().HasIndex(x => x.Token).IsUnique();

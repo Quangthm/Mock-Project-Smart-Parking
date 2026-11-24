@@ -28,6 +28,68 @@ public sealed class StructureRepository(ReservationDbContext db) : IStructureRep
     public void AddReceipt(StructureReleaseReceiptRow receipt) => db.StructureReleaseReceipts.Add(receipt);
     public void AddState(StructureSiteStateRow state) => db.StructureSiteStates.Add(state);
 
+    public Task<StructureMaintenanceClosureRow?> MaintenanceClosureAsync(Guid windowId, CancellationToken ct) =>
+        FreshAsync(db.StructureMaintenanceClosures.Where(x => x.WindowId == windowId), ct);
+
+    public void AddMaintenanceClosure(StructureMaintenanceClosureRow closure) => db.StructureMaintenanceClosures.Add(closure);
+
+    public async Task<IReadOnlyList<MaintenanceCommitmentConflict>> FindMaintenanceConflictsAsync(
+        Guid tenantId, Guid siteId, Guid? unitId, Guid? slotId,
+        IReadOnlySet<Guid> scopedUnitIds, IReadOnlySet<Guid> scopedSlotIds,
+        DateTimeOffset start, DateTimeOffset end, DateTimeOffset now, CancellationToken ct)
+    {
+        var reservations = await Live(tenantId, siteId, now)
+            .Where(r => r.ExpectedStartTime < end && (r.ClaimEndTime ?? r.ExpectedEndTime) > start)
+            .Select(r => new
+            {
+                r.Id,
+                r.ExpectedStartTime,
+                End = r.ClaimEndTime ?? r.ExpectedEndTime,
+                r.TargetSpatialUnitId,
+                EffectiveSlot = r.ActiveClaimSlotId ??
+                    db.SlotAllocations.Where(a => a.ReservationId == r.Id && a.TenantId == tenantId && a.SiteId == siteId &&
+                        (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED"))
+                        .OrderByDescending(a => a.CreatedAt).Select(a => (Guid?)a.SlotId).FirstOrDefault() ?? r.TargetSlotId
+            })
+            .ToListAsync(ct);
+
+        var sessions = await db.ParkingSessions.AsNoTracking()
+            .Where(s => s.TenantId == tenantId && s.SiteId == siteId && s.ExitTime == null && s.EntryTime < end)
+            .Select(s => new
+            {
+                s.Id,
+                s.EntryTime,
+                EffectiveSlot = s.CurrentSlotId ??
+                    db.SlotAllocations.Where(a => a.ParkingSessionId == s.Id && a.TenantId == tenantId && a.SiteId == siteId &&
+                        (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED"))
+                        .OrderByDescending(a => a.CreatedAt).Select(a => (Guid?)a.SlotId).FirstOrDefault()
+            })
+            .ToListAsync(ct);
+
+        bool Matches(Guid? targetUnit, Guid? effectiveSlot)
+        {
+            if (slotId is { } scopedSlot) return effectiveSlot == scopedSlot;
+            if (unitId is null) return true;
+            var unitSet = new HashSet<Guid>(scopedUnitIds) { unitId.Value };
+            return (targetUnit is { } unit && unitSet.Contains(unit)) ||
+                (effectiveSlot is { } slot && scopedSlotIds.Contains(slot));
+        }
+
+        var conflicts = new List<MaintenanceCommitmentConflict>();
+        foreach (var reservation in reservations)
+        {
+            if (Matches(reservation.TargetSpatialUnitId, reservation.EffectiveSlot))
+                conflicts.Add(new(reservation.Id, "RESERVATION", reservation.ExpectedStartTime, reservation.End, reservation.TargetSpatialUnitId, reservation.EffectiveSlot));
+        }
+        foreach (var session in sessions)
+        {
+            if (Matches(null, session.EffectiveSlot))
+                conflicts.Add(new(session.Id, "SESSION", session.EntryTime, null, null, session.EffectiveSlot));
+        }
+
+        return conflicts.OrderBy(c => c.Start).ThenBy(c => c.Type).ThenBy(c => c.Id).ToArray();
+    }
+
     private IQueryable<ReservationRow> Live(Guid tenantId, Guid siteId, DateTimeOffset now) =>
         db.Reservations.AsNoTracking().Where(r => r.TenantId == tenantId && r.SiteId == siteId &&
             (r.Status == "PARKING" || r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now) ||

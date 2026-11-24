@@ -28,6 +28,9 @@ public sealed partial class ReservationRow
     public DateTimeOffset? ConfirmationEvaluatedAt { get; private set; }
     public DateTimeOffset? ClaimEndTime { get; private set; }
 
+    // Set when Facility withdrew capacity for this booking's bay or area.
+    public DateTimeOffset? CancelledAt { get; private set; }
+
     public static ReservationRow Prepare(Guid id, Guid requestId, Guid accountId, Guid vehicleId,
         Guid tenantId, Guid siteId, Guid slotId, Guid termsId, string termsVersion, string method,
         DateTimeOffset start, DateTimeOffset end, DateTimeOffset claimEnd, DateTimeOffset now,
@@ -226,5 +229,57 @@ public sealed partial class ReservationRow
         ConfirmationState = "CONFIRMED";
         ConfirmationNextActionAt = null;
         ConfirmationCode = null;
+    }
+
+    // Emergency closure reallocation: the same booking keeps its identity and entitlement but is
+    // moved to another physical bay. A parked vehicle is never reallocated; the restriction handler
+    // filters those out before asking.
+    public void ReallocateSlot(Guid newSlotId)
+    {
+        if (newSlotId == Guid.Empty)
+            throw new InvalidOperationException("A replacement slot is required.");
+        if (Status is not ("PENDING_PAYMENT" or "CONFIRMED" or "ALLOCATED"))
+            throw new InvalidOperationException("Only an active booking can be reallocated.");
+        TargetSlotId = newSlotId;
+        TargetSpatialUnitId = null;
+        ActiveClaimSlotId = newSlotId;
+    }
+
+    // Facility emergency closure: capacity was withdrawn by the operator, so the booking can no
+    // longer be honoured. Recorded as an unclassified-free cancellation so the account is not
+    // restricted by the voluntary cancellation policy. PARKING is never cancelled here.
+    public void CancelForFacilityFailure(DateTimeOffset cancelledAt, bool requiresPaymentReconciliation,
+        Guid? restrictionId = null)
+    {
+        if (Status is not ("PENDING_PAYMENT" or "CONFIRMED" or "ALLOCATED"))
+            throw new InvalidOperationException("Only an active booking can be cancelled for a facility failure.");
+        Status = "CANCELLED";
+        CancelledAt = cancelledAt;
+        ActiveClaimSlotId = null;
+        // The restriction that caused the withdrawal owns the pending refund; the code lets a later
+        // redelivery tell its own leftover refund apart from another restriction's or workflow's.
+        ConfirmationCode = restrictionId is { } id ? $"FACILITY_FAILURE:{id:D}" : "FACILITY_FAILURE";
+        if (requiresPaymentReconciliation)
+        {
+            ConfirmationState = "RECONCILIATION_REQUIRED";
+            return;
+        }
+
+        if (ConfirmationState != "CONFIRMED")
+        {
+            ConfirmationState = "NO_ENTITLEMENT";
+            ConfirmationNextActionAt = null;
+        }
+    }
+
+    // Called after PaymentService accepted the refund request outside the database transaction.
+    public void MarkReconciliationCompleted(string code)
+    {
+        if (Status != "CANCELLED" || string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("Reconciliation can only close a cancelled booking.");
+        if (ConfirmationState != "RECONCILIATION_REQUIRED") return;
+        ConfirmationState = "NO_ENTITLEMENT";
+        ConfirmationNextActionAt = null;
+        ConfirmationCode = code;
     }
 }

@@ -34,12 +34,21 @@ public sealed class DisabledAccountAccessRequester : IAccountAccessRequester
         throw new ReservationGateException(503, "RESERVATION_ADMISSION_DISABLED", "Reservation admission is not enabled.");
 }
 
-public sealed class DisabledReservationFactsPublisher : IReservationFactsPublisher
+public sealed class DisabledReservationFactsPublisher(ILogger<DisabledReservationFactsPublisher>? logger = null) : IReservationFactsPublisher
 {
     public Task AvailabilityChangedAsync(ReservationAvailabilityChangedV1 fact, CancellationToken ct) =>
         throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
-    public Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct) =>
-        throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
+    public Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct)
+    {
+        // Durable reservation messaging is disabled, so this structure fact cannot be published.
+        // Skipping publication is safe and must not fail the owning structure-edit workflow, so
+        // this is logged as a warning and treated as a no-op rather than failing closed.
+        logger?.LogWarning(
+            "Durable reservation messaging is disabled; skipping FacilityStructureAppliedV1 publication for SiteId {SiteId} (Token {Token}).",
+            fact.SiteId,
+            fact.SynchronizationToken);
+        return Task.CompletedTask;
+    }
     public Task HoldChangedAsync(ReservationHoldChangedV1 fact, CancellationToken ct) =>
         throw new ReservationGateException(503, "RESERVATION_MESSAGING_UNAVAILABLE", "Durable reservation messaging is not enabled.");
     public Task ConfirmedAsync(ReservationConfirmedV1 fact, CancellationToken ct) =>
@@ -127,6 +136,13 @@ public static class ReservationMessaging
             {
                 registration.AddConsumer<LayoutInvalidatedConsumer>();
             }
+            // Emergency capacity restrictions come from Facility on the same broker as layout
+            // relays, so the local closure mirror is maintained whenever either topology is on.
+            if (layoutRelayEnabled || admissionEnabled)
+            {
+                registration.AddConsumer<FacilityCapacityRestrictedConsumer>();
+                registration.AddConsumer<FacilityCapacityRestrictionReleasedConsumer>();
+            }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
                 outbox.UsePostgres();
@@ -154,6 +170,10 @@ public static class ReservationMessaging
                 }
                 bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                 bus.Message<FacilityLayoutInvalidatedMessage>(message => message.SetEntityName(FacilityLayoutInvalidationTopology.ExchangeName));
+                bus.Message<FacilityCapacityRestrictedMessage>(message =>
+                    message.SetEntityName(FacilityCapacityRestrictionConsumerTopology.RestrictedExchangeName));
+                bus.Message<FacilityCapacityRestrictionReleasedMessage>(message =>
+                    message.SetEntityName(FacilityCapacityRestrictionConsumerTopology.ReleasedExchangeName));
                 if (gateCheckoutEnabled)
                 {
                     bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
@@ -170,6 +190,21 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<LayoutInvalidatedConsumer>(context);
+                    });
+                }
+                if (layoutRelayEnabled || admissionEnabled)
+                {
+                    bus.ReceiveEndpoint(FacilityCapacityRestrictionConsumerTopology.RestrictedQueueName, endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<FacilityCapacityRestrictedConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint(FacilityCapacityRestrictionConsumerTopology.ReleasedQueueName, endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<FacilityCapacityRestrictionReleasedConsumer>(context);
                     });
                 }
                 if (admissionEnabled)

@@ -37,6 +37,16 @@ public sealed class ReservationAvailabilityRepository(ReservationDbContext db, O
         // Do not silently sum two conflicting representations of capacity.
         var quotas = await db.Set<OperationalCapacityConfig>().AsNoTracking().Where(q =>
             q.TenantId == proposed.TenantId && q.SiteId == proposed.SiteId && q.VehicleType == proposed.VehicleType).ToArrayAsync(ct);
-        return new(rows, sessions, allocations, quotas);
+        var proposedEnd = proposed.ClaimEndTime ?? proposed.ExpectedEndTime;
+        var closures = await db.StructureMaintenanceClosures.AsNoTracking().Where(c =>
+            c.TenantId == proposed.TenantId && c.SiteId == proposed.SiteId && c.CancelledAt == null &&
+            c.WindowStart < proposedEnd && c.WindowEnd > proposed.ExpectedStartTime).ToArrayAsync(ct);
+        // Emergency closures may not have been reconciled yet, so they are read from the local
+        // mirror that the Facility consumer writes; a released or expired closure blocks nothing.
+        var emergencies = await db.StructureEmergencyClosures.AsNoTracking().Where(c =>
+            c.TenantId == proposed.TenantId && c.SiteId == proposed.SiteId && c.ReleasedAt == null &&
+            c.EffectiveFrom < proposedEnd &&
+            (c.EffectiveUntil == null || c.EffectiveUntil > proposed.ExpectedStartTime)).ToArrayAsync(ct);
+        return new(rows, sessions, allocations, quotas, closures, emergencies);
     }
 }

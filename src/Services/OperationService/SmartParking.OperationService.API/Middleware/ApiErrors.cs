@@ -19,7 +19,7 @@ public static class ApiErrors
 
     public static async Task<bool> WriteAsync(HttpContext context, int status, string code,
         string message, object? errors = null, object? released = null, object? items = null,
-        CancellationToken ct = default)
+        object? commitments = null, CancellationToken ct = default)
     {
         if (context.Response.HasStarted || context.RequestAborted.IsCancellationRequested) return false;
         context.Response.StatusCode = status;
@@ -35,6 +35,7 @@ public static class ApiErrors
         if (errors is not null) body["errors"] = errors;
         if (released is not null) body["released"] = released;
         if (items is not null) body["items"] = items;
+        if (commitments is not null) body["commitments"] = commitments;
         await context.Response.WriteAsJsonAsync(body, ct);
         return true;
     }

@@ -14,6 +14,17 @@ public sealed class SlotAllocationRow
         AttachToSession(sessionId);
         AllocationStatus = "OCCUPIED";
     }
+    // A reserved allocation follows its booking to a replacement bay. An occupied allocation is
+    // pinned to the vehicle that is physically standing there and can never be moved.
+    public void MoveTo(Guid slotId)
+    {
+        if (slotId == Guid.Empty)
+            throw new GateTransitionException("INVALID_ALLOCATION_STATE", "A replacement bay is required.");
+        if (AllocationStatus != "RESERVED")
+            throw new GateTransitionException("INVALID_ALLOCATION_STATE", "Only a reserved allocation can be moved.");
+        SlotId = slotId;
+    }
+
     public void Release(DateTimeOffset now)
     {
         if (AllocationStatus is not ("OCCUPIED" or "RESERVED"))
