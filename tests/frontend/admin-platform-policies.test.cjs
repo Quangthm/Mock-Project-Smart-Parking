@@ -128,6 +128,21 @@ const validDraft = {
   cancellationTimezone: 'Asia/Ho_Chi_Minh',
 };
 
+test('adminPolicyApi.getAdminFacilityDirectory reads named tenant/site options from Facility with the bearer token', async () => {
+  const directory = {
+    tenants: [{ id: 'tenant-test', code: 'DEMO-OWNER', name: 'SmartPark Demo Owner', status: 'ACTIVE' }],
+    sites: [{ id: 'site-test', tenantId: 'tenant-test', code: 'DEMO-HQ', name: 'SmartPark Demo Site', status: 'ACTIVE', isActive: true }],
+  };
+  const f = fixture(() => response(200, { success: true, data: directory }));
+  assert.deepEqual(await f.policyApi.getAdminFacilityDirectory(), directory);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].url, 'http://localhost:5045/api/v1/admin/facility-directory');
+  assert.equal(f.calls[0].options.method, 'GET');
+  assert.equal(f.calls[0].options.headers.Authorization, 'Bearer access-a');
+  const invalid = fixture(() => response(200, { success: true, data: { tenants: [] } }));
+  await assert.rejects(invalid.policyApi.getAdminFacilityDirectory(), /Invalid facility directory response/);
+});
+
 test('adminPolicyApi.getCatalogue parses the 14-key platform catalogue with bound null vs present', async () => {
   const f = fixture(() => response(200, { success: true, data: cataloguePayload }));
   const result = await f.policyApi.getCatalogue();

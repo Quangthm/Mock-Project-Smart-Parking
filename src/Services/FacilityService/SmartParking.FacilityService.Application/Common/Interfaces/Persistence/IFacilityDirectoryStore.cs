@@ -1,11 +1,10 @@
-namespace SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.DTOs;
 
-public sealed record TenantBody(string Name, string Email, string Phone);
-public sealed record SiteValidation(Guid[] SiteIds, Guid[] TenantIds);
-public sealed record ValidatedSite(Guid Id, Guid TenantId);
+namespace SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 
 public interface IFacilityDirectoryStore
 {
+    Task<AdminFacilityDirectoryDto> GetAdminDirectoryAsync(CancellationToken ct);
     Task<bool> ProvisionTenantAsync(Guid id, TenantBody body, CancellationToken ct);
     Task<IReadOnlyList<ValidatedSite>> ValidateSitesAsync(SiteValidation body, CancellationToken ct);
 }

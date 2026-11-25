@@ -5,6 +5,8 @@ import { Button } from "../../../components/ui/Button"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import {
   getEffective,
+  getAdminFacilityDirectory,
+  type AdminFacilityDirectory,
   type EffectivePolicyValue,
   type EffectiveReservationPolicy,
 } from "../../../lib/adminPolicyApi"
@@ -29,7 +31,7 @@ function describeEffectiveError(error: unknown): string {
       return "This site has no active policy revision at that time. The lot owner must publish an initial revision to establish an effective policy."
     }
     if (error.code === "SITE_TENANT_MISMATCH") {
-      return "The tenant and site identifiers do not match. Check the pair you entered."
+      return "The selected tenant and parking site do not match. Choose the pair again."
     }
     if (error.code === "INVALID_REQUEST") {
       return "Both tenantId and siteId must be supplied together, or both omitted."
@@ -70,6 +72,9 @@ export function EffectivePolicyView() {
   const [at, setAt] = useState("")
   const [tenantId, setTenantId] = useState("")
   const [siteId, setSiteId] = useState("")
+  const [directory, setDirectory] = useState<AdminFacilityDirectory>({ tenants: [], sites: [] })
+  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [directoryError, setDirectoryError] = useState(false)
 
   const [data, setData] = useState<EffectiveReservationPolicy | null>(null)
   const [loading, setLoading] = useState(true)
@@ -114,6 +119,16 @@ export function EffectivePolicyView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    let active = true
+    void getAdminFacilityDirectory()
+      .then(result => { if (active) setDirectory(result) })
+      .catch(() => { if (active) setDirectoryError(true) })
+      .finally(() => { if (active) setDirectoryLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const sites = directory.sites.filter(site => !tenantId || site.tenantId === tenantId)
   const arrival = data?.arrivalLateTolerance
   const totalValues = useMemo(() => Object.keys(data?.values ?? {}).length, [data])
 
@@ -129,8 +144,8 @@ export function EffectivePolicyView() {
           </h2>
         </div>
         <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-          Evaluate the policy a driver would see at a specific moment. Leave the identifiers blank to
-          resolve the platform policy, or supply both to resolve a site policy.
+          Evaluate the policy a driver would see at a specific moment. Use platform scope or choose
+          a tenant and parking site to resolve a site policy.
         </p>
 
         <div className="mt-4 grid items-end gap-3 sm:grid-cols-3">
@@ -148,35 +163,62 @@ export function EffectivePolicyView() {
           </div>
           <div>
             <label className="label" htmlFor="effective-tenant">
-              Tenant ID (optional)
+              Tenant (optional)
             </label>
-            <input
+            <select
               id="effective-tenant"
               className="input"
               value={tenantId}
-              placeholder="owner tenant UUID"
-              autoComplete="off"
-              onChange={(event) => setTenantId(event.target.value)}
-            />
+              disabled={directoryLoading || directoryError}
+              onChange={(event) => {
+                const nextTenantId = event.target.value
+                setTenantId(nextTenantId)
+                if (!nextTenantId || !directory.sites.some(site => site.id === siteId && site.tenantId === nextTenantId))
+                  setSiteId("")
+              }}
+            >
+              <option value="">Platform scope (all tenants)</option>
+              {directory.tenants.map(tenant => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name}{tenant.code ? ` (${tenant.code})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label" htmlFor="effective-site">
-              Site ID (optional)
+              Parking site (optional)
             </label>
-            <input
+            <select
               id="effective-site"
               className="input"
               value={siteId}
-              placeholder="parking site UUID"
-              autoComplete="off"
-              onChange={(event) => setSiteId(event.target.value)}
-            />
+              disabled={directoryLoading || directoryError}
+              onChange={(event) => {
+                const site = directory.sites.find(item => item.id === event.target.value)
+                setSiteId(site?.id ?? "")
+                setTenantId(site?.tenantId ?? "")
+              }}
+            >
+              <option value="">{tenantId ? "Select a parking site…" : "Platform scope (all sites)"}</option>
+              {sites.map(site => (
+                <option key={site.id} value={site.id}>
+                  {site.name}{site.code ? ` (${site.code})` : ""}{site.isActive ? "" : " [INACTIVE]"}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
+        {(directoryLoading || directoryError) && (
+          <p role="status" className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+            {directoryLoading ? "Loading tenants and parking sites…" : "Tenant and parking site directory is unavailable. Platform evaluation is still available."}
+          </p>
+        )}
+
         {pairMismatch && (
           <p className="mt-2 text-xs" style={{ color: "var(--badge-warning-fg)" }}>
-            Both tenantId and siteId must be supplied together, or both omitted.
+            Select a parking site for this tenant, or reset to platform.
           </p>
         )}
 

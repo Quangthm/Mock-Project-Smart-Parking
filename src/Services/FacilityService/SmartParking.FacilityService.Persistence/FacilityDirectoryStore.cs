@@ -1,10 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.DTOs;
 using SmartParking.FacilityService.Domain.Entities;
 namespace SmartParking.FacilityService.Persistence;
 public sealed class FacilityDirectoryStore(ParkingDbContext database, IUnitOfWork unitOfWork) : IFacilityDirectoryStore
 {
+    public async Task<AdminFacilityDirectoryDto> GetAdminDirectoryAsync(CancellationToken ct)
+    {
+        var tenants = await database.Tenants.AsNoTracking()
+            .Where(tenant => tenant.DeletedAt == null)
+            .OrderBy(tenant => tenant.Name).ThenBy(tenant => tenant.Code)
+            .Select(tenant => new AdminTenantOptionDto(tenant.Id, tenant.Code, tenant.Name, tenant.Status))
+            .ToArrayAsync(ct);
+        var sites = await database.ParkingSites.AsNoTracking()
+            .Where(site => site.DeletedAt == null)
+            .OrderBy(site => site.Name).ThenBy(site => site.Code)
+            .Select(site => new AdminSiteOptionDto(site.Id, site.TenantId, site.Code, site.Name,
+                site.Status, site.Status == "ACTIVE"))
+            .ToArrayAsync(ct);
+        return new AdminFacilityDirectoryDto(tenants, sites);
+    }
+
     public async Task<bool> ProvisionTenantAsync(Guid id, TenantBody body, CancellationToken ct)
     {
         if (!await database.Tenants.AnyAsync(tenant => tenant.Id == id, ct))

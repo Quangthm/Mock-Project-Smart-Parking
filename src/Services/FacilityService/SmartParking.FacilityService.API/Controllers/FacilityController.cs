@@ -1,4 +1,5 @@
 using MediatR;
+using SmartParking.FacilityService.Application.Usecases.Directory.Queries.GetAdminFacilityDirectory;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -51,6 +52,13 @@ public sealed class FacilityController(
 {
     [HttpGet("/health")]
     public IActionResult Health() => Ok(new { status = "ok" });
+
+    [HttpGet("/api/v1/admin/facility-directory")]
+    public async Task<IActionResult> AdminFacilityDirectory(CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetAdminFacilityDirectoryQuery(), ct);
+        return Ok(new { success = true, data = result });
+    }
 
     [HttpPut("/internal/owner-onboarding/{id:guid}")]
     public async Task<IActionResult> ProvisionOwner(Guid id, OwnerOnboardingBody body, CancellationToken ct)

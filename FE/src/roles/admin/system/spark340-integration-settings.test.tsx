@@ -5,6 +5,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { IntegrationSettingsView } from "./IntegrationSettingsView"
 import { SystemConfig } from "./SystemConfig"
 import { PolicyDraftModal } from "./PolicyDraftModal"
+import { EffectivePolicyView } from "./EffectivePolicyView"
 import { CANONICAL_POLICY_GROUPS } from "../../../lib/policyDisplay"
 import type { PolicyRevisionListItem } from "../../../lib/adminPolicyApi"
 
@@ -12,6 +13,7 @@ const api = vi.hoisted(() => ({
   getPaymentIntegration: vi.fn(), updatePaymentIntegration: vi.fn(), getNotificationIntegrations: vi.fn(),
   getCatalogue: vi.fn(), getRevisions: vi.fn(), getRevisionById: vi.fn(), getEffective: vi.fn(),
   createDraft: vi.fn(), updateDraft: vi.fn(), activateRevision: vi.fn(),
+  getAdminFacilityDirectory: vi.fn(),
 }))
 vi.mock("../../../lib/adminIntegrationApi", () => api)
 vi.mock("../../../lib/adminPolicyApi", () => api)
@@ -27,6 +29,17 @@ const catalogue = {
     key, name: key, description: key, dataType: "duration", unit: "minutes", defaultValue: 15,
     isOverridableByOwner: false, bound: null,
   })),
+}
+
+const directory = {
+  tenants: [
+    { id: "tenant-test", code: "DEMO-OWNER", name: "SmartPark Demo Owner", status: "ACTIVE" },
+    { id: "tenant-other", code: "", name: "Other Owner", status: "ACTIVE" },
+  ],
+  sites: [
+    { id: "site-test", tenantId: "tenant-test", code: "DEMO-HQ", name: "SmartPark Demo Site", status: "ACTIVE", isActive: true },
+    { id: "site-other", tenantId: "tenant-other", code: "", name: "Other Site", status: "INACTIVE", isActive: false },
+  ],
 }
 
 function assertPaymentUnavailable(container: HTMLElement) {
@@ -47,6 +60,7 @@ beforeEach(() => {
   api.updatePaymentIntegration.mockImplementation(() => { throw new Error("Deferred Payment PUT called") })
   api.getNotificationIntegrations.mockResolvedValue({ channels })
   api.getCatalogue.mockResolvedValue(catalogue)
+  api.getAdminFacilityDirectory.mockResolvedValue(directory)
   api.getRevisions.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 0 })
   api.getEffective.mockResolvedValue({
     scope: "PLATFORM", tenantId: null, siteId: null, evaluatedAt: "2026-01-01T00:00:00Z",
@@ -118,9 +132,11 @@ describe("SPARK-340 PayOS-only MVP release", () => {
     expect(effective.getAttribute("aria-selected")).toBe("true")
     await screen.findByRole("heading", { name: "Effective Policy Simulation" })
     await waitFor(() => expect(api.getEffective).toHaveBeenCalled())
-    await user.type(screen.getByLabelText("Tenant ID (optional)"), "tenant-test")
+    expect(await screen.findByRole("option", { name: "SmartPark Demo Owner (DEMO-OWNER)" })).toBeDefined()
+    expect(screen.getByRole("option", { name: "SmartPark Demo Site (DEMO-HQ)" })).toBeDefined()
+    await user.selectOptions(screen.getByLabelText("Tenant (optional)"), "tenant-test")
     expect(screen.getByRole("button", { name: "Evaluate" }).hasAttribute("disabled")).toBe(true)
-    await user.type(screen.getByLabelText("Site ID (optional)"), "site-test")
+    await user.selectOptions(screen.getByLabelText("Parking site (optional)"), "site-test")
     await user.click(screen.getByRole("button", { name: "Evaluate" }))
     await waitFor(() => expect(api.getEffective).toHaveBeenLastCalledWith(expect.objectContaining({ tenantId: "tenant-test", siteId: "site-test" })))
 
@@ -131,6 +147,51 @@ describe("SPARK-340 PayOS-only MVP release", () => {
     await screen.findByRole("heading", { name: "Platform Policy Catalogue" })
     expect(api.getCatalogue.mock.calls.length).toBeGreaterThan(1)
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("filters sites, synchronizes the tenant, clears stale pairs and resets to platform", async () => {
+    const user = userEvent.setup()
+    render(<EffectivePolicyView />)
+    await screen.findByRole("option", { name: "SmartPark Demo Site (DEMO-HQ)" })
+    const tenant = screen.getByLabelText<HTMLSelectElement>("Tenant (optional)")
+    const site = screen.getByLabelText<HTMLSelectElement>("Parking site (optional)")
+    expect(within(site).getByRole("option", { name: "Other Site [INACTIVE]" })).toBeDefined()
+    expect(Array.from(tenant.options).some(option => option.text.includes("tenant-test"))).toBe(false)
+    expect(Array.from(site.options).some(option => option.text.includes("site-test"))).toBe(false)
+
+    await user.selectOptions(site, "site-test")
+    expect(tenant.value).toBe("tenant-test")
+    expect(within(site).queryByRole("option", { name: "Other Site [INACTIVE]" })).toBeNull()
+    await user.selectOptions(tenant, "tenant-other")
+    expect(site.value).toBe("")
+    expect(screen.getByRole("button", { name: "Evaluate" }).hasAttribute("disabled")).toBe(true)
+    expect(within(site).queryByRole("option", { name: "SmartPark Demo Site (DEMO-HQ)" })).toBeNull()
+    await user.selectOptions(site, "site-other")
+    await user.selectOptions(site, "")
+    expect(tenant.value).toBe("")
+    expect(site.value).toBe("")
+    await user.selectOptions(site, "site-test")
+    await user.selectOptions(tenant, "")
+    expect(site.value).toBe("")
+    await user.selectOptions(site, "site-test")
+    await user.click(screen.getByRole("button", { name: "Reset to platform" }))
+    expect(tenant.value).toBe("")
+    expect(site.value).toBe("")
+    await waitFor(() => expect(api.getEffective).toHaveBeenLastCalledWith({ tenantId: undefined, siteId: undefined, at: undefined }))
+    expect(api.getPaymentIntegration).not.toHaveBeenCalled()
+  })
+
+  it.each(["pending", "failed"])("keeps platform evaluation available when the directory is %s", async state => {
+    if (state === "pending") api.getAdminFacilityDirectory.mockReturnValue(new Promise(() => {}))
+    else api.getAdminFacilityDirectory.mockRejectedValue(new Error("Directory unavailable"))
+    render(<EffectivePolicyView />)
+    await screen.findByText("Platform revision v1")
+    expect(screen.getByRole("status").textContent).toContain(state === "pending" ? "Loading tenants" : "Platform evaluation is still available")
+    expect(screen.getByLabelText("Tenant (optional)").hasAttribute("disabled")).toBe(true)
+    expect(screen.getByRole("button", { name: "Evaluate" }).hasAttribute("disabled")).toBe(false)
+    await userEvent.click(screen.getByRole("button", { name: "Evaluate" }))
+    await waitFor(() => expect(api.getEffective).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole("alert")).toBeNull()
   })
 
   it("retains PolicyDraftModal update with its version token", async () => {

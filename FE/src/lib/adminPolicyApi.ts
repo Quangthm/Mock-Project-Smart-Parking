@@ -5,6 +5,30 @@ const POLICY_PREFIX = "/api/v1/admin/policies/operations"
 const reservationServer = () =>
   (import.meta.env.VITE_RESERVATION_API_BASE_URL ?? "http://localhost:5055").replace(/\/$/, "")
 
+const facilityServer = () =>
+  (import.meta.env.VITE_PARKING_API_BASE_URL ?? "http://localhost:5045").replace(/\/$/, "")
+
+export interface AdminTenantOption {
+  id: string
+  code: string
+  name: string
+  status: string
+}
+
+export interface AdminSiteOption {
+  id: string
+  tenantId: string
+  code: string
+  name: string
+  status: string
+  isActive: boolean
+}
+
+export interface AdminFacilityDirectory {
+  tenants: AdminTenantOption[]
+  sites: AdminSiteOption[]
+}
+
 interface Response<T> {
   success: boolean
   data: T
@@ -163,6 +187,20 @@ export interface PolicyActivationResult {
   effectiveFrom: string
   effectiveUntil: string | null
   supersededRevision: { id: string; version: number; effectiveUntil: string } | null
+}
+
+export async function getAdminFacilityDirectory(): Promise<AdminFacilityDirectory> {
+  await ensureAccessToken()
+  const response = await request<Response<AdminFacilityDirectory>>(
+    "/facility-directory",
+    "GET",
+    undefined,
+    "/api/v1/admin",
+    facilityServer(),
+  )
+  if (!response.success || !Array.isArray(response.data?.tenants) || !Array.isArray(response.data?.sites))
+    throw new Error("Invalid facility directory response.")
+  return response.data
 }
 
 export async function getCatalogue(): Promise<PlatformPolicyCatalogue> {
