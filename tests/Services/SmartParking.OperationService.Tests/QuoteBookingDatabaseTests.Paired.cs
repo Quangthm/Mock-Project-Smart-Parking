@@ -100,7 +100,7 @@ public sealed partial class QuoteBookingDatabaseTests
             db.Add(revision);
             await db.SaveChangesAsync();
             var binding = new ReservationQuoteBinding(AccountId.Value, plate, tenant, site, slot, start, Intent.End,
-                "PAYOS", new(false, "none-v1"), facilityVersion, platform, 1, sitePolicy, 1);
+                "PAYOS", new(false, "none-v1"), platform, 1, sitePolicy, 1);
             Assert.Equal(HttpStatusCode.Unauthorized, (await http.PostAsJsonAsync("/internal/reservation-quotes/v1", binding)).StatusCode);
             clock.Now = DateTimeOffset.UtcNow.AddMinutes(-10).AddSeconds(15);
             var proof = await owner.IssuePlateQuoteAsync(binding, default);

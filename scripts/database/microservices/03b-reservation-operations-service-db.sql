@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     slot_check TEXT,
     resolved_site_id UUID,
     resolved_tenant_id UUID,
-    facility_version TEXT,
     state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,

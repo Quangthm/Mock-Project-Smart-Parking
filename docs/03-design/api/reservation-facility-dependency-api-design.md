@@ -135,7 +135,7 @@ The 10 November single guarded database evaluation timestamp and no-entitlement-
 | Item | Contract |
 | --- | --- |
 | Method / URL | GET `/internal/reservation-dependencies/v1/slots/{slotId}` |
-| Availability | Implemented alongside the site-and-slot facts route. Both use the same Facility configuration snapshot. |
+| Availability | Operations consumes the B2 metadata response. The current Facility producer still reads the site snapshot; its cutover is pending. |
 | Authentication / origin | SERVICE; dedicated authenticated Operations identity, audience and permission checked by Facility |
 | Scope | Selected Facility slot; derive authoritative tenant/site in the owning repository |
 | Content type / headers | No body; JSON response; service bearer credential; no browser JWT |
@@ -143,14 +143,14 @@ The 10 November single guarded database evaluation timestamp and no-entitlement-
 **Request sample:** slot path identifier `33333333-3333-4333-8333-333333333333` (required UUID); no site or tenant input. **Response sample** (conceptual HTTP 200, known slot):
 
 ```json
-{"slotId":"33333333-3333-4333-8333-333333333333","siteId":"22222222-2222-4222-8222-222222222222","tenantId":"11111111-1111-4111-8111-111111111111","eligibleCarSlot":true,"version":"opaque-version","participatesInStructureGuard":true}
+{"slotId":"33333333-3333-4333-8333-333333333333","siteId":"22222222-2222-4222-8222-222222222222","tenantId":"11111111-1111-4111-8111-111111111111"}
 ```
 
-Facility finds the live slot GUID in its own store and uses the existing site structure guard to read its configuration. Inactive site/tenant, deleted ancestry or incompatible category yields `eligibleCarSlot: false`. A missing or deleted slot gives 404 `SLOT_NOT_FOUND`. Invalid UUID gives 400. Missing or insufficient service identity gives 401/403. Structure contention can give 409 `STRUCTURE_BUSY`. Operations treats contention, generic routing 404, malformed results and transport failures as dependency failures. A new review can retry. The read creates no durable dependency or capacity claim.
+Facility derives the identities from the live slot and owning site/tenant. Preserve the typed 404 `SLOT_NOT_FOUND`, invalid-input and service-authorization handling. Operations treats a missing route, incoherent identity or inaccessible owner as dependency failure. Quote review creates no claim.
 
 ### MassTransit slot validation for admission
 
-Facility resolves the selected GUID via its repository independently during admission. Consume a versioned service-local request from Operations with request/workflow, stable branch operation and attempt IDs, selected slot, required CAR/eligibility context and deadline. Reply with the matching correlation, authoritative tenant/site/slot and eligibility/configuration evidence, or an explicit business rejection. Keep unavailable, transient error and timeout distinct from definitive rejection. Operations owns attempt fencing and durable decision recording. No synchronous broker RPC. Verify correct/incorrect sender and duplicate, delayed, mismatched and stale attempts. Exact wire names, queue bindings and trust setup require owner agreement.
+The Operations contract sends `SlotCheckV1(workflowId, attemptId, accountId, fingerprint, requestedSlotId, start, end)` and accepts `SlotDecisionV1(request, outcome, siteId?, tenantId?)` only for the exact pending request. Facility must check the selected slot over the normalized UTC interval and return derived identities on success. Deploying with the old interval-blind producer cannot establish eligibility. The separate site-qualified read and temporary token protocols retain their existing snapshots. See the [Facility implementation and acceptance handoff](<../../05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Facility-Handoff.md>).
 
 ### Protected claim verification
 

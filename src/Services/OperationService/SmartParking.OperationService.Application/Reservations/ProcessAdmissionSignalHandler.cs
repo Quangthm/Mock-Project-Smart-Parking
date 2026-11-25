@@ -29,9 +29,13 @@ public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository 
             var intent = JsonSerializer.Deserialize<QuoteReservationIntent>(request.IntentJson)
                 ?? throw new InvalidOperationException("Missing persisted admission intent.");
             var plate = new PlateCheckV1(request.Id, request.Id, request.AccountId, request.Fingerprint, intent.LicensePlate);
-            var slot = new SlotCheckV1(request.Id, request.Id, request.AccountId, request.Fingerprint, intent.RequestedSlotId);
+            var slot = new SlotCheckV1(request.Id, request.Id, request.AccountId, request.Fingerprint,
+                intent.RequestedSlotId, intent.Start, intent.End);
             switch (command.Signal)
             {
+                case var _ when slot.Start == default || slot.End <= slot.Start:
+                    request.FailQuoteAdmission("FACILITY_RESPONSE_INVALID");
+                    break;
                 case StartQuoteAdmission:
                     await accounts.RequestAsync(AdmissionMessage.For(request), ct);
                     await messages.CheckPlateAsync(plate, ct);
@@ -58,11 +62,12 @@ public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository 
                     break;
                 case SlotDecisionV1 decision when decision.Request == slot && request.SlotCheck == "PENDING":
                     if (decision.Outcome == "ELIGIBLE" && decision.SiteId is Guid site && site != Guid.Empty &&
-                        decision.TenantId is Guid tenant && tenant != Guid.Empty && !string.IsNullOrWhiteSpace(decision.Version))
-                        request.RecordSlot(true, site, tenant, decision.Version);
+                        decision.TenantId is Guid tenant && tenant != Guid.Empty)
+                        request.RecordSlot(true, site, tenant);
                     else if (decision.Outcome == "INELIGIBLE" && decision.SiteId is null &&
-                        decision.TenantId is null && decision.Version is null) request.RecordSlot(false, null, null, null);
-                    else request.FailQuoteAdmission(decision.Outcome == "DEPENDENCY_UNAVAILABLE"
+                        decision.TenantId is null) request.RecordSlot(false, null, null);
+                    else request.FailQuoteAdmission(decision.Outcome == "DEPENDENCY_UNAVAILABLE" &&
+                        decision.SiteId is null && decision.TenantId is null
                         ? "FACILITY_UNAVAILABLE" : "FACILITY_RESPONSE_INVALID");
                     break;
             }

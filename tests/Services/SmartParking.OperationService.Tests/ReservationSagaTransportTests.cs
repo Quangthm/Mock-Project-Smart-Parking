@@ -78,14 +78,14 @@ public sealed class ReservationSagaTransportTests
             var plate = await plateCheck.Task;
             var facility = await slotCheck.Task;
             Assert.Equal(new PlateCheckV1(first, first, account, receipt.Fingerprint, "51A12345"), plate);
-            Assert.Equal(new SlotCheckV1(first, first, account, receipt.Fingerprint, slot), facility);
+            Assert.Equal(new SlotCheckV1(first, first, account, receipt.Fingerprint, slot, intent.Start, intent.End), facility);
             Assert.Equal(receipt.AttemptId, (await accountCheck.Task).AttemptId);
             var allowed = new AccountAccessDecisionV1(Guid.NewGuid(), first, receipt.AttemptId, 1,
                 account, account, "driver", "CREATE_RESERVATION", clock.Now, true, "ALLOWED");
             await Send(bus, "operations-reservation-plate-results-v1",
                 new PlateDecisionV1(plate with { AccountId = Guid.NewGuid() }, true, "CAR", 7), first);
             await Send(bus, "operations-reservation-slot-results-v1",
-                new SlotDecisionV1(facility, "ELIGIBLE", Guid.NewGuid(), Guid.NewGuid(), "revision"), first);
+                new SlotDecisionV1(facility, "ELIGIBLE", Guid.NewGuid(), Guid.NewGuid()), first);
             await Send(bus, "operations-reservation-plate-results-v1", new PlateDecisionV1(plate, true, "CAR", 7), first);
             await Send(bus, AccountAccessEndpoints.Decisions, allowed, first, receipt.AttemptId);
             await WaitFor(host, first, "Final");

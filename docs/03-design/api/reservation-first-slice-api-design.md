@@ -28,7 +28,7 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 | Item | Contract |
 | --- | --- |
 | Method / URL | POST `/api/reservation-quotes` |
-| Availability | Operations consumer implemented. Returns 503 until the versioned Payment owner route is available. The current checkout continues to use `/api/reservation-terms`. |
+| Availability | Operations consumes the B2 identity-only metadata and reviewed quote binding. Coordinated Facility and Payment producer verification is pending. |
 | Authentication / freshness | Driver JWT / TOKEN and local policy; estimate and quote review have no booking effect |
 | Resource scope | Caller’s quote; authoritative slot resolution via Facility |
 | Content type / headers | JSON; bearer auth |
@@ -42,7 +42,7 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 | Body field | Format | Contract |
 | --- | --- | --- |
 | licensePlate | string | Normalized using the agreed UserService rules. Operations independently canonicalizes/validates it and resolves ownership in admission. |
-| requestedSlotId | UUID | Facility resolves site/tenant and CAR eligibility. |
+| requestedSlotId | UUID | Facility resolves the exact slot, site and tenant for pricing. The admission Saga checks CAR eligibility for the requested interval. |
 | start, end | ISO 8601 with offset | Ordered interval. Server normalizes instants and applies effective policy. |
 | paymentMethod | enum | `PAYOS` for the current paid review. |
 
@@ -56,9 +56,9 @@ Quote ID/version and validity are required. The reviewed result exposes the immu
 
 The response also includes `operationalPolicy` with `platformRevisionId`, `platformVersion`, `siteRevisionId`, `siteVersion`, effective integer `values`, `arrivalLateToleranceEnabled` and `cancellationTimezone`. Display these policies and Payment’s disclosure before consent. Clearing or changing the canonical plate, slot, either instant or method clears consent. A change of driver Account, expiry, changed policy, tariff terms or coverage that invalidates the binding requires a new review. A preview cannot restore consent.
 
-Malformed input returns 400. An owner-confirmed missing slot returns 404. Ineligible slot or stale quote returns 409. Missing owner routes, credentials, incomplete pricing evidence and mismatched owner responses fail closed with 503. Review creates no reservation, dependency token or order.
+Malformed input returns 400. An owner-confirmed missing slot returns 404. A stale quote returns 409. Definitive interval ineligibility is a later admission outcome. Missing owner routes, credentials, incomplete pricing evidence and mismatched owner responses fail closed with 503. Review creates no reservation, dependency token or order.
 
-**Client transition.** Keep the current review/create pair together. The current create route consumes legacy `termsId/termsVersion`. Enable submission of plate reviews only when Operations can verify the exact Payment proof, recheck coverage under its guards and consume the quote once. A quote ID cannot be passed as a terms ID.
+**B2 activation.** The Driver submits the reviewed quote ID/version with the same selection. Operations checks Payment’s immutable proof directly against normalized intent and the joined owner results. One-time quote binding, policy/coverage checks and the temporary ADMISSION token remain in the guarded hold workflow. Coordinate activation with both revised producers; the legacy terms path has its own binding.
 
 ### Submit durable admission
 

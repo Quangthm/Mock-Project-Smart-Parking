@@ -1,4 +1,6 @@
 using System.Text.Json;
+using SmartParking.Contracts.ReservationAdmission;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using MassTransit;
 using MassTransit.EntityFrameworkCoreIntegration;
 using MediatR;
@@ -27,7 +29,10 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     private readonly QuoteCommitFault fault = new();
     private int proofReads;
     private int policyVersion = 1;
-    private string facilityVersion = "facility-1";
+    private const string SnapshotVersion = "inventory-at-acquire";
+    private Func<ReservationQuoteBinding, ReservationQuoteBinding> proofBinding = binding => binding;
+    private bool wrongToken;
+    private Guid? unrelatedSlot;
     private bool expired, covered;
     private bool wrongReceipt, rejectZero;
     private int reconciledZero;
@@ -57,6 +62,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         services.AddSingleton<IReservationFacilityDependencyOwner>(this);
         services.AddSingleton<IReservationSubscriptionEligibility>(this);
         services.AddSingleton<ICurrentActor>(this);
+        services.AddScoped<IAccountAccessRequester, AccountAccessRequester>();
         services.AddScoped<IAdmissionMessages, AdmissionMessages>();
         services.AddScoped<IQuoteAdmissionStarter, AdmissionMessages>();
         services.AddScoped<IReservationFactsPublisher, ReservationFactsPublisher>();
@@ -115,9 +121,9 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Equal((AccountId!.Value, quoteId, "quote-1"), (account, id, version));
         Interlocked.Increment(ref proofReads);
         var binding = new ReservationQuoteBinding(account, plate, tenant, site, slot, start, Intent.End, "PAYOS",
-            Evaluate(plate, tenant, site, new(start, Intent.End)), "facility-1", platform, 1, sitePolicy, 1);
+            Evaluate(plate, tenant, site, new(start, Intent.End)), platform, 1, sitePolicy, 1);
         return Task.FromResult(new PaymentReservationQuote(id, version, "ISSUED", expired ? start.AddDays(-1) : start,
-            binding, "tariff-1", 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "FULL", "Full prepayment"));
+            proofBinding(binding), "tariff-1", 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "FULL", "Full prepayment"));
     }
 
     public Task<IReadOnlyList<ReservationDepositEvidence>> ReadCollectionsAsync(Guid orderId, CancellationToken ct) =>
@@ -166,7 +172,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var row = await db.ReservationRequests.SingleAsync(r => r.Id == id);
         row.AcceptDecision(row.AttemptId, 1, Guid.NewGuid(), row.AdmittedAt, true, row.AdmittedAt);
         row.RecordPlate(true, plate, 3, row.AdmittedAt);
-        row.RecordSlot(true, site, tenant, "facility-1");
+        row.RecordSlot(true, site, tenant);
         if (!await db.Set<OperationalCapacityConfig>().AnyAsync(q => q.SiteId == site))
             db.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), SiteId = site, TenantId = tenant,
                 VehicleType = "CAR", TotalPhysicalCapacity = 1, MaxReservationQuota = 1, IsActive = true,
@@ -191,9 +197,12 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     public Task<FacilityDependencyResult> AcquireAsync(FacilityDependencyIntent intent, CancellationToken ct)
     {
         Assert.Equal((tenant, site, slot), (intent.TenantId, intent.SiteId, intent.SlotId));
-        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, facilityVersion, true, true),
-            [new(slot, unit, "CAR", true, true, false, [unit], ["CAR"])], [], true);
-        return Task.FromResult(new FacilityDependencyResult(intent, "HELD", snapshot));
+        var resources = new List<FacilityResourceFact> { new(slot, unit, "CAR", true, true, false, [unit], ["CAR"]) };
+        if (unrelatedSlot is Guid other)
+            resources.Add(new(other, unit, "CAR", true, true, true, [unit], ["CAR"]));
+        var version = unrelatedSlot.HasValue ? "inventory-with-another-backup-slot" : SnapshotVersion;
+        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, version, true, true), resources, [], true);
+        return Task.FromResult(new FacilityDependencyResult(wrongToken ? intent with { Token = Guid.NewGuid() } : intent, "HELD", snapshot));
     }
 
     public Task<FacilityDependencyAcknowledgement> CompleteAsync(FacilityDependencyIntent intent, string outcomeJson, CancellationToken ct) =>
@@ -255,25 +264,113 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
 
     [QuoteDatabaseFact]
-    public async Task ExpiredProofOrChangedFacilityOrPolicyAbortsHeldToken()
+    public async Task ExpiredProofOrChangedBindingOrPolicyAbortsHeldToken()
     {
         await using var services = Services();
-        foreach (var reason in new[] { "expiry", "facility", "policy" })
+        foreach (var reason in new[] { "expiry", "site", "tenant", "slot", "start", "end", "account", "plate", "method", "coverage", "policy" })
         {
-            facilityVersion = reason == "facility" ? "changed" : "facility-1";
+            proofBinding = binding => binding;
             expired = false;
             policyVersion = 1;
             var id = await Prepare(services, Guid.NewGuid());
+            proofBinding = binding => reason switch
+            {
+                "site" => binding with { SiteId = Guid.NewGuid() },
+                "tenant" => binding with { TenantId = Guid.NewGuid() },
+                "slot" => binding with { RequestedSlotId = Guid.NewGuid() },
+                "start" => binding with { Start = binding.Start.AddMinutes(1) },
+                "end" => binding with { End = binding.End.AddMinutes(1) },
+                "account" => binding with { AccountId = Guid.NewGuid() },
+                "plate" => binding with { CanonicalPlate = "52B12345" },
+                "method" => binding with { PaymentMethod = "CASH" },
+                "coverage" => binding with { Coverage = binding.Coverage with { Version = "changed" } },
+                _ => binding
+            };
             expired = reason == "expiry";
             policyVersion = reason == "policy" ? 2 : 1;
             await Send(services, new CommitQuoteHoldCommand(id));
             using var scope = services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
-            Assert.Equal("QUOTE_STALE", await db.ReservationRequests.Where(x => x.Id == id).Select(x => x.Code).SingleAsync());
+            var expected = reason is "expiry" or "policy" or "coverage" ? "QUOTE_STALE" : "OWNER_CONTRACT_INVALID";
+            Assert.Equal(expected, await db.ReservationRequests.Where(x => x.Id == id).Select(x => x.Code).SingleAsync());
             Assert.Equal("ABORTING", await db.Set<ReservationFacilityDependency>().Where(x => x.WorkflowId == id).Select(x => x.State).SingleAsync());
             Assert.False(await db.Reservations.AnyAsync(x => x.Id == id));
         }
     }
+    [QuoteDatabaseFact]
+    public async Task OnlyTheRequestedIntervalCanResolveThePendingSlotBranch()
+    {
+        await using var services = Services();
+        var id = await Capture(services, Guid.NewGuid());
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var row = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == id);
+        var expected = new SlotCheckV1(id, id, row.AccountId, row.Fingerprint, slot, start, Intent.End);
+        await mediator.Send(new ProcessAdmissionSignal(id, new StartQuoteAdmission(id)));
+        var dispatched = await db.Set<OutboxMessage>().SingleAsync(m => m.CorrelationId == id && m.MessageType.Contains("SlotCheckV1"));
+        using var envelope = JsonDocument.Parse(dispatched.Body);
+        Assert.Equal(expected, envelope.RootElement.GetProperty("message").Deserialize<SlotCheckV1>(JsonSerializerOptions.Web));
+
+        var oldRequest = JsonSerializer.SerializeToNode(expected)!.AsObject();
+        oldRequest.Remove("Start");
+        oldRequest.Remove("End");
+        var oldEcho = oldRequest.Deserialize<SlotCheckV1>()!;
+        foreach (var echo in new[] { oldEcho, expected with { Start = default }, expected with { End = default },
+            expected with { Start = expected.End }, expected with { End = expected.End.AddMinutes(1) } })
+            await mediator.Send(new ProcessAdmissionSignal(id, new SlotDecisionV1(echo, "ELIGIBLE", site, tenant)));
+        Assert.Equal("PENDING", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.SlotCheck).SingleAsync());
+
+        await mediator.Send(new ProcessAdmissionSignal(id, new SlotDecisionV1(expected, "INELIGIBLE", null, null)));
+        await mediator.Send(new ProcessAdmissionSignal(id, new SlotDecisionV1(expected, "ELIGIBLE", site, tenant)));
+        await Send(services, new CommitQuoteHoldCommand(id));
+        Assert.Equal("SLOT_INELIGIBLE", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.Code).SingleAsync());
+        Assert.False(await db.Reservations.AnyAsync(r => r.Id == id));
+
+        var next = await Capture(services, Guid.NewGuid());
+        var pending = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == next);
+        var decision = new SlotDecisionV1(expected with { WorkflowId = next, AttemptId = next, Fingerprint = pending.Fingerprint },
+            "ELIGIBLE", site, tenant);
+        Assert.False(JsonSerializer.SerializeToElement(decision, JsonSerializerOptions.Web).TryGetProperty("version", out _));
+        await mediator.Send(new ProcessAdmissionSignal(next, decision));
+        await mediator.Send(new ProcessAdmissionSignal(next, decision with { SiteId = Guid.NewGuid() }));
+        var accepted = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == next);
+        Assert.Equal("SUCCEEDED", accepted.SlotCheck);
+        Assert.Equal(site, accepted.ResolvedSiteId);
+        Assert.Equal(tenant, accepted.ResolvedTenantId);
+    }
+
+    [QuoteDatabaseFact]
+    public async Task UnrelatedBackupAddedAfterReviewAllowsTheAcceptedSlotHold()
+    {
+        await using var services = Services();
+        var original = await ReadProofAsync(AccountId!.Value, quoteId, quoteVersion, default);
+        unrelatedSlot = Guid.NewGuid();
+        var id = await Prepare(services, Guid.NewGuid());
+        await Send(services, new CommitQuoteHoldCommand(id));
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var held = await db.Reservations.SingleAsync(r => r.Id == id);
+        Assert.Equal(original.Binding.RequestedSlotId, held.ActiveClaimSlotId);
+        Assert.Equal(original.QuoteId, held.QuoteId);
+        Assert.Equal(original.DepositAmount, held.DepositAmount);
+    }
+
+    [QuoteDatabaseFact]
+    public async Task WrongAcquisitionTokenCannotSupplyHoldEvidence()
+    {
+        await using var services = Services();
+        wrongToken = true;
+        var error = await Assert.ThrowsAsync<ReservationGateException>(() => Prepare(services, Guid.NewGuid()));
+        Assert.Equal("OWNER_CONTRACT_INVALID", error.Code);
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var dependency = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.SiteId == site);
+        Assert.Equal("PREPARING", dependency.State);
+        Assert.Null(dependency.SnapshotFingerprint);
+        Assert.False(await db.Reservations.AnyAsync(r => r.QuoteId == quoteId));
+    }
+
     private async Task<Guid> SeedTimedHold(ServiceProvider services, bool late, bool zero)
     {
         covered = zero;
@@ -287,7 +384,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
             "seeded-timed-hold", created);
         request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), created, true, created);
         request.RecordPlate(true, plate, 1, created);
-        request.RecordSlot(true, site, tenant, "facility-1");
+        request.RecordSlot(true, site, tenant);
         var policy = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ResolveReservationPoliciesQuery(tenant, site, created));
         var booking = ReservationRow.PrepareQuote(request.Id, request.AccountId, plate, tenant, site, slot, "PAYOS",
             start, Intent.End, Intent.End.AddMinutes(1), created, h, 100, zero ? 100 : 0, zero ? 0 : 100, "VND",
@@ -451,7 +548,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var policy = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ResolveReservationPoliciesQuery(tenant, site, now));
         var policyJson = JsonSerializer.Serialize(policy);
         var review = ReservationTerms.Issue(termsId, request.AccountId, "legacy-selection", intent.TermsVersion, start,
-            JsonSerializer.Serialize(new BookingTermsSnapshot(commercial, new(tenant, site, slot, facilityVersion, true, true),
+            JsonSerializer.Serialize(new BookingTermsSnapshot(commercial, new(tenant, site, slot, SnapshotVersion, true, true),
                 policyJson, platform, 1, sitePolicy, 1)));
         review.Accept(request.Id);
         var booking = ReservationRow.Prepare(request.Id, request.Id, request.AccountId, vehicle, tenant, site, slot,

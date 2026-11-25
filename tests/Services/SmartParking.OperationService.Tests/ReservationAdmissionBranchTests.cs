@@ -20,14 +20,28 @@ public sealed class ReservationAdmissionBranchTests
         {
             case "account": request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now, false, Now); break;
             case "plate": request.RecordPlate(false, "51A12345", null, Now); break;
-            case "slot": request.RecordSlot(false, null, null, null); break;
+            case "slot": request.RecordSlot(false, null, null); break;
         }
         var before = ReservationProgress.From(request, null);
         request.RecordPlate(true, "51A12345", 1, Now);
-        request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid(), "revision");
+        request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
         Assert.False(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now, true, Now));
         Assert.Equal(before, ReservationProgress.From(request, null));
         Assert.Equal("REJECTED", request.State);
+    }
+
+    [Fact]
+    public void HeldTokenRequiresTheSameSnapshotOnReplay()
+    {
+        var token = ReservationFacilityDependency.Prepare(Guid.NewGuid(), Guid.NewGuid(), "ADMISSION",
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "intent", Now.AddMinutes(1), Now);
+        var original = """{"complete":true}""";
+        var changed = """{"complete":false}""";
+        token.RecordHeld(original, FacilityDependencyProtocol.Fingerprint(original), Now);
+        token.RecordHeld(original, FacilityDependencyProtocol.Fingerprint(original), Now);
+        Assert.Throws<InvalidOperationException>(() =>
+            token.RecordHeld(changed, FacilityDependencyProtocol.Fingerprint(changed), Now));
+        Assert.Equal(original, token.SnapshotJson);
     }
 
     [Fact]
@@ -35,7 +49,7 @@ public sealed class ReservationAdmissionBranchTests
     {
         var request = NewRequest();
         var originalAttempt = request.AttemptId;
-        request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid(), "v1");
+        request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
         request.Advance(Now.AddSeconds(5));
         Assert.True(request.Advance(Now.AddSeconds(15)));
         Assert.False(request.AcceptDecision(originalAttempt, 1, Guid.NewGuid(), Now, true, Now.AddSeconds(16)));

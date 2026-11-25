@@ -38,7 +38,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
     }
 
     private ReservationQuoteBinding Expected => new(AccountId!.Value, "51A12345", tenant, site, slot,
-        start, start.AddHours(1), "PAYOS", new(false, "none-v1"), "facility-rev", platformPolicy, 1, sitePolicy, 2);
+        start, start.AddHours(1), "PAYOS", new(false, "none-v1"), platformPolicy, 1, sitePolicy, 2);
 
     private PaymentReservationQuote Quote => new(Guid.NewGuid(), "quote-1", "ISSUED", start.AddMinutes(-15),
         Expected, "tariff-7", 25000, 0, 25000, "VND", "FULL", "Full prepayment");
@@ -60,7 +60,9 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
     [InlineData("ok", null)]
     [InlineData("missing-slot", "SLOT_NOT_FOUND")]
     [InlineData("missing-facility-route", "OWNER_UNAVAILABLE")]
-    [InlineData("ineligible", "SLOT_INELIGIBLE")]
+    [InlineData("wrong-slot", "OWNER_CONTRACT_INVALID")]
+    [InlineData("empty-site", "OWNER_CONTRACT_INVALID")]
+    [InlineData("empty-tenant", "OWNER_CONTRACT_INVALID")]
     [InlineData("missing-payment-route", "OWNER_UNAVAILABLE")]
     [InlineData("expired", "QUOTE_STALE")]
     public async Task ReviewOnlyReadsFacilityAndIssuesOneBoundQuote(string scenario, string? errorCode)
@@ -80,7 +82,8 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
                 return new(HttpStatusCode.NotFound) { Content = JsonContent.Create(new
                     { code = scenario == "missing-slot" ? "SLOT_NOT_FOUND" : "NOT_FOUND" }) };
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(
-                new FacilityBookingFacts(tenant, site, slot, "facility-rev", scenario != "ineligible", true)) };
+                new SelectedSlotMetadata(scenario == "wrong-slot" ? Guid.NewGuid() : slot,
+                    scenario == "empty-site" ? Guid.Empty : site, scenario == "empty-tenant" ? Guid.Empty : tenant)) };
         });
         var paymentHttp = new StubHttpMessageHandler(request =>
         {
@@ -106,6 +109,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
         if (errorCode is null)
         {
             var result = await handler.Handle(input, default);
+            Assert.DoesNotContain("facilityVersion", paymentHttp.LastBody!, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(Expected, JsonSerializer.Deserialize<ReservationQuoteBinding>(
                 paymentHttp.LastBody!, JsonSerializerOptions.Web));
             Assert.Equal(issued.QuoteId, result.QuoteId);
@@ -118,7 +122,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
         {
             var error = await Assert.ThrowsAsync<ReservationGateException>(() => handler.Handle(input, default));
             Assert.Equal(errorCode, error.Code);
-            if (scenario is "missing-slot" or "missing-facility-route" or "ineligible")
+            if (scenario is "missing-slot" or "missing-facility-route" or "wrong-slot" or "empty-site" or "empty-tenant")
                 Assert.Null(paymentHttp.LastRequest);
         }
     }
@@ -133,7 +137,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
             expected with { TenantId = Guid.NewGuid() }, expected with { SiteId = Guid.NewGuid() },
             expected with { RequestedSlotId = Guid.NewGuid() }, expected with { End = start.AddHours(2) },
             expected with { Start = start.AddMinutes(5) }, expected with { PaymentMethod = "CASH" },
-            expected with { Coverage = new(true, "plan-2") }, expected with { FacilityVersion = "changed" },
+            expected with { Coverage = new(true, "plan-2") }, expected with { PlatformPolicyVersion = 4 },
             expected with { SitePolicyVersion = 3 }
         ];
         foreach (var changed in changes)

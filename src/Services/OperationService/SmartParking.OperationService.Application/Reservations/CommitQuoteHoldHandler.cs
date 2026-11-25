@@ -45,7 +45,6 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
                 proof.Binding.TenantId != request.ResolvedTenantId || proof.Binding.SiteId != request.ResolvedSiteId ||
                 proof.Binding.Start != intent.Start || proof.Binding.End != intent.End || proof.Binding.PaymentMethod != intent.PaymentMethod)
                 throw BookingContracts.InvalidOwner();
-            if (proof.Binding.FacilityVersion != request.FacilityVersion) throw Stale();
             if (proof.Binding.Coverage is null) throw BookingContracts.InvalidOwner();
             proof.ValidateFor(proof.Binding, now);
             if (token is null)
@@ -90,7 +89,7 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         var now = await bookings.DatabaseNowAsync(ct);
         var interval = new ReservationInterval(intent.Start, intent.End);
         var current = resources.Booking;
-        if (!current.EligibleCarSlot || !current.ParticipatesInStructureGuard || current.Version != request.FacilityVersion ||
+        if (!current.EligibleCarSlot || !current.ParticipatesInStructureGuard ||
             current.SiteId != binding.SiteId || current.TenantId != binding.TenantId || current.SlotId != intent.RequestedSlotId) throw Stale();
         var policy = await mediator.Send(new ResolveReservationPoliciesQuery(binding.TenantId, binding.SiteId, now), ct);
         var expected = binding with { Coverage = subscriptions.Evaluate(intent.LicensePlate, binding.TenantId, binding.SiteId, interval),

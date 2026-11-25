@@ -650,3 +650,44 @@ dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.Facil
 **B1 VERIFIED.** Automatic scope suggestion, automatic allocation/reallocation, Facility backup configuration retirement, walk-in producer/simulation, D08 reconciliation, B2–B4 and C–E remain deferred or separately approval-gated. Shared Facility eligibility/token handling remains in use by the current callers. There is no development database reset or migration required for B1.
 
 Suggested commit subject: `refactor(reservations): simplify availability to named-slot claims [SPARK-273]`.
+
+## 25 November 2026 — B2 Operations implementation
+
+B1 baseline `a8bab041f88e0a56f1d8376a6773805189f9ee67` on `feature/SPARK-273-driver-book-parking-ahead-of-arrival`. The user approved the revised Operations scope and coordinated owner contracts, then separately approved updating only the assertions in the Facility endpoint test. Index empty. The pre-existing router and SPARK-243 session edits and untracked user instructions and walk-in occupancy handoff were preserved.
+
+Quote review now takes the exact slot, site and tenant identities from the signed slot-only Facility GET. It constructs the Payment binding from that metadata, authenticated Account, canonical plate, normalized UTC interval, method, coverage and operational policy revisions. A typed missing slot, an invalid identity response and dependency unavailability have distinct handling. Review has no admission effect. The Saga sends the persisted start and end, checks the entire echoed slot envelope and records the first matching decision for the pending branch. Facility evaluates the parking interval; Operations applies its accepted conflict buffer locally.
+
+The hold handler checks the immutable Payment proof directly against the Driver intent and the joined Account, Vehicle and Facility evidence, then checks current policy/coverage, expiry and local availability under the existing guards. Both quoted Facility version comparisons are removed. The temporary ADMISSION token retains exact intent and selected identities, held-snapshot and completion fingerprints, deadline, selected-slot usability checks and durable abort/complete. The site-qualified legacy facts read and confirmation token still use the original snapshot. B1 availability, H, single quote binding and atomic reservation/outbox persistence remain in service.
+
+### Exact B2 file inventory
+
+All paths below are relative to the repository root.
+
+| Directory | Files and purpose |
+|---|---|
+| `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/` | Add `SelectedSlotMetadata.cs`. Modify `IReservationFacilityOwner.cs` and `ReviewReservationQuoteHandler.cs` for review metadata, `ReservationQuoteBinding.cs` for the Payment wire, `ProcessAdmissionSignalHandler.cs` for interval dispatch/decision handling, and `CommitQuoteHoldHandler.cs` for independent proof and token checks. |
+| `src/Services/OperationService/SmartParking.OperationService.Application/Contracts/ReservationAdmission/` | `SlotCheckV1.cs` adds UTC Start/End. `SlotDecisionV1.cs` removes Version. |
+| `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/` | `ReservationRequest.cs` removes the obsolete field and RecordSlot parameter. |
+| `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/` | `ReservationFacilityClient.cs` reads the smaller slot-only response. |
+| `scripts/database/microservices/` | `03b-reservation-operations-service-db.sql` removes only the nullable facility_version declaration from reservation_requests. EF maps the remaining fields by convention. Fresh initialization was verified. An existing database can retain the unused column. No migration, reset, data rewrite or manual cleanup is required for B2. |
+| `tests/Services/SmartParking.OperationService.Tests/` | `PlateQuoteReviewTests.cs` verifies metadata and the Payment wire. `ReservationAdmissionBranchTests.cs` covers terminal fencing and same-token replay. `ReservationSagaTransportTests.cs` updates the wire assertions. `QuoteBookingDatabaseTests.cs` covers direct binding mismatches, actual interval dispatch/echo handling, inventory independence, token identity and hold effects. `QuoteBookingDatabaseTests.CapacityConcurrency.cs` adapts the existing B1 fixtures. `QuoteBookingDatabaseTests.Paired.cs` updates fresh reviewed issuance in the paired fixture. |
+| `tests/Services/SmartParking.FacilityService.Tests/` | `ReservationSlotEndpointTests.cs` asserts the three identities returned by the Operations client. The producer fixture still supplies legacy booking facts. |
+| `docs/03-design/api/` | `reservation-first-slice-api-design.md` and `reservation-facility-dependency-api-design.md` distinguish the B2 consumer and pending producers. |
+| `docs/05-project-management/handoffs/SPARK-273 — Reservation/` | Correct `2026-11-19-SPARK-273-payment-authority.md`. Add [SPARK-273-B2-Facility-Handoff.md](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Facility-Handoff.md>) and [SPARK-273-B2-Payment-Handoff.md](<../../../docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Payment-Handoff.md>). |
+| `ai/tasks/active/` | `TASK-SPARK-273-SESSION-20261108.md` records approval, implementation, verification and remaining gates. |
+
+### Verification
+
+```powershell
+dotnet build SmartParking.slnx --no-restore --nologo -m:1
+dotnet test tests/Services/SmartParking.OperationService.Tests/SmartParking.OperationService.Tests.csproj --no-build --nologo -m:1
+dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --no-build --nologo -m:1 --filter FullyQualifiedName~ReservationSlotEndpointTests
+```
+
+- Solution build succeeded with zero errors and 35 warnings using restored assets. There were 31 NU1900 vulnerability-feed warnings, one existing IoT NU1510, two CS9107 in unchanged Operations repositories and one xUnit1031 in an unchanged Payment test.
+- Operations passed 102, failed 0, skipped 2. A fresh SCRAM-authenticated PostgreSQL 18 cluster on loopback was initialized with the original Operations initializer and supplied through SMARTPARK_QUOTE_TEST_DB. The sandbox initially denied local connections. The rerun with loopback access completed, stopped the isolated cluster and removed its generated directory. Facility endpoint filter passed 1, failed 0, skipped 0 after the sandboxed testhost initially timed out.
+- The regression cases exercise signed review with controlled HTTP owners, capture of the serialized slot check in the actual EF outbox, missing/default/mismatched echoes, first accepted reply, controlled Facility rejection and late success, direct scope/interval/plate/Account/method/policy/coverage mismatches, wrong token, contradictory replay, and an unrelated inventory change followed by successful booking of the original slot at its accepted amount. Real PostgreSQL exercises competing named claims, rollback, single quote binding, correlated hold outbox, exact H, paid/zero and historical terms behavior. Scope of proof is Operations plus the endpoint client assertion.
+- Skipped `DurableCaptureOwnerRepliesTerminalFencingAndRestart` and `SignedQuoteOrderAndVerifiedTransfersReachGuardedConfirmation`. Dedicated broker/vhost and paired Payment fixtures were not configured. The current Payment validator still requires FacilityVersion. The current Facility consumer lacks the interval-aware producer and the authoritative scoped/open-ended maintenance source remains to be demonstrated. Activation requires the same real slot to yield different results for different intervals, and a fresh signed Payment issuance/proof and order workflow. No live payment or Postman execution.
+- Temporary QuoteVersion retention is required by reviewed-order routing and financial handling of the rq1- prefix. Reassess QuoteId and authoritative Payment state once legacy creation, order routing and financial evidence have been accounted for. B3/B4 each require explicit approval. D08 affected-slot ordering, C settlement and subsequent worker retirement remain deferred.
+
+**B2 OPERATIONS VERIFIED — FACILITY AND PAYMENT INTEGRATION PENDING**. Suggested commit: `refactor(reservations): bind admission directly to the accepted quote [SPARK-273]`. No staging or commit.

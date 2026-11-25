@@ -31,7 +31,6 @@ public sealed class ReservationRequest
     public string? SlotCheck { get; private set; }
     public Guid? ResolvedSiteId { get; private set; }
     public Guid? ResolvedTenantId { get; private set; }
-    public string? FacilityVersion { get; private set; }
     public string? VehicleBindingState { get; private set; }
     public long? VehicleBindingRevision { get; private set; }
     public DateTimeOffset? VehicleBindingCheckedAt { get; private set; }
@@ -57,14 +56,13 @@ public sealed class ReservationRequest
         CheckJoin();
     }
 
-    public void RecordSlot(bool eligible, Guid? site, Guid? tenant, string? version)
+    public void RecordSlot(bool eligible, Guid? site, Guid? tenant)
     {
         if (State != "CHECKING" || SlotCheck != "PENDING") return;
         SlotCheck = eligible ? "SUCCEEDED" : "REJECTED";
         if (!eligible) { Reject("SLOT_INELIGIBLE"); return; }
         ResolvedSiteId = site;
         ResolvedTenantId = tenant;
-        FacilityVersion = version;
         CheckJoin();
     }
 

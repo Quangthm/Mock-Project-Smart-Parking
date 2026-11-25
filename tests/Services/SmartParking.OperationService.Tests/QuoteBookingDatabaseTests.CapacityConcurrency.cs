@@ -28,7 +28,7 @@ public sealed partial class QuoteBookingDatabaseTests
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var now = DateTimeOffset.UtcNow;
         var token = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.WorkflowId == request);
-        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, facilityVersion, true, true),
+        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, SnapshotVersion, true, true),
             [new(slot, unit, "CAR", true, true, fixedBackup, [unit], ["CAR"])], [new(null, "CAR", 1)], true);
         var json = FacilityDependencyProtocol.SerializeSnapshot(snapshot, FacilityDependencyProtocol.Intent(token));
         db.Entry(token).Property(t => t.SnapshotJson).CurrentValue = json;
@@ -192,7 +192,7 @@ public sealed partial class QuoteBookingDatabaseTests
                 "PAYOS", from, until, until, at, at.AddMinutes(5), 100, 0, 100, "VND",
                 """{"Values":{"OCCUPANCY_VALIDITY_TIMESPAN":240}}""", Guid.NewGuid(), "q1", start, "tariff", "none", false);
             // Supply the real admission handler with only the selected slot's owner evidence.
-            var snapshot = new FacilityResourceSnapshot(new(tenant, site, selected, facilityVersion, true, true),
+            var snapshot = new FacilityResourceSnapshot(new(tenant, site, selected, SnapshotVersion, true, true),
                 [new(selected, unit, "CAR", true, true, false, [unit], ["CAR"])], [], true);
             try
             {
@@ -206,7 +206,7 @@ public sealed partial class QuoteBookingDatabaseTests
 
             request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), at, true, at);
             request.RecordPlate(true, canonicalPlate, 1, at);
-            request.RecordSlot(true, site, tenant, "eligible");
+            request.RecordSlot(true, site, tenant);
             request.AttachQuoteHold(row.Id);
             db.Add(request);
             await bookings.AddAsync(row, ct);

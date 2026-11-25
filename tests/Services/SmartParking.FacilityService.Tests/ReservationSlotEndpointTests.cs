@@ -58,8 +58,7 @@ public sealed class ReservationSlotEndpointTests : IRequestHandler<ReadBookingFa
         }).Build();
         var client = new ReservationFacilityClient(http, configuration);
         var result = await client.ResolveSlotAsync(slot.SlotId, default);
-        Assert.Equal((slot.SiteId, slot.TenantId, slot.Version), (result.SiteId, result.TenantId, result.Version));
-        Assert.True(result.EligibleCarSlot);
+        Assert.Equal((slot.SlotId, slot.SiteId, slot.TenantId), (result.SlotId, result.SiteId, result.TenantId));
         var error = await Assert.ThrowsAsync<ReservationGateException>(() => client.ResolveSlotAsync(Guid.NewGuid(), default));
         Assert.Equal((404, "SLOT_NOT_FOUND"), (error.StatusCode, error.Code));
     }
