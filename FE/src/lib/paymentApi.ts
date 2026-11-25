@@ -132,7 +132,18 @@ async function invoiceRequest(path: string, accept: string, signal?: AbortSignal
   throw new Error(errors[response.status] ?? "Payment Service could not load invoice information. Please try again.")
 }
 
+export interface ReservationCheckoutState {
+  state: "MISSING" | "PAYABLE" | "CLOSED" | "PAID" | "FAILED" | "STANDALONE" | "HISTORICAL"
+  holdExpiresAt: string | null
+  reservationId: string | null
+  orderId: string | null
+}
+
 export const paymentApi = {
+  reservationCheckout: (reservationId: string) => paymentRequest<ReservationCheckoutState>(
+    '/reservations/' + encodeURIComponent(reservationId) + '/checkout-state', { method: "GET" }),
+  orderReservation: (orderId: string) => paymentRequest<ReservationCheckoutState>(
+    '/orders/' + encodeURIComponent(orderId) + '/reservation', { method: "GET" }),
   async invoiceHistory(filters: { pageNumber: number; status: string; fromDate: string; toDate: string }, signal?: AbortSignal): Promise<DriverInvoicePage> {
     const query = new URLSearchParams({ pageNumber: String(filters.pageNumber), pageSize: "10" })
     if (filters.status) query.set("status", filters.status)

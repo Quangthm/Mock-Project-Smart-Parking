@@ -25,11 +25,6 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationAdmissionState>().HasKey(x => x.CorrelationId);
         Map<ReservationAdmissionState>(modelBuilder, "reservation_admission_sagas");
         Map<ReservationRequest>(modelBuilder, "reservation_requests");
-        Map<ReservationFacilityDependency>(modelBuilder, "reservation_facility_dependencies");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.OutcomeJson).HasColumnType("jsonb");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.Version).IsConcurrencyToken();
-        modelBuilder.Entity<ReservationFacilityDependency>().HasIndex(x => new { x.WorkflowId, x.Purpose }).IsUnique();
         modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedPricingSnapshot).HasColumnType("jsonb");
         Map<OperationalPolicyRow>(modelBuilder, "operational_policies");
         modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.OverrideBounds).HasColumnType("jsonb");

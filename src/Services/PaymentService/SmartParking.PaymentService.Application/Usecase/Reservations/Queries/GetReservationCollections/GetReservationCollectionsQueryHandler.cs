@@ -52,7 +52,7 @@ public sealed class GetReservationCollectionsQueryHandler
                 TenantId: order.TenantId,
                 SiteId: order.SiteId,
                 QuoteId: order.QuoteId ?? Guid.Empty,
-                TermsVersion: order.TermsVersion ?? "1",
+                TermsVersion: order.TermsVersion,
                 Amount: tx.Amount,
                 Currency: order.ReviewedCurrency ?? "VND",
                 Evidence: reviewed ? new(1, tx.Id, Guid.Parse(order.IdempotencyKey!), tx.Id,

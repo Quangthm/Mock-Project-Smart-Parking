@@ -64,8 +64,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO reservations (
     id, request_id, vehicle_id, terms_id, terms_version, selected_payment_method,
-    booked_amount, deposit_amount, currency, payment_order_id, order_provisioning_state,
-    zero_price_acceptance_state, confirmation_state, confirmation_effect_id,
+    booked_amount, deposit_amount, currency, payment_order_id, confirmation_state, confirmation_effect_id,
     confirmation_evaluated_at, tenant_id, site_id, account_id, target_slot_id,
     original_plate, normalized_plate, vehicle_type, expected_start_time, expected_end_time,
     confirmed_at, status, hold_expires_at, accepted_pricing_snapshot,
@@ -74,9 +73,6 @@ INSERT INTO reservations (
 SELECT
     reservation_id, request_id, vehicle_id, terms_id, 'demo-spark-286', 'PAYOS',
     booked_amount, deposit_amount, 'VND', order_id,
-    CASE WHEN order_id IS NOT NULL THEN 'CREATED'
-         WHEN booked_amount = 0 THEN 'NOT_REQUIRED' ELSE 'CLOSED_NO_ORDER' END,
-    CASE WHEN booked_amount = 0 THEN 'ACCEPTED' ELSE 'NOT_REQUIRED' END,
     CASE WHEN confirmed_at IS NOT NULL THEN 'CONFIRMED' ELSE 'NO_ENTITLEMENT' END,
     CASE WHEN confirmed_at IS NOT NULL THEN confirmation_id END, confirmed_at,
     :'tenant_id'::uuid, :'site_id'::uuid, :'driver_account_id'::uuid, requested_slot_id,

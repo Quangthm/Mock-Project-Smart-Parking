@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
@@ -9,6 +8,7 @@ import {
   classifyPaymentStatus,
   isPaymentOrderId,
   paymentApi,
+  type ReservationCheckoutState,
   type PaymentStatusResponse,
 } from "../../../lib/paymentApi"
 import { reservationsApi } from "../../../lib/reservationsApi"
@@ -28,7 +28,7 @@ export function PaymentResultPage() {
   return <AccountPaymentResult key={`${getSessionGeneration()}:${user?.id ?? ""}:${window.location.search}`} />
 }
 
-const closedReservations = new Set(["CANCELLED", "EXPIRED", "UNFULFILLABLE", "NO_SHOW", "REJECTED"])
+const closedReservations = new Set(["CANCELLED", "EXPIRED", "UNFULFILLABLE", "INVALIDATED", "NO_SHOW", "REJECTED"])
 
 function AccountPaymentResult() {
   const { user, setView } = useApp()
@@ -44,36 +44,35 @@ function AccountPaymentResult() {
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
 
-  const [lookup, setLookup] = useState<{ orderId: string; requestId: string | null } | null>(null)
+  const [lookup, setLookup] = useState<{ orderId: string; requestId: string | null; state: ReservationCheckoutState["state"] } | null>(null)
   const [reservationError, setReservationError] = useState("")
 
   const boundOrder = orderId || detail?.orderId || ""
-  const remembered = paymentApi.rememberedCheckout(boundOrder)
-  const knownStandalone = remembered?.standalone === true &&
-    (!transactionId || transactionId.toLowerCase() === remembered.paymentTransactionId.toLowerCase())
-  // The order binding from Operations is authoritative; the query string can be edited.
   const requestId = lookup?.orderId === boundOrder ? lookup.requestId : null
   const progress = useReservationProgress(requestId)
-  const reservation = progress.snapshot?.orderId?.toLowerCase() === boundOrder.toLowerCase() ? progress.snapshot : null
+  const reservation = requestId && progress.snapshot?.reservationId === requestId ? progress.snapshot : null
   const reservationState = reservation?.reservationState
   useEffect(() => {
-    if ((knownStandalone && !hint) || user?.role !== "driver" || !isPaymentOrderId(boundOrder)) return
+    if (user?.role !== "driver" || !isPaymentOrderId(boundOrder)) return
     let active = true
     const generation = getSessionGeneration()
     const current = () => active && generation === getSessionGeneration()
-    void reservationsApi.requestForOrder(boundOrder).then(({ requestId }) => {
+    void paymentApi.orderReservation(boundOrder).then(async ({ state, reservationId }) => {
+      if (!current()) return
+      const requestId = state === "HISTORICAL" ? (await reservationsApi.requestForOrder(boundOrder)).requestId : reservationId
+      if (state === "MISSING" || (!requestId && state !== "STANDALONE")) throw new Error("Order unavailable.")
       if (current()) {
         if (requestId !== null && (typeof requestId !== "string" || !isPaymentOrderId(requestId))) {
           throw new Error("Invalid reservation reference.")
         }
-        setLookup({ orderId: boundOrder, requestId })
+        setLookup({ orderId: boundOrder, requestId, state })
         setReservationError("")
       }
     }).catch(() => {
       if (current()) setReservationError("Could not load the reservation confirmation. Check Current Booking.")
     })
     return () => { active = false }
-  }, [boundOrder, knownStandalone, hint, user?.role])
+  }, [boundOrder, refresh, user?.role])
 
   // Payment status is independent of reservation confirmation.
   useEffect(() => {
@@ -138,7 +137,7 @@ function AccountPaymentResult() {
   }, [orderId, refresh, transactionId])
 
   // Only standalone Payment workflows keep their bounded transaction-status retries.
-  const standalone = !hint && (knownStandalone || user?.role !== "driver" ||
+  const standalone = !hint && (user?.role !== "driver" ||
     (lookup?.orderId === boundOrder && lookup.requestId === null))
   const retries = useRef(0)
   useEffect(() => {
@@ -170,7 +169,7 @@ function AccountPaymentResult() {
 
   const confirmed = reservationState === "CONFIRMED"
   const closed = reservationState && closedReservations.has(reservationState)
-  const orderClosed = reservation?.paymentReadiness === "CLOSED"
+  const orderClosed = requestId && lookup?.state === "CLOSED"
   const title = confirmed ? "Reservation confirmed" : closed ? `Reservation ${formatStatus(reservationState).toLowerCase()}`
     : orderClosed ? "Reservation payment order closed"
     : requestId && result === "success" ? "Payment received. Awaiting reservation confirmation." : paymentTitle

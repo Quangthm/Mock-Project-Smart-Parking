@@ -22,7 +22,7 @@ function reservationStamp(value: string, formatter: Intl.DateTimeFormat) {
   return Number.isFinite(Date.parse(value)) ? formatter.format(new Date(value)) : "Unavailable"
 }
 const reservationTone: Record<string, BadgeTone> = {
-  COMPLETED: "success", PENDING_PAYMENT: "warning", NO_SHOW: "danger", UNFULFILLABLE: "danger",
+  COMPLETED: "success", PENDING_PAYMENT: "warning", NO_SHOW: "danger", UNFULFILLABLE: "danger", INVALIDATED: "danger",
   CONFIRMED: "primary", ALLOCATED: "primary", PARKING: "primary",
 }
 

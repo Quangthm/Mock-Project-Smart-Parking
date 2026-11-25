@@ -1,3 +1,4 @@
+using SmartParking.Contracts.ReservationPayments;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,8 +51,14 @@ public static class InfrastructureDependencyInjection
 
         var useInMemory = configuration.GetValue<bool>("RabbitMQ:UseInMemory");
 
+        services.AddScoped<SmartParking.PaymentService.Application.Reservations.IReservationFinancialNotifications, ReservationFinancialNotifications>();
         services.AddMassTransit(x =>
         {
+            if (configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
+            {
+                x.AddConsumer<EnsureReservationOrderConsumer>().Endpoint(e => e.Name = ReservationPaymentEndpoints.EnsureOrder);
+                x.AddConsumer<ReservationDispositionConsumer>().Endpoint(e => e.Name = ReservationPaymentEndpoints.Disposition);
+            }
             configureOutbox?.Invoke(x);
 
             if (useInMemory)

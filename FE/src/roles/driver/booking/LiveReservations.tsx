@@ -48,13 +48,22 @@ export function LiveReservations({ accountScope }: { accountScope: string }) {
 
 function UpcomingReservation({ booking }: { booking: OwnReservation }) {
   const [paying, setPaying] = useState(false)
-  const { snapshot, connected, reconnect } = useReservationProgress(
-    booking.state === "PENDING_PAYMENT" ? booking.requestId : undefined,
+  const { snapshot, checkout, connected, reconnect } = useReservationProgress(
+    booking.state === "PENDING_PAYMENT" ? booking.requestId : undefined, true,
   )
   const item = snapshot?.reservationId === booking.reservationId ? {
     ...booking, state: snapshot.reservationState ?? booking.state, orderId: snapshot.orderId,
     holdExpiresAt: snapshot.holdExpiresAt,
   } : booking
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!item.holdExpiresAt) return
+    const timer = window.setTimeout(() => setNow(Date.now()), Math.max(0, Date.parse(item.holdExpiresAt) - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [item.holdExpiresAt])
+  const payable = checkout && checkout !== "UNAVAILABLE" && checkout.state === "PAYABLE" && checkout.holdExpiresAt &&
+    Date.parse(checkout.holdExpiresAt) === Date.parse(item.holdExpiresAt ?? "") &&
+    item.holdExpiresAt && Date.parse(item.holdExpiresAt) > now ? checkout.orderId : null
   const lot = store.getLots().find(lot => lot.id === item.siteId)
   const slot = lot?.slots.find(slot => slot.id === item.requestedSlotId)
   return <article className="card" style={{ display: "grid", gap: 16 }}>
@@ -66,10 +75,10 @@ function UpcomingReservation({ booking }: { booking: OwnReservation }) {
     </div>
     {item.state === "PENDING_PAYMENT" && <>
       {item.holdExpiresAt && <p>Payment deadline: {new Date(item.holdExpiresAt).toLocaleString()}</p>}
-      {!connected ? <button type="button" className="btn-outline" onClick={reconnect}>Reconnect for payment updates</button> : item.orderId && snapshot?.paymentReadiness === "AVAILABLE" ? <>
+      {!connected || checkout === "UNAVAILABLE" ? <button type="button" className="btn-outline" onClick={reconnect}>Reconnect for payment updates</button> : payable ? <>
         <button type="button" className="btn-outline" aria-expanded={paying} onClick={() => setPaying(value => !value)}>{paying ? "Hide payment" : "View payment"}</button>
-        {paying && <PaymentCheckout key={item.orderId} showMethodPicker={false} reservationOrderId={item.orderId} reservationRequestId={item.requestId ?? undefined} holdExpiresAt={item.holdExpiresAt} />}
-      </> : <p role="status">Preparing secure payment…</p>}
+        {paying && <PaymentCheckout key={payable} showMethodPicker={false} reservationOrderId={payable} reservationRequestId={item.requestId ?? undefined} holdExpiresAt={item.holdExpiresAt} />}
+      </> : <p role="status">{checkout?.state === "PAID" ? "Payment received" : checkout?.state === "CLOSED" || checkout?.state === "FAILED" ? formatStatus(checkout.state) : "Preparing secure payment…"} </p>}
     </>}
   </article>
 }

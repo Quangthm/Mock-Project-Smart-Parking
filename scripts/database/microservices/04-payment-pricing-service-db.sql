@@ -149,7 +149,7 @@ CREATE TABLE IF NOT EXISTS reservation_quotes (
     
     tariff_id UUID,
     tariff_revision_id UUID,
-    terms_version VARCHAR(50) NOT NULL DEFAULT 'v1',
+    terms_version VARCHAR(50),
     coverage_version VARCHAR(100),
     
     valid_until TIMESTAMPTZ NOT NULL,
@@ -197,8 +197,10 @@ CREATE TABLE IF NOT EXISTS payment_orders (
          AND reviewed_method IS NOT NULL AND btrim(reviewed_method) <> ''
          AND reviewed_currency IS NOT NULL AND reviewed_currency ~ '^[A-Z]{3}$'
          AND account_id IS NOT NULL AND quote_id IS NOT NULL
-         AND terms_version IS NOT NULL AND btrim(terms_version) <> ''
-         AND idempotency_key IS NOT NULL AND btrim(idempotency_key) <> '' AND expires_at IS NOT NULL)
+         AND terms_version IS NULL
+         AND idempotency_key IS NOT NULL AND btrim(idempotency_key) <> ''
+         AND ((final_amount > 0 AND expires_at IS NOT NULL) OR
+              (final_amount = 0 AND expires_at IS NULL AND status = 'PAID' AND NOT is_provisioning_fence)))
     ),
     CONSTRAINT ck_payment_orders_provisioning_fence CHECK (
         (status IS NULL) = is_provisioning_fence AND

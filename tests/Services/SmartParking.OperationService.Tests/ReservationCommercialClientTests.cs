@@ -41,33 +41,12 @@ public sealed class ReservationCommercialClientTests
     }
 
     [Fact]
-    public async Task EnsureOrderAsync_UsesSignedOperationsTokenWithoutDriverContext()
+    public async Task CollectionsAsync_UsesSignedOperationsTokenWithoutDriverContext()
     {
         using var rsa = RSA.Create(2048);
-        DepositOrderRequest? sent = null;
-        var handler = new StubHttpMessageHandler(_ => Json(Serialize(new
-        {
-            success = true,
-            data = new
-            {
-                state = "CREATED",
-                orderId = Guid.NewGuid(),
-                acceptedRequest = Accepted(sent!)
-            }
-        })));
+        var handler = new StubHttpMessageHandler(_ => Json(Serialize(new { success = true, data = new {state = "SETTLED", collections = Array.Empty<object>()} })));
         var client = CreateClient(handler, rsa.ExportRSAPrivateKeyPem());
-        var request = NewDepositOrderRequest();
-        sent = request;
-
-        var result = await client.EnsureOrderAsync(request, CancellationToken.None);
-
-        using var body = JsonDocument.Parse(handler.LastBody!);
-        Assert.Equal(request.QuoteId, body.RootElement.GetProperty("quoteId").GetGuid());
-        Assert.Equal(request.QuoteVersion, body.RootElement.GetProperty("termsVersion").GetString());
-        Assert.False(body.RootElement.TryGetProperty("operationsTermsId", out _));
-        Assert.Equal("CREATED", result.State);
-        Assert.NotNull(result.OrderId);
-        Assert.NotEqual(Guid.Empty, result.OrderId.Value);
+        await client.CollectionsAsync(Guid.NewGuid(), Guid.NewGuid(), default);
         Assert.False(handler.LastRequest!.Headers.Contains("X-Internal-Service-Key"));
         var authorization = handler.LastRequest.Headers.Authorization;
         Assert.Equal("Bearer", authorization?.Scheme);
@@ -79,14 +58,13 @@ public sealed class ReservationCommercialClientTests
     }
 
     [Fact]
-    public async Task EnsureOrderAsync_FailsClosedWhenMachineAuthIsNotConfigured()
+    public async Task CollectionsAsync_FailsClosedWhenMachineAuthIsNotConfigured()
     {
         var handler = new StubHttpMessageHandler(_ => throw new Xunit.Sdk.XunitException("HTTP must not be called."));
         var client = CreateClient(handler);
-        var request = NewDepositOrderRequest();
 
         var error = await Assert.ThrowsAsync<ReservationGateException>(
-            () => client.EnsureOrderAsync(request, CancellationToken.None));
+            () => client.CollectionsAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None));
 
         Assert.Equal(503, error.StatusCode);
         Assert.Equal("OWNER_UNAVAILABLE", error.Code);
@@ -108,38 +86,6 @@ public sealed class ReservationCommercialClientTests
         var context = new HttpContextAccessor { HttpContext = httpContext };
         return new ReservationCommercialClient(
             new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5065/") }, context, configuration);
-    }
-
-    private static BookingSelection NewSelection()
-    {
-        var now = DateTimeOffset.UtcNow;
-        return new BookingSelection(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), now, now.AddHours(1), "PAYOS");
-    }
-
-    private static DepositOrderRequest NewDepositOrderRequest()
-    {
-        var selection = NewSelection();
-        return new DepositOrderRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            selection.SiteId, Guid.NewGuid(), "v1", 10000m, "VND", selection.PaymentMethod,
-            DateTimeOffset.UtcNow.AddMinutes(10));
-    }
-
-    private static object Accepted(DepositOrderRequest request)
-    {
-        return new
-        {
-            operationId = request.OperationId,
-            reservationId = request.ReservationId,
-            accountId = request.AccountId,
-            tenantId = request.TenantId,
-            siteId = request.SiteId,
-            quoteId = request.QuoteId,
-            termsVersion = request.QuoteVersion,
-            amount = request.Amount,
-            currency = request.Currency,
-            paymentMethod = request.PaymentMethod,
-            expiresAt = request.ExpiresAt
-        };
     }
 
     private static string Serialize(object value) => JsonSerializer.Serialize(value);

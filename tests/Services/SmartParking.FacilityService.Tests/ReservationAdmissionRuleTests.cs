@@ -69,14 +69,14 @@ public sealed class ReservationAdmissionRuleTests
     {
         var request = Request();
         Assert.True(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), true, Now.AddSeconds(2)));
-        Assert.Throws<InvalidOperationException>(() => request.AttachQuoteHold(request.Id));
+        Assert.Throws<InvalidOperationException>(() => request.CompleteAdmission(request.Id, false));
         request.RecordPlate(true, "51A12345", 7, Now.AddSeconds(3));
         request.RecordPlate(false, "51A12345", null, Now.AddSeconds(4));
         Assert.Equal("51A12345", request.VehiclePlate);
         Assert.Equal(7L, request.VehicleBindingRevision);
-        Assert.Throws<InvalidOperationException>(() => request.AttachQuoteHold(request.Id));
+        Assert.Throws<InvalidOperationException>(() => request.CompleteAdmission(request.Id, false));
         request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
-        request.AttachQuoteHold(request.Id);
+        request.CompleteAdmission(request.Id, false);
         Assert.Equal(request.Id, request.ReservationId);
         Assert.False(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), true, Now.AddSeconds(3)));
     }
@@ -89,7 +89,7 @@ public sealed class ReservationAdmissionRuleTests
         var receipt = configuration.CreateMapper().Map<ReservationReceipt>(Request());
         Assert.Null(receipt.ReservationId);
         Assert.Equal("CHECKING", receipt.State);
-        var invalid = new AdmitQuoteReservation(new("", Guid.Empty, Now, Now, "CASH", Guid.Empty, ""), Guid.Empty);
+        var invalid = new AdmitQuoteReservation(new("", Guid.Empty, Now, Now, "CASH", Guid.Empty), Guid.Empty);
         Assert.False(new AdmitQuoteReservationValidator().Validate(invalid).IsValid);
     }
 }

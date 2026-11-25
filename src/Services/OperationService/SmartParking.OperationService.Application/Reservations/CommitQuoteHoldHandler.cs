@@ -23,7 +23,7 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         ReservationGateException? failure = null;
         try
         {
-            proof = await payment.ReadProofAsync(observed.AccountId, intent.QuoteId, intent.QuoteVersion, ct);
+            proof = await payment.ReadProofAsync(observed.AccountId, intent.QuoteId, ct);
         }
         catch (ReservationGateException error) { failure = error; }
 
@@ -40,7 +40,7 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
             RequireTimely(request, intent, now);
             if (failure is not null) throw failure;
             if (proof?.Binding is null) throw BookingContracts.InvalidOwner();
-            if (proof.QuoteId != intent.QuoteId || proof.QuoteVersion != intent.QuoteVersion ||
+            if (proof.QuoteId != intent.QuoteId ||
                 proof.Binding.AccountId != request.AccountId || proof.Binding.CanonicalPlate != request.VehiclePlate ||
                 request.VehiclePlate != intent.LicensePlate || proof.Binding.RequestedSlotId != intent.RequestedSlotId ||
                 proof.Binding.TenantId != request.ResolvedTenantId || proof.Binding.SiteId != request.ResolvedSiteId ||
@@ -95,9 +95,9 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
             throw new ReservationGateException(409, "QUOTE_ALREADY_BOUND", "The quote already has a reservation.");
         var row = ReservationRow.PrepareQuote(request.Id, request.AccountId, intent.LicensePlate, binding.TenantId,
             binding.SiteId, intent.RequestedSlotId, intent.PaymentMethod, intent.Start, intent.End,
-            intent.End.AddMinutes(policy.Values["INTER_BOOKING_BUFFER"]), now, policy.DeadlinesFor(interval, now).PaymentDueAt,
+            intent.End.AddMinutes(policy.Values["INTER_BOOKING_BUFFER"]), now, proof.DepositAmount == 0 ? null : policy.DeadlinesFor(interval, now).PaymentDueAt,
             proof.BookedAmount, proof.CoveredAmount, proof.DepositAmount, proof.Currency, JsonSerializer.Serialize(policy),
-            proof.QuoteId, proof.QuoteVersion, proof.ValidUntil, proof.TariffVersion, binding.Coverage.Version, binding.Coverage.IsCovered);
+            proof.QuoteId, proof.ValidUntil, proof.TariffVersion, binding.Coverage.Version, binding.Coverage.IsCovered);
         await bookings.RequirePlateAvailableAsync(row, now, ct);
         await mediator.Send(new RequireReservationAvailabilityCommand(row, now), ct);
         var checkpoint = await bookings.DatabaseNowAsync(ct);
@@ -108,8 +108,25 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         if (finalPolicy.Platform != policy.Platform || finalPolicy.Site != policy.Site ||
             !finalPolicy.AllowsWindow(interval, checkpoint)) throw Stale();
 
+        var confirmed = proof.DepositAmount == 0;
+        if (confirmed)
+        {
+            await bookings.RequireDurableConfirmationAsync(ct);
+            row.ConfirmZeroAdmission(checkpoint);
+        }
         await bookings.AddAsync(row, ct);
-        request.AttachQuoteHold(row.Id);
+        request.CompleteAdmission(row.Id, confirmed);
+        await facts.EnsureOrderAsync(new(row.Id, row.AccountId, binding.TenantId, binding.SiteId,
+            proof.QuoteId, binding.RequestedSlotId, binding.CanonicalPlate, binding.Start, binding.End,
+            binding.PaymentMethod, proof.DepositAmount, proof.Currency, binding.Coverage.IsCovered,
+            binding.Coverage.Version, row.HoldExpiresAt), ct);
+        if (confirmed)
+        {
+            await facts.ConfirmedAsync(new(row.ConfirmationEffectId!.Value, row.Id, row.AccountId, row.TenantId, row.SiteId, checkpoint), ct);
+            await facts.AvailabilityChangedAsync(new(Guid.NewGuid(), checkpoint, row.TenantId, row.SiteId,
+                binding.RequestedSlotId, binding.Start, row.ClaimEndTime!.Value, row.Status), ct);
+            return;
+        }
         await facts.HoldChangedAsync(new(Guid.NewGuid(), checkpoint, request.Id, row.Id, request.AccountId,
             binding.TenantId, binding.SiteId, intent.RequestedSlotId, intent.Start, row.ClaimEndTime!.Value,
             row.HoldExpiresAt!.Value, row.Status, row.Version), ct);

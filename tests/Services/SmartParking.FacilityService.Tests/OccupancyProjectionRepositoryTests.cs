@@ -133,39 +133,25 @@ public sealed class OccupancyProjectionRepositoryTests
     }
 
     [StructurePostgresFact]
-    public async Task HeldReservationTokenFencesProjectionAndRedeliveryRetainsItsOriginalIdentity()
+    public async Task StructureSiteLockFencesProjectionAndRedeliveryRetainsItsOriginalIdentity()
     {
         await using var fixture = await OccupancyProjectionFixture.CreateAsync();
         var change = Change(fixture, "MAINTENANCE", 1);
         await fixture.ExecuteAsync($"UPDATE parking_slots SET supported_vehicle_type='CAR' WHERE id='{fixture.SlotId}'");
         var options = new DbContextOptionsBuilder<ParkingDbContext>().UseNpgsql(fixture.DataSource).Options;
-        var intent = new DependencyIntent(Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION", fixture.TenantId, fixture.SiteId,
-            fixture.SlotId, "selection", DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(1).ToUnixTimeSeconds()));
         await using var owner = new ParkingDbContext(options);
-        var repository = new ReservationDependencyRepository(owner);
-        var work = new UnitOfWork(owner);
-        var acquire = new AcquireDependencyHandler(repository, work);
-        var held = await acquire.Handle(new(intent), default);
-        Assert.Equal("HELD", held.State);
-        Assert.True(held.Snapshot!.Booking.EligibleCarSlot);
+        await using var transaction = await owner.Database.BeginTransactionAsync();
+        await owner.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({fixture.SiteId.ToString()},2))");
         var conflict = await Assert.ThrowsAsync<SmartParking.FacilityService.Domain.StructureException>(() =>
             fixture.ProjectAsync(change, default));
         Assert.Equal("STRUCTURE_BUSY", conflict.Code);
         Assert.Equal(0L, await fixture.ProcessedEventCountAsync(change.EventId));
         Assert.Equal("AVAILABLE", await fixture.SlotStateAsync());
-        var abort = new AbortDependencyHandler(repository, work);
-        Assert.Equal("ABORTED", (await abort.Handle(new(intent), default)).State);
-        Assert.Equal("ABORTED", (await acquire.Handle(new(intent), default)).State);
+        await transaction.RollbackAsync();
         Assert.True(await fixture.ProjectAsync(change, default));
         Assert.False(await fixture.ProjectAsync(change, default));
         Assert.Equal("MAINTENANCE", await fixture.SlotStateAsync());
-        var confirmation = intent with { Token = Guid.NewGuid(), WorkflowId = Guid.NewGuid() };
-        var after = await acquire.Handle(new(confirmation), default);
-        Assert.False(after.Snapshot!.Booking.EligibleCarSlot);
-        Assert.NotEqual(held.Snapshot.Booking.Version, after.Snapshot.Booking.Version);
-        var complete = new CompleteDependencyHandler(repository, work);
-        var acknowledgement = await complete.Handle(new(confirmation, "{}"), default);
-        Assert.Equal(acknowledgement, await complete.Handle(new(confirmation, "{}"), default));
+
     }
 
     private static OccupancyProjectionEvent Change(OccupancyProjectionFixture fixture, string physicalState, long sequenceNumber)

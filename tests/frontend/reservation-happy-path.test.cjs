@@ -20,7 +20,7 @@ function load(file, mocks, globals = {}) {
 }
 const selection = { vehicleId: 'vehicle', siteId: 'site', requestedSlotId: '917820fe-d339-4007-aa5f-2d5180e53fd4', start: '2026-12-01T03:00:00.000Z', end: '2026-12-01T05:00:00.000Z', paymentMethod: 'PAYOS' };
 const quoteSelection = { licensePlate: '51A12345', requestedSlotId: selection.requestedSlotId, start: selection.start, end: selection.end, paymentMethod: 'PAYOS' };
-const quoteIntent = { ...quoteSelection, quoteId: '90411434-635c-4526-b579-434d826ed2f8', quoteVersion: 'v3' };
+const quoteIntent = { ...quoteSelection, quoteId: '90411434-635c-4526-b579-434d826ed2f8' };
 const quote = { ...quoteIntent, canonicalPlate: quoteSelection.licensePlate, siteId: selection.siteId,
   validUntil: '2099-01-01T00:00:00Z', bookedAmount: 40000, depositAmount: 20000, currency: 'VND',
   disclosure: 'Reviewed quote', operationalPolicy: { values: {} } };
@@ -53,7 +53,7 @@ const requestKey = '0854e9bf-b070-47b9-ab2f-b8b294186acf';
 const receiptId = '22680f58-0737-46fa-9a53-6d5201bf7bdd';
 
 function checkout(api = {}, storage = new Map()) {
-  const hooks = []; let index = 0; let snapshot = null; let generation = 1; let subscribed;
+  const hooks = []; let index = 0; let snapshot = null; let financial = null; let generation = 1; let subscribed;
   const jsx = (type, props) => ({ type, props });
   const component = load('roles/driver/booking/ReservationCheckout.tsx', {
     react: {
@@ -67,7 +67,7 @@ function checkout(api = {}, storage = new Map()) {
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '../../../lib/authApi': { getSessionGeneration: () => generation },
     '../../../lib/reservationsApi': { reservationsApi: { reviewQuote: async () => quote, submitQuote: api.submit } },
-    '../../../lib/reservationProgress': { useReservationProgress: id => { subscribed = id; return { snapshot, connected: true }; } },
+    '../../../lib/reservationProgress': { useReservationProgress: id => { subscribed = id; return { snapshot, checkout: financial, connected: true }; } },
     '../../../lib/formatStatus': { formatStatus: value => value },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'UntitledIcon' },
     '../payments/PaymentCheckout': { PaymentCheckout: 'PaymentCheckout' },
@@ -88,17 +88,17 @@ function checkout(api = {}, storage = new Map()) {
   async function click(label) { button(label).props.onClick(); await new Promise(resolve => setImmediate(resolve)); render(); }
   async function accept() { await click('Review price and terms'); nodes().find(node => node.type === 'input').props.onChange({ target: { checked: true } }); render(); await click('Accept terms and reserve'); }
   render();
-  return { render, nodes, button, click, accept, storage, requestId: () => subscribed, progress: value => { snapshot = value; render(); }, switchAccount: () => { generation++; } };
+  return { render, nodes, button, click, accept, storage, payment: value => { financial = value; render(); }, requestId: () => subscribed, progress: value => { snapshot = value; render(); }, switchAccount: () => { generation++; } };
 }
 
 test('happy path waits for a real order and never treats HOLD_CREATED as CONFIRMED', async () => {
-  let booking = { requestId: 'request', admissionState: 'HOLD_CREATED', checks: {account:'SUCCEEDED',vehicle:'SUCCEEDED',facility:'SUCCEEDED',booking:'SUCCEEDED'}, reservationId: 'booking', reservationState: 'PENDING_PAYMENT', paymentReadiness: 'PREPARING', orderId: null, holdExpiresAt: '2099-01-01T00:00:00Z', bookedAmount: 40000, depositAmount: 20000 };
+  let booking = { requestId: 'request', admissionState: 'HOLD_CREATED', checks: {account:'SUCCEEDED',vehicle:'SUCCEEDED',facility:'SUCCEEDED',booking:'SUCCEEDED'}, reservationId: 'booking', reservationState: 'PENDING_PAYMENT', orderId: null, holdExpiresAt: '2099-01-01T00:00:00Z', bookedAmount: 40000, depositAmount: 20000 };
   const receipt = { requestId: 'request', state: 'HOLD_CREATED', reservationId: 'booking' };
   const f = checkout({ submit: async () => receipt });
   await f.accept(); f.progress(booking);
   assert.equal(f.nodes().some(node => node.type === 'PaymentCheckout'), false);
   assert.equal(f.button('Done'), undefined);
-  booking = { ...booking, orderId: 'payment-order', paymentReadiness: 'AVAILABLE' };
+  f.payment({ state: 'PAYABLE', orderId: 'payment-order', holdExpiresAt:booking.holdExpiresAt });
   f.progress(booking);
   assert.equal(f.nodes().find(node => node.type === 'PaymentCheckout').props.reservationOrderId, 'payment-order');
   assert.equal(f.button('Done'), undefined);
@@ -120,7 +120,7 @@ test('ambiguous submission survives remount and retries exactly the same intent/
 test('saved terms and malformed intents cannot resubmit, but a known request can recover', () => {
   const legacy = { key: requestKey, intent: { ...selection, termsId: 'terms', termsVersion: 'v1' } };
   const submit = () => assert.fail('opening storage must not create a reservation');
-  for (const attempt of [legacy, { ...legacy, intent: { ...quoteIntent, quoteVersion: null } },
+  for (const attempt of [legacy, { ...legacy, intent: { ...quoteIntent, quoteId: null } },
     { ...legacy, intent: quoteIntent, key: 'bad-key' }, { ...legacy, intent: quoteIntent, requestId: 'bad-id' }]) {
     const f = checkout({ submit }, new Map([['driver-account', JSON.stringify(attempt)]]));
     assert.equal(f.requestId(), undefined);
@@ -145,10 +145,11 @@ test('late admission responses after account switch do not persist foreign recei
 });
 
 test('SignalR joins before one recovery read, merges by request revision and fences a changed login', async () => {
-  let generation = 4, tokenProvider, handler, reconnect, disconnect, finishRead;
+  let generation = 4, tokenProvider, handler, hint, reconnect, disconnect, finishRead;
+  const pending = [], checkoutStates = [];
   const calls = [], versions = [], availability = [];
   const connection = {
-    on(name, callback) { assert.equal(name, 'ReservationProgress'); handler = callback; },
+    on(name, callback) { if (name === 'ReservationProgress') handler = callback; else if (name === 'ReservationCheckoutChanged') hint = callback; },
     off() {}, onreconnecting(callback) { disconnect = callback; }, onreconnected(callback) { reconnect = callback; }, onclose() {},
     async start() { calls.push('start'); }, async invoke(method, id) { calls.push([method,id]); },
     async stop() { calls.push('stop'); },
@@ -161,6 +162,7 @@ test('SignalR joins before one recovery read, merges by request revision and fen
   }
   const fixture = load('lib/reservationProgress.ts', {
     react: {}, '@microsoft/signalr': {HubConnectionBuilder: Builder, HttpTransportType: {WebSockets: 1, ServerSentEvents: 2}, LogLevel: {None: 6}},
+    './paymentApi': {paymentApi:{reservationCheckout: () => new Promise(resolve => pending.push(resolve))}},
     './authApi': {getSessionGeneration: () => generation, ensureAccessToken: async () => 'driver-token'},
     './reservationsApi': {reservationServer: '/operations', reservationsApi: { progress: id => {
       calls.push(['read', id]); return new Promise(resolve => { finishRead = resolve; });
@@ -168,17 +170,28 @@ test('SignalR joins before one recovery read, merges by request revision and fen
   });
   const snapshot = (version, requestId = 'ours') => ({requestId, version, checks: {}, eventId: 'event-' + version});
   const flush = () => new Promise(resolve => setImmediate(resolve));
-  const stop = fixture.watchReservationProgress('ours', s => versions.push(s.version), v => availability.push(v));
+  const stop = fixture.watchReservationProgress('ours', s => versions.push(s.version), v => availability.push(v), v => checkoutStates.push(v?.state ?? v));
   await flush();
   assert.equal(await tokenProvider(), 'driver-token');
   assert.deepEqual(calls, ['start',['Subscribe','ours'],['read','ours']]);
   handler(snapshot(4)); handler(snapshot(4)); handler(snapshot(9,'foreign')); finishRead(snapshot(2)); await flush();
   assert.deepEqual(versions, [4]); assert.deepEqual(availability, [true]);
+  assert.equal(pending.length, 1);
+  hint('foreign');
+  assert.equal(pending.length, 1);
+  hint('ours');
+  pending[1]({state:'PAYABLE', reservationId:'ours'});
+  pending[0]({state:'MISSING', reservationId:null});
+  await flush();
+  assert.deepEqual(checkoutStates, ['PAYABLE']);
   disconnect();
   const recovering = reconnect();
   await flush();
   assert.deepEqual(calls.slice(3), [['Subscribe','ours'],['read','ours']]);
+  assert.equal(pending.length, 3);
+  pending[2]({state:'PAID', reservationId:'ours'});
   finishRead(snapshot(6)); await recovering;
+  assert.deepEqual(checkoutStates, ['PAYABLE',null,'PAID']);
   handler(snapshot(5));
   assert.deepEqual(versions, [4,6]); assert.deepEqual(availability, [true,false,true]);
   generation++;
@@ -214,16 +227,19 @@ test('payment return schedules status checks only for standalone orders', async 
       '../../../context/AppContext': {useApp: () => ({authReady:true, user:{id:'me',role:'driver'}})},
       '../../../lib/authApi': {getSessionGeneration: () => 1}, '../../../lib/formatStatus': {formatStatus: v => v},
       './payment-checkout.css': {},
+      '../../../lib/reservationsApi': {reservationsApi:{requestForOrder:async () =>
+        route === 'legacy-reservation' ? {requestId, reservationId:requestId} : null}},
       '../../../lib/paymentApi': {isPaymentOrderId: v => typeof v === 'string' && v.length === 36,
         classifyPaymentStatus: () => 'pending', paymentApi: {
+          orderReservation: async id => {
+            assert.equal(id, order); lookups++;
+            if (route === 'lookup-unavailable') throw new Error('Unavailable');
+            if (route === 'legacy-reservation') return {state:'HISTORICAL', reservationId:requestId, orderId:order};
+            return route.endsWith('reservation') ? { state:'PAID', reservationId:requestId } : {state:'STANDALONE', reservationId:null};
+          },
           rememberedCheckout: () => ({paymentTransactionId: order, standalone: route === 'standalone'}),
           status: async () => { reads++; return {orderId:order,status:'PENDING',amount:1}; },
         }},
-      '../../../lib/reservationsApi': { reservationsApi: {requestForOrder: async id => {
-        assert.equal(id, order); lookups++;
-        if (route === 'lookup-unavailable') throw new Error('Unavailable');
-        return {requestId: route.endsWith('reservation') ? requestId : null};
-      }}},
       '../../../lib/reservationProgress': {useReservationProgress: id => {
         subscribed = id; return {snapshot, connected:true};
       }},
@@ -236,16 +252,16 @@ test('payment return schedules status checks only for standalone orders', async 
       await new Promise(resolve => setImmediate(resolve));
     } while (changed);
     assert.equal(reads, 1, route);
-    assert.equal(lookups, route === 'standalone' ? 0 : 1, route);
+    assert.equal(lookups, 1, route);
     assert.equal(subscribed ?? null, route.endsWith('reservation') ? requestId : null, route);
     assert.equal(timers, route.endsWith('standalone') ? 1 : 0, route);
     if (route === 'reservation') {
       const heading = node => Array.isArray(node) ? node.map(heading).find(Boolean) :
         node?.type === 'h1' ? node.props.children : node?.props && heading(node.props.children);
       assert.equal(heading(tree), 'Payment is still processing');
-      snapshot = {requestId, orderId:requestId, reservationState:'CONFIRMED'};
+      snapshot = {requestId, reservationId:order, orderId:null, reservationState:'CONFIRMED'};
       index = 0; assert.equal(heading(component()), 'Payment is still processing');
-      snapshot = {...snapshot, orderId:order};
+      snapshot = {...snapshot, reservationId:requestId};
       index = 0; tree = component();
       assert.equal(heading(tree), 'Reservation confirmed');
       assert.doesNotMatch(JSON.stringify(tree), /Payment successful/);

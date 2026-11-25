@@ -20,12 +20,12 @@ public sealed class IssueReviewedQuoteHandler(IReviewedTariffRepository tariffs,
         var covered = b.Coverage.IsCovered ? booked : 0;
         var now = clock.GetUtcNow();
         var until = new DateTimeOffset(now.UtcTicks - now.UtcTicks % 10, TimeSpan.Zero).AddMinutes(10);
-        var proof = new ReviewedQuoteProof(Guid.NewGuid(), $"rq1-{Guid.NewGuid():N}", "ISSUED", until, b,
+        var proof = new ReviewedQuoteProof(Guid.NewGuid(), "ISSUED", until, b,
             revision.ToString("D"), booked, covered, booked - covered, breakdown.Currency, "FULL",
             "Non-refundable deposit applies if cancelled within 15 minutes of reservation start time.", breakdown);
         var quote = new ReservationQuote
         {
-            Id = proof.QuoteId, TermsVersion = proof.QuoteVersion, AccountId = b.AccountId, TenantId = b.TenantId,
+            Id = proof.QuoteId, TermsVersion = null, AccountId = b.AccountId, TenantId = b.TenantId,
             SiteId = b.SiteId, RequestedSlotId = b.RequestedSlotId, StartTime = b.Start.ToUniversalTime(),
             EndTime = b.End.ToUniversalTime(), BookedAmount = booked, DepositAmount = proof.DepositAmount,
             Currency = proof.Currency, PrepaymentMode = PrepaymentMode.FULL, TariffId = policy.TariffId,

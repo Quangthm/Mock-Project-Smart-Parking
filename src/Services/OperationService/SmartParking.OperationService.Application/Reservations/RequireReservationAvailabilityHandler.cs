@@ -12,10 +12,9 @@ public sealed class RequireReservationAvailabilityHandler(IReservationAvailabili
     public async Task Handle(RequireReservationAvailabilityCommand command, CancellationToken ct)
     {
         var proposed = command.Proposed;
-        using var accepted = command.ReacquisitionPolicy is null ? JsonDocument.Parse(proposed.AcceptedOperationalPolicySnapshot!) : null;
-        int Minutes(string key) => command.ReacquisitionPolicy?.Values[key] ??
-            accepted!.RootElement.GetProperty("Values").GetProperty(key).GetInt32();
-        var projection = TimeSpan.FromMinutes(Minutes("OCCUPANCY_VALIDITY_TIMESPAN"));
+        using var accepted = command.CurrentProjectionMinutes is null ? JsonDocument.Parse(proposed.AcceptedOperationalPolicySnapshot!) : null;
+        var projection = TimeSpan.FromMinutes(command.CurrentProjectionMinutes ??
+            accepted!.RootElement.GetProperty("Values").GetProperty("OCCUPANCY_VALIDITY_TIMESPAN").GetInt32());
         var facts = await repository.ReadAsync(proposed, command.EvaluatedAt, ct);
         var byReservation = facts.Allocations.ToLookup(a => a.ReservationId);
         var bySession = facts.Allocations.ToLookup(a => a.ParkingSessionId);

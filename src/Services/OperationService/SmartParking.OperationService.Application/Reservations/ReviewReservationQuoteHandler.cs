@@ -33,7 +33,7 @@ public sealed class ReviewReservationQuoteHandler(ICurrentActor actor, IReservat
         quote.ValidateFor(binding, now);
         if (!policy.AllowsWindow(interval, now))
             throw new ReservationGateException(409, "QUOTE_STALE", "The booking window has changed.");
-        return new(quote.QuoteId, quote.QuoteVersion, quote.ValidUntil, plate, metadata.SiteId, metadata.SlotId,
+        return new(quote.QuoteId, quote.ValidUntil, plate, metadata.SiteId, metadata.SlotId,
             interval.Start, interval.End, command.PaymentMethod, quote.TariffVersion, coverage.IsCovered, coverage.Version,
             quote.BookedAmount, quote.CoveredAmount, quote.DepositAmount, quote.Currency, quote.Disclosure,
             new(policy.Platform.Id, policy.Platform.Version, policy.Site.Id, policy.Site.Version,

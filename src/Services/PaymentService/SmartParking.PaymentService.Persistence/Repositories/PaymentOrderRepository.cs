@@ -35,6 +35,14 @@ public class PaymentOrderRepository : IPaymentOrderRepository
             .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
     }
 
+    public Task<PaymentOrder?> FindOwnCheckoutAsync(Guid accountId, Guid? reservationId, Guid? orderId, CancellationToken ct)
+    {
+        var owned = _dbContext.PaymentOrders.AsNoTracking().Where(o => o.AccountId == accountId);
+        return reservationId is Guid reservation
+            ? owned.SingleOrDefaultAsync(o => o.ReferenceId == reservation && o.ReviewedMethod != null, ct)
+            : owned.SingleOrDefaultAsync(o => o.Id == orderId && !o.IsProvisioningFence, ct);
+    }
+
     public async Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default)
     {
         await _dbContext.PaymentOrders.AddAsync(order, cancellationToken);

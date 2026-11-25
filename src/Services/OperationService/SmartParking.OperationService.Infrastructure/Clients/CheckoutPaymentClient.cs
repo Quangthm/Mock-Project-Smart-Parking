@@ -43,8 +43,8 @@ public sealed class CheckoutPaymentClient(
     public async Task<CheckoutPaymentPreparation> PrepareAsync(
         Guid tenantId,
         Guid siteId,
-        Guid referenceId,
-        string referenceType,
+        Guid sessionId,
+        Guid? reservationId,
         string vehicleType,
         DateTimeOffset entryTime,
         DateTimeOffset pricingCutoffAt,
@@ -53,6 +53,8 @@ public sealed class CheckoutPaymentClient(
         CancellationToken ct,
         decimal? developmentTestAmount = null)
     {
+        // Keep the existing departure retry key, including for reservation-originated visits.
+        var checkoutKey = reservationId.HasValue ? $"checkout:reservation:{reservationId:N}" : $"checkout:parking_session:{sessionId:N}";
         var result = await SendAsync<PaymentEnvelope<PreparedPaymentOrder>>(
             HttpMethod.Post,
             "/api/v1/payments/orders/prepare",
@@ -60,9 +62,9 @@ public sealed class CheckoutPaymentClient(
             {
                 tenantId,
                 siteId,
-                sessionId = referenceId,
-                referenceId,
-                referenceType,
+                sessionId,
+                referenceId = sessionId,
+                referenceType = "PARKING_SESSION",
                 vehicleType,
                 entryTime,
                 pricingCutoffAt,
@@ -70,7 +72,7 @@ public sealed class CheckoutPaymentClient(
                 accountId,
                 penaltyAmount = 0,
                 penaltyReason = (string?)null,
-                idempotencyKey = $"checkout:{referenceType.ToLowerInvariant()}:{referenceId:N}{(developmentTestAmount.HasValue ? ":development-test-2000" : string.Empty)}",
+                idempotencyKey = developmentTestAmount.HasValue ? checkoutKey + ":development-test-2000" : checkoutKey,
                 developmentTestAmount
             },
             ct);

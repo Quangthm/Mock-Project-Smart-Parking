@@ -16,17 +16,17 @@ public sealed class CreatePaymentOrderCommandHandler(
         CancellationToken cancellationToken)
     {
         var request = command.Request;
+        if (request.ReferenceType == ReferenceType.RESERVATION)
+        {
+            throw new PaymentDomainException(
+                "FORBIDDEN_RESERVATION_DEPOSIT_CREATION",
+                "Reservation deposit orders must be created by the reservation workflow from the accepted quote.");
+        }
+
         if (request.Amount < 0)
             throw new PaymentDomainException("INVALID_AMOUNT", "The payment amount is invalid.");
 
         var effectiveOrderType = request.OrderType ?? OrderType.PARKING_FEE;
-        if (effectiveOrderType == OrderType.RESERVATION_FEE && request.ReferenceType == ReferenceType.RESERVATION)
-        {
-            throw new PaymentDomainException(
-                "FORBIDDEN_RESERVATION_DEPOSIT_CREATION",
-                "Reservation deposit orders must be created via the internal EnsureOrder endpoint with an immutable quote.");
-        }
-
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var existing = await orders.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);

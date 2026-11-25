@@ -21,7 +21,7 @@ public class ReservationQuote
 
     public Guid? TariffId { get; set; }
     public Guid? TariffRevisionId { get; set; }
-    public string TermsVersion { get; set; } = "v1";
+    public string? TermsVersion { get; set; }
     public string? CoverageVersion { get; set; }
 
     public DateTimeOffset ValidUntil { get; set; }

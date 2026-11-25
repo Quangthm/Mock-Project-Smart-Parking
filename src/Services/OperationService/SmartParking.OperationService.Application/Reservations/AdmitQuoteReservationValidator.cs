@@ -17,7 +17,6 @@ public sealed class AdmitQuoteReservationValidator : AbstractValidator<AdmitQuot
             RuleFor(x => x.Intent.End).GreaterThan(x => x.Intent.Start);
             RuleFor(x => x.Intent.PaymentMethod).Equal("PAYOS");
             RuleFor(x => x.Intent.QuoteId).NotEmpty();
-            RuleFor(x => x.Intent.QuoteVersion).NotEmpty().MaximumLength(256);
         });
     }
 }

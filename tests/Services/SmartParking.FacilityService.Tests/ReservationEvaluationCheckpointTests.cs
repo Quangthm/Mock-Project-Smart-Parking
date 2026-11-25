@@ -9,18 +9,8 @@ public sealed class ReservationEvaluationCheckpointTests
     {
         var booking = ReservationRow.PrepareQuote(Guid.NewGuid(), Guid.NewGuid(), "51A12345", Guid.NewGuid(),
             Guid.NewGuid(), Guid.NewGuid(), "PAYOS", Start, Start.AddHours(1), Start.AddHours(1), Start.AddMinutes(-5),
-            Start, amount, 0, amount, "VND", "{}", Guid.NewGuid(), "rq1-test", Start, "tariff", "coverage", false);
-        if (amount > 0)
-        {
-            Assert.True(booking.BeginOrderProvisioning(booking.CreatedAt, TimeSpan.FromSeconds(1)));
-            booking.RecordOrderCreated(Guid.NewGuid());
-            Assert.True(booking.BeginPaidConfirmation(Guid.NewGuid(), booking.CreatedAt));
-        }
-        else
-        {
-            Assert.True(booking.BeginZeroPriceAcceptance(booking.CreatedAt, TimeSpan.FromSeconds(1)));
-            booking.RecordZeroOrder(Guid.NewGuid(), Guid.NewGuid(), booking.CreatedAt);
-        }
+            amount > 0 ? Start : null, amount, 0, amount, "VND", "{}", Guid.NewGuid(), Start, "tariff", "coverage", false);
+        if (amount > 0) booking.BindCollection(Guid.NewGuid(), Guid.NewGuid(), "settled");
         return booking;
     }
 
@@ -34,12 +24,12 @@ public sealed class ReservationEvaluationCheckpointTests
         var evaluated = Start.AddSeconds(offset);
         if (!eligible)
         {
-            Assert.Throws<InvalidOperationException>(() => booking.ConfirmAtEvaluation(booking.CollectionId, evaluated));
+            Assert.Throws<InvalidOperationException>(() => booking.ConfirmPaid(evaluated));
             Assert.Null(booking.ConfirmedAt);
             Assert.Null(booking.ConfirmationEffectId);
             return;
         }
-        booking.ConfirmAtEvaluation(booking.CollectionId, evaluated);
+        booking.ConfirmPaid(evaluated);
         Assert.Equal("CONFIRMED", booking.Status);
         Assert.Equal(evaluated, booking.ConfirmationEvaluatedAt);
         Assert.Equal(evaluated, booking.ConfirmedAt);
@@ -53,10 +43,10 @@ public sealed class ReservationEvaluationCheckpointTests
     public void FreshEvaluationAtStartRejectsAfterAnAbandonedAttempt()
     {
         var abandoned = Booking();
-        abandoned.ConfirmAtEvaluation(abandoned.CollectionId, Start.AddSeconds(-1));
+        abandoned.ConfirmPaid(Start.AddSeconds(-1));
         // Represents a fresh aggregate loaded after rollback; deployment tests prove actual SQL rollback.
         var fresh = Booking();
-        Assert.Throws<InvalidOperationException>(() => fresh.ConfirmAtEvaluation(fresh.CollectionId, Start));
+        Assert.Throws<InvalidOperationException>(() => fresh.ConfirmPaid(Start));
         Assert.Null(fresh.ConfirmationEvaluatedAt);
     }
 
@@ -64,48 +54,11 @@ public sealed class ReservationEvaluationCheckpointTests
     public void GenuineZeroPriceRequiresNoCollectionAndStillUsesCutoff()
     {
         var booking = Booking(0);
-        Assert.Throws<InvalidOperationException>(() => booking.ConfirmAtEvaluation(Guid.NewGuid(), Start.AddSeconds(-1)));
-        booking.ConfirmAtEvaluation(null, Start.AddSeconds(-1));
-        Assert.Equal("CONFIRMED", booking.Status);
+        booking.ConfirmZeroAdmission(Start.AddSeconds(-1));
         Assert.Null(booking.CollectionId);
-        Assert.Throws<InvalidOperationException>(() => booking.ConfirmAtEvaluation(null, Start.AddSeconds(1)));
-    }
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ExactHoldDeadlineClosesNormalConfirmationAndOnlyVerifiedPaidCanReacquire(bool covered)
-    {
-        var h = Start.AddMinutes(-2);
-        var row = ReservationRow.PrepareQuote(Guid.NewGuid(), Guid.NewGuid(), "51A12345", Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), "PAYOS", Start, Start.AddHours(1), Start.AddHours(1),
-            Start.AddMinutes(-5), h, 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "{}", Guid.NewGuid(),
-            "quote-1", Start, "tariff-1", "coverage-1", covered);
-        Guid? collection = null;
-        if (covered)
-        {
-            row.BeginZeroPriceAcceptance(row.CreatedAt, TimeSpan.FromSeconds(1));
-            Assert.Throws<InvalidOperationException>(() => row.RecordZeroOrder(Guid.NewGuid(), Guid.Empty, row.CreatedAt));
-            row.RecordZeroOrder(Guid.NewGuid(), Guid.NewGuid(), row.CreatedAt);
-        }
-        else
-        {
-            row.BeginOrderProvisioning(row.CreatedAt, TimeSpan.FromSeconds(1));
-            row.RecordOrderCreated(Guid.NewGuid());
-            collection = Guid.NewGuid();
-            Assert.True(row.BeginPaidConfirmation(collection.Value, row.CreatedAt));
-        }
-        Assert.Throws<InvalidOperationException>(() => row.ConfirmAtEvaluation(collection, h));
-        row.ReleaseExpiredHold(h);
-        Assert.Null(row.ActiveClaimSlotId);
-        if (covered)
-        {
-            Assert.Throws<InvalidOperationException>(() => row.ConfirmReacquiredPaidClaim(Guid.NewGuid(), h));
-            Assert.Null(row.ConfirmedAt);
-        }
-        else
-        {
-            row.ConfirmReacquiredPaidClaim(collection!.Value, h);
-            Assert.Equal(h, row.ConfirmedAt);
-        }
+        Assert.Null(booking.HoldExpiresAt);
+        booking.ReleaseExpiredHold(Start);
+        Assert.Equal("CONFIRMED", booking.Status);
+        Assert.Throws<InvalidOperationException>(() => booking.ConfirmZeroAdmission(Start));
     }
 }

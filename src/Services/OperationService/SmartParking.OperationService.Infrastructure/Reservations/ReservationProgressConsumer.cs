@@ -12,7 +12,7 @@ public sealed class ReservationProgressConsumer(IReservationRequestRepository re
         var ct = context.CancellationToken;
         var request = await requests.FindOwnAsync(change.AccountId, change.RequestId, ct);
         if (request is null) return;
-        var booking = request.ReservationId is Guid id ? await bookings.FindOrderProvisioningAsync(id, ct) : null;
+        var booking = request.ReservationId is Guid id ? await bookings.FindBookingAsync(id, ct) : null;
         await relay.DeliverAsync(request.AccountId,
             ReservationProgress.From(request, booking), ct);
     }

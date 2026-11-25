@@ -185,17 +185,4 @@ public sealed class ReservationAvailabilityTests
         Assert.True(Check(Guid.NewGuid()).Allowed);
     }
 
-    [Fact]
-    public void ProducerTombstoneRejectsDelayedAcquireAndCompletedOutcomeRejectsAbort()
-    {
-        ReservationDependency New() => ReservationDependency.Create(Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION", "fingerprint", Now.AddMinutes(1), Now);
-        var aborted = New(); aborted.Abort(Now);
-        Assert.Throws<StructureException>(() => aborted.Hold("{}", Now));
-        var committed = New(); committed.Hold("{}", Now);
-        committed.Complete("same", Now.AddHours(1));
-        committed.Complete("same", Now.AddHours(2));
-        Assert.Throws<StructureException>(() => committed.Abort(Now.AddHours(3)));
-        Assert.Throws<StructureException>(() => committed.Complete("different", Now.AddHours(3)));
-    }
 }

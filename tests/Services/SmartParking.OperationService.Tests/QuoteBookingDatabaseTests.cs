@@ -17,11 +17,10 @@ using SmartParking.OperationService.Persistence;
 namespace SmartParking.OperationService.Tests;
 
 public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyRepository, IReservationQuoteOwner, ICurrentActor,
-    IReservationSubscriptionEligibility, IReservationCommercialOwner, IReservationFacilityDependencyOwner
+    IReservationSubscriptionEligibility, IReservationCommercialOwner
 {
     private readonly Guid site = Guid.NewGuid(), tenant = Guid.NewGuid(), slot = Guid.NewGuid();
     private Guid quoteId = Guid.NewGuid();
-    private string quoteVersion = "quote-1";
     private readonly Guid platform = Guid.NewGuid(), sitePolicy = Guid.NewGuid(), unit = Guid.NewGuid();
     private readonly Guid order = Guid.NewGuid(), receipt = Guid.NewGuid();
     private readonly string plate = $"51A{Random.Shared.Next(10000, 100000)}";
@@ -30,21 +29,18 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     private int proofReads;
     private int policyVersion = 1;
     private int holdMinutes = 1;
-    private const string SnapshotVersion = "inventory-at-acquire";
     private Func<ReservationQuoteBinding, ReservationQuoteBinding> proofBinding = binding => binding;
     private bool expired, covered;
-    private bool wrongReceipt, rejectZero;
-    private int reconciledZero;
     private readonly List<Guid> reconciled = [];
     public Guid? AccountId { get; } = Guid.NewGuid();
     public Guid? UserId { get; } = Guid.NewGuid();
     public string Role => "driver";
-    private QuoteReservationIntent Intent => new(plate, slot, start, start.AddHours(1), "PAYOS", quoteId, quoteVersion);
+    private QuoteReservationIntent Intent => new(plate, slot, start, start.AddHours(1), "PAYOS", quoteId);
 
     private ServiceProvider Services(ReservationCommercialClient? payment = null, bool listenForPayments = true)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
-            ["ConnectionStrings:Reservation"] = Environment.GetEnvironmentVariable("SMARTPARK_QUOTE_TEST_DB")
+            ["ConnectionStrings:Reservation"] = payment == null ? Environment.GetEnvironmentVariable("SMARTPARK_QUOTE_TEST_DB") : SettlementSetting("OPERATIONS_DB")
         }).Build();
         var services = new ServiceCollection();
         services.AddLogging();
@@ -58,7 +54,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
             services.AddSingleton<IReservationCommercialOwner>(payment);
             services.AddSingleton<IReservationQuoteOwner>(payment);
         }
-        services.AddSingleton<IReservationFacilityDependencyOwner>(this);
         services.AddSingleton<IReservationSubscriptionEligibility>(this);
         services.AddSingleton<ICurrentActor>(this);
         services.AddScoped<IAccountAccessRequester, AccountAccessRequester>();
@@ -69,12 +64,13 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         {
             x.AddEntityFrameworkOutbox<ReservationDbContext>(o => {
                 o.UsePostgres();
-                o.UseBusOutbox(b => b.DisableDeliveryService());
+                o.QueryDelay = TimeSpan.FromMilliseconds(100);
+                o.UseBusOutbox(b => { if (payment == null) b.DisableDeliveryService(); });
             });
             if (payment == null) x.UsingInMemory((_, _) => { });
             else
             {
-                x.AddConsumer<ReservationHoldChangedConsumer>();
+                x.AddConsumer<SmartParking.OperationService.Infrastructure.Messaging.ReservationZeroReceiptIssuedConsumer>();
                 x.AddConsumer<SmartParking.OperationService.Infrastructure.Messaging.ReservationPaymentSucceededConsumer>();
                 x.UsingRabbitMq((context, bus) =>
                 {
@@ -83,14 +79,18 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
                         h.Username(SettlementSetting("OPERATIONS_USER"));
                         h.Password(SettlementSetting("PASSWORD"));
                     });
-                    bus.Message<ReservationHoldChangedV1>(m => m.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));
-                    bus.ReceiveEndpoint("smartpark-operation-reservation-hold-changed-v1", e =>
-                        e.ConfigureConsumer<ReservationHoldChangedConsumer>(context));
+                    bus.ReceiveEndpoint("operations-reservation-zero-receipt-v1", e =>
+                    {
+                        e.ConfigureConsumeTopology = false;
+                        e.UseEntityFrameworkOutbox<ReservationDbContext>(context);
+                        e.ConfigureConsumer<SmartParking.OperationService.Infrastructure.Messaging.ReservationZeroReceiptIssuedConsumer>(context);
+                    });
                     bus.Message<SmartParking.OperationService.Infrastructure.Messaging.PaymentSucceededV1>(
                         m => m.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                     if (listenForPayments) bus.ReceiveEndpoint("smartpark-operation-reservation-payment-succeeded-v1", e =>
                     {
                         e.UseMessageRetry(r => r.Interval(5, TimeSpan.FromMilliseconds(250)));
+                        e.UseEntityFrameworkOutbox<ReservationDbContext>(context);
                         e.ConfigureConsumer<SmartParking.OperationService.Infrastructure.Messaging.ReservationPaymentSucceededConsumer>(context);
                     });
                 });
@@ -116,30 +116,16 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     public PlateCoverage Evaluate(string canonicalPlate, Guid tenantId, Guid siteId, ReservationInterval interval) =>
         new(covered, covered ? "covered-1" : "none-v1");
 
-    public Task<PaymentReservationQuote> ReadProofAsync(Guid account, Guid id, string version, CancellationToken ct)
+    public Task<PaymentReservationQuote> ReadProofAsync(Guid account, Guid id, CancellationToken ct)
     {
-        Assert.Equal((AccountId!.Value, quoteId, "quote-1"), (account, id, version));
+        Assert.Equal((AccountId!.Value, quoteId), (account, id));
         Interlocked.Increment(ref proofReads);
         var binding = new ReservationQuoteBinding(account, plate, tenant, site, slot, start, Intent.End, "PAYOS",
             Evaluate(plate, tenant, site, new(start, Intent.End)), platform, 1, sitePolicy, 1);
-        return Task.FromResult(new PaymentReservationQuote(id, version, "ISSUED", expired ? start.AddDays(-1) : start,
+        return Task.FromResult(new PaymentReservationQuote(id, "ISSUED", expired ? start.AddDays(-1) : start,
             proofBinding(binding), "tariff-1", 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "FULL", "Full prepayment"));
     }
 
-    public Task<IReadOnlyList<ReservationDepositEvidence>> ReadCollectionsAsync(Guid orderId, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<ReservationDepositEvidence>>([]);
-
-    public Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct) =>
-        Task.FromResult(new DepositOrderResult("CREATED", order, request));
-    public Task<ZeroOrderDecision> AcceptZeroAsync(ZeroOrderBinding binding, CancellationToken ct) =>
-        Task.FromResult(rejectZero ? new ZeroOrderDecision("REJECTED", binding, null, null, "QUOTE_STALE") :
-            new ZeroOrderDecision("ACCEPTED", binding, order, wrongReceipt ? Guid.Empty : receipt));
-    public Task ReconcileZeroAsync(ZeroOrderEvidence evidence, string reason, CancellationToken ct)
-    {
-        Assert.Equal((order, receipt), (evidence.OrderId, evidence.ReceiptId));
-        reconciledZero++;
-        return Task.CompletedTask;
-    }
     public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct)
     {
         reconciled.Add(collection.CollectionId);
@@ -147,7 +133,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
     public Task<PaymentReservationQuote> IssuePlateQuoteAsync(ReservationQuoteBinding binding, CancellationToken ct) => throw new NotSupportedException();
     public Task<PricePreview> PreviewAsync(Guid account, ReservationPricePreview intent, CancellationToken ct) => throw new NotSupportedException();
-    public Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct) => throw new NotSupportedException();
     public Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct) => throw new NotSupportedException();
 
     private static async Task Send(ServiceProvider services, IRequest command)
@@ -180,35 +165,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         return id;
     }
 
-    private async Task HoldToken(ServiceProvider services, Guid id, string purpose)
-    {
-        using var scope = services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
-        var token = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.WorkflowId == id && t.Purpose == purpose);
-        await Send(services, new AdvanceFacilityDependencyCommand(token.Id));
-    }
-
-    public Task<FacilityDependencyResult> AcquireAsync(FacilityDependencyIntent intent, CancellationToken ct)
-    {
-        Assert.NotEqual("ADMISSION", intent.Purpose);
-        Assert.Equal((tenant, site, slot), (intent.TenantId, intent.SiteId, intent.SlotId));
-        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, SnapshotVersion, true, true),
-            [new(slot, unit, "CAR", true, true, false, [unit], ["CAR"])], [], true);
-        return Task.FromResult(new FacilityDependencyResult(intent, "HELD", snapshot));
-    }
-
-    public Task<FacilityDependencyAcknowledgement> CompleteAsync(FacilityDependencyIntent intent, string outcomeJson, CancellationToken ct)
-    {
-        Assert.NotEqual("ADMISSION", intent.Purpose);
-        return Task.FromResult(new FacilityDependencyAcknowledgement(intent, "COMPLETED", FacilityDependencyProtocol.Fingerprint(outcomeJson)));
-    }
-
-    public Task<FacilityDependencyAcknowledgement> AbortAsync(FacilityDependencyIntent intent, CancellationToken ct)
-    {
-        Assert.NotEqual("ADMISSION", intent.Purpose);
-        return Task.FromResult(new FacilityDependencyAcknowledgement(intent, "ABORTED", null));
-    }
-
     [QuoteDatabaseFact]
     public async Task RollbackAndConcurrentQuoteUseCommitOneHoldAndOneOutboxTrigger()
     {
@@ -228,7 +184,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Null(beforeRetry.ReservationId);
         Assert.False(await holds.AnyAsync());
         Assert.False(await db.Reservations.AnyAsync(r => r.QuoteId == quoteId));
-        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(t => t.WorkflowId == first));
         await Task.WhenAll(Send(services, new CommitQuoteHoldCommand(first)), Send(services, new CommitQuoteHoldCommand(second)));
         var booked = await db.Reservations.AsNoTracking().SingleAsync(r => r.QuoteId == quoteId);
         var winningReceipt = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == booked.Id);
@@ -243,7 +198,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Null(booked.AcceptedPricingSnapshot);
         Assert.Equal("tariff-1", booked.TariffVersion);
         Assert.Single(await holds.ToListAsync());
-        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(t => t.WorkflowId == first || t.WorkflowId == second));
         var loser = first == booked.Id ? second : first;
         Assert.Equal("QUOTE_ALREADY_BOUND", await db.ReservationRequests.Where(r => r.Id == loser).Select(r => r.Code).SingleAsync());
         expired = true;
@@ -285,7 +239,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
             var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
             var expected = reason is "expiry" or "policy" or "coverage" ? "QUOTE_STALE" : "OWNER_CONTRACT_INVALID";
             Assert.Equal(expected, await db.ReservationRequests.Where(x => x.Id == id).Select(x => x.Code).SingleAsync());
-            Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == id));
             Assert.False(await db.Reservations.AnyAsync(x => x.Id == id));
         }
     }
@@ -336,7 +289,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     public async Task AcceptedSlotHoldDoesNotReadFacilityInventory()
     {
         await using var services = Services();
-        var original = await ReadProofAsync(AccountId!.Value, quoteId, quoteVersion, default);
+        var original = await ReadProofAsync(AccountId!.Value, quoteId, default);
         var id = await Prepare(services, Guid.NewGuid());
         await Send(services, new CommitQuoteHoldCommand(id));
         using var scope = services.CreateScope();
@@ -345,7 +298,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Equal(original.Binding.RequestedSlotId, held.ActiveClaimSlotId);
         Assert.Equal(original.QuoteId, held.QuoteId);
         Assert.Equal(original.DepositAmount, held.DepositAmount);
-        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == id));
     }
 
     [QuoteDatabaseFact]
@@ -382,7 +334,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         await db.SaveChangesAsync();
         await Send(services, new CommitQuoteHoldCommand(id));
         Assert.Equal("HOLD_CREATED", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.State).SingleAsync());
-        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == id));
     }
 
     private async Task<Guid> SeedTimedHold(ServiceProvider services, bool late, bool zero)
@@ -391,7 +342,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var key = Guid.NewGuid();
         var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         var created = now.AddMinutes(-5);
-        var h = late ? now.AddSeconds(-1) : now.AddMinutes(2);
+        var h = late ? now.AddMinutes(-2) : now.AddMinutes(2);
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var request = ReservationRequest.AdmitQuote(UserId!.Value, AccountId!.Value, key, JsonSerializer.Serialize(Intent),
@@ -401,20 +352,10 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         request.RecordSlot(true, site, tenant);
         var policy = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ResolveReservationPoliciesQuery(tenant, site, created));
         var booking = ReservationRow.PrepareQuote(request.Id, request.AccountId, plate, tenant, site, slot, "PAYOS",
-            start, Intent.End, Intent.End.AddMinutes(1), created, h, 100, zero ? 100 : 0, zero ? 0 : 100, "VND",
-            JsonSerializer.Serialize(policy), quoteId, "quote-1", start, "tariff-1", zero ? "covered-1" : "none-v1", zero);
-        request.AttachQuoteHold(booking.Id);
-        if (!zero)
-        {
-            booking.BeginOrderProvisioning(created, TimeSpan.FromSeconds(1));
-            booking.RecordOrderCreated(order);
-        }
-        else if (late)
-        {
-            // Simulate the original owner committing before H and losing its acknowledgement.
-            booking.BeginZeroPriceAcceptance(created, TimeSpan.FromSeconds(1));
-            booking.DeferZeroPriceAcceptance(created.AddSeconds(2), "UNKNOWN", "RESPONSE_LOST");
-        }
+            start, Intent.End, Intent.End.AddMinutes(1), created, zero ? null : h, 100, zero ? 100 : 0, zero ? 0 : 100, "VND",
+            JsonSerializer.Serialize(policy), quoteId, start, "tariff-1", zero ? "covered-1" : "none-v1", zero);
+        if (zero) booking.ConfirmZeroAdmission(created);
+        request.CompleteAdmission(booking.Id, zero);
         db.Add(request);
         db.Add(booking);
         db.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), SiteId = site, TenantId = tenant, VehicleType = "CAR",
@@ -423,215 +364,179 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         return booking.Id;
     }
 
-    private ReservationDepositEvidence Evidence(Guid id) => new(Guid.NewGuid(), Guid.NewGuid(), order, Guid.NewGuid(),
-        id, id, AccountId!.Value, tenant, site, quoteId, "quote-1", null, null, 100, "VND", "PAYOS", "verified-reference",
-        DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "PAYOS");
+    private ReservationPaymentEvidence Evidence(Guid id) => new(Guid.NewGuid(), order, Guid.NewGuid(), id,
+        AccountId!.Value, tenant, site, 100, "VND", "PAYOS", plate, DateTimeOffset.UtcNow);
 
     [QuoteDatabaseFact]
-    public async Task VerifiedCollectionConfirmsOnceAndAdditionalMoneyIsReconciled()
+    public async Task SuccessfulSettlementBindsDirectlyAndSurvivesReplay()
     {
         await using var services = Services();
         var id = await Prepare(services, Guid.NewGuid());
         await Send(services, new CommitQuoteHoldCommand(id));
-        await Send(services, new ProvisionReservationOrderCommand(id));
         var evidence = Evidence(id);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Send(services, new RecordReservationPaymentCommand(new(Guid.NewGuid(), order, Guid.NewGuid(), id,
-            AccountId!.Value, tenant, site, 100, "VND", "PAYOS", "generic", start))));
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         Task<ReservationRow> Read() => db.Reservations.AsNoTracking().SingleAsync(x => x.Id == id);
-        Assert.Null((await Read()).CollectionId);
-        await Send(services, new RecordReservationDepositCommand(evidence with { PaymentMethod = "CASH" }));
-        Assert.Null((await Read()).CollectionId);
-        Assert.Single(reconciled);
-        await Send(services, new RecordReservationDepositCommand(evidence));
-        await HoldToken(services, id, "CONFIRMATION");
-        await Send(services, new ConfirmPaidReservationCommand(id, evidence.CollectionId));
+        Assert.Null((await Read()).PaymentOrderId);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Send(services, new RecordReservationPaymentCommand(evidence with { PaymentMethod = "CASH" })));
+        await Send(services, new RecordReservationPaymentCommand(evidence));
         var confirmed = await Read();
-        Assert.Equal("CONFIRMED", confirmed.Status);
-        Assert.True(confirmed.ConfirmationEvaluatedAt < confirmed.HoldExpiresAt);
-        await Send(services, new RecordReservationDepositCommand(evidence with { EventId = Guid.NewGuid() }));
-        await Send(services, new ConfirmPaidReservationCommand(id, evidence.CollectionId));
-        Assert.Single(reconciled);
-        var other = Evidence(id);
-        await Send(services, new RecordReservationDepositCommand(other));
-        Assert.Equal(other.CollectionId, reconciled.Last());
+        Assert.Equal(("CONFIRMED", order, evidence.PaymentTransactionId), (confirmed.Status, confirmed.PaymentOrderId, confirmed.CollectionId));
+        await Send(services, new RecordReservationPaymentCommand(evidence with {EventId = Guid.NewGuid()}));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Send(services, new RecordReservationPaymentCommand(Evidence(id))));
         Assert.Equal(confirmed.ConfirmationEffectId, (await Read()).ConfirmationEffectId);
     }
 
     [QuoteDatabaseFact]
-    public async Task PaidAfterExpiryReacquiresAnAvailableClaim()
+    public async Task LatePaidClaimReacquiresOriginalSlot()
     {
         await using var services = Services();
         var id = await SeedTimedHold(services, true, false);
-        var payment = Evidence(id);
-        policyVersion++; // A compatible revision still permits the original interval and buffer.
-        var expiry = Send(services, new ExpireReservationHoldCommand(id));
-        try { await Send(services, new RecordReservationDepositCommand(payment)); }
-        catch (InvalidOperationException error) when (error.Message.Contains("busy booking"))
-        {
-            await expiry;
-            await Send(services, new RecordReservationDepositCommand(payment));
-        }
-        await expiry;
-        await Send(services, new ConfirmPaidReservationCommand(id, payment.CollectionId));
-        await HoldToken(services, id, "CONFIRMATION");
-        await Send(services, new ConfirmPaidReservationCommand(id, payment.CollectionId));
+        await Send(services, new ExpireReservationHoldCommand(id));
+        await Send(services, new RecordReservationPaymentCommand(Evidence(id)));
         using var scope = services.CreateScope();
         var row = await scope.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations.SingleAsync(r => r.Id == id);
-        Assert.Equal("CONFIRMED", row.Status);
-        Assert.True(row.ConfirmationEvaluatedAt >= row.HoldExpiresAt && row.ConfirmationEvaluatedAt < row.ExpectedStartTime);
+        Assert.Equal(("CONFIRMED", slot), (row.Status, row.ActiveClaimSlotId));
+        Assert.True(row.ConfirmationEvaluatedAt >= row.HoldExpiresAt);
     }
 
     [QuoteDatabaseFact]
-    public async Task CompetingSameSiteReservationAfterExpirySendsPaidMoneyToReconciliation()
+    public async Task FirstCollectionAfterStartBindsWithoutEntitlementAndStagesOneDisposition()
+    {
+        start = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddSeconds(-10).ToUnixTimeSeconds());
+        await using var services = Services();
+        var id = await SeedTimedHold(services, true, false);
+        var evidence = Evidence(id);
+        await Send(services, new RecordReservationPaymentCommand(evidence));
+        await Send(services, new RecordReservationPaymentCommand(evidence));
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var row = await db.Reservations.SingleAsync(r => r.Id == id);
+        Assert.Equal(("EXPIRED", "RESERVATION_START_PASSED", evidence.PaymentOrderId),
+            (row.Status, row.ConfirmationCode, row.PaymentOrderId));
+        Assert.Null(row.ConfirmationEffectId);
+        Assert.Null(row.ActiveClaimSlotId);
+        Assert.Single(await db.Set<OutboxMessage>().Where(m => m.MessageType.Contains("RequestReservationDispositionV1")
+            && m.Body.Contains(id.ToString())).ToListAsync());
+    }
+
+    [QuoteDatabaseFact]
+    public async Task LatePaidConflictCommitsOneDisposition()
     {
         await using var services = Services();
         var id = await SeedTimedHold(services, true, false);
-        var payment = Evidence(id);
-        await Send(services, new ExpireReservationHoldCommand(id));
-        await Send(services, new RecordReservationDepositCommand(payment));
-        await HoldToken(services, id, "CONFIRMATION");
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO reservations (tenant_id,site_id,account_id,normalized_plate,status,target_slot_id,expected_start_time,expected_end_time) VALUES ({tenant},{site},{Guid.NewGuid()},{plate},'CONFIRMED',{Guid.NewGuid()},{start},{start.AddHours(1)})");
-        await Send(services, new ConfirmPaidReservationCommand(id, payment.CollectionId));
-        var row = await db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
-        Assert.Equal("EXPIRED", row.Status);
-        Assert.Equal("RECONCILIATION_REQUIRED", row.ConfirmationState);
+        var evidence = Evidence(id);
+        await Send(services, new RecordReservationPaymentCommand(evidence));
+        await Send(services, new RecordReservationPaymentCommand(evidence));
+        var row = await db.Reservations.SingleAsync(r => r.Id == id);
+        Assert.Equal(("INVALIDATED", "NO_ENTITLEMENT", evidence.PaymentTransactionId), (row.Status, row.ConfirmationState, row.CollectionId));
         Assert.Null(row.ActiveClaimSlotId);
-        await Send(services, new ConfirmPaidReservationCommand(id, payment.CollectionId));
-        Assert.Equal([payment.CollectionId], reconciled);
+        Assert.Single(await db.Set<OutboxMessage>().Where(m => m.MessageType.Contains("RequestReservationDispositionV1") && m.Body.Contains(id.ToString())).ToListAsync());
     }
 
     [QuoteDatabaseFact]
-    public async Task CoveredAcceptanceRequiresMatchingOrderAndDurableReceiptBeforeH()
+    public async Task ZeroAdmissionAndFinancialLinkHaveIndependentAtomicEffects()
     {
-        await using var services = Services();
         covered = true;
+        await using var services = Services();
         var id = await Prepare(services, Guid.NewGuid());
-        await Send(services, new CommitQuoteHoldCommand(id));
-        await Send(services, new AcceptZeroPriceTermsCommand(id));
-        await Send(services, new ConfirmZeroPriceReservationCommand(id));
-        await HoldToken(services, id, "CONFIRMATION");
-        await Send(services, new ConfirmZeroPriceReservationCommand(id));
-        await Send(services, new AcceptZeroPriceTermsCommand(id));
-        using var scope = services.CreateScope();
-        var row = await scope.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations.SingleAsync(r => r.Id == id);
-        Assert.Equal("CONFIRMED", row.Status);
-        Assert.Equal(order, row.PaymentOrderId);
-        Assert.Equal(receipt, row.ZeroReceiptId);
-        Assert.Null(row.CollectionId);
-        Assert.True(row.ConfirmationEvaluatedAt < row.HoldExpiresAt);
-    }
-
-    [QuoteDatabaseFact]
-    public async Task LateCoveredReplayReconcilesItsOriginalOrderWithoutRestoringCapacity()
-    {
-        await using var services = Services();
-        var id = await SeedTimedHold(services, true, true);
-        await Send(services, new ExpireReservationHoldCommand(id));
-        await Send(services, new AcceptZeroPriceTermsCommand(id));
-        await Send(services, new ConfirmZeroPriceReservationCommand(id));
-        await Send(services, new ConfirmZeroPriceReservationCommand(id));
-        using var scope = services.CreateScope();
-        var row = await scope.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations.SingleAsync(r => r.Id == id);
-        Assert.Equal(("EXPIRED", "NO_ENTITLEMENT"), (row.Status, row.ConfirmationState));
-        Assert.Null(row.ConfirmationEffectId);
-        Assert.Null(row.ActiveClaimSlotId);
-        Assert.Equal(1, reconciledZero);
-    }
-    [QuoteDatabaseFact]
-    public async Task HistoricalVehicleTermsHoldProvisionsAndConfirmsFromTheLegacyPaymentWire()
-    {
-        await using var services = Services();
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
-        var now = DateTimeOffset.UtcNow;
-        var requestId = Guid.NewGuid();
-        var termsId = Guid.NewGuid();
-        var vehicle = Guid.NewGuid();
-        var accountId = AccountId!.Value;
-        const string termsVersion = "terms-1";
-        var selection = new BookingSelection(vehicle, site, slot, start, Intent.End, "PAYOS");
-        var commercial = new CommercialTerms(quoteId, "legacy-payment-v1", start, selection, accountId, 100, 100,
-            "VND", "FULL", "standard-v1", "Full prepayment");
-        var policy = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ResolveReservationPoliciesQuery(tenant, site, now));
-        var policyJson = JsonSerializer.Serialize(policy);
-
-        // Model a booking committed by a previous deployment without calling a retired writer.
-        await db.Database.ExecuteSqlInterpolatedAsync($$"""
-            INSERT INTO reservation_requests
-                (id, user_id, account_id, idempotency_key, operation, intent_json, fingerprint, state, admitted_at,
-                 overall_deadline, attempt_id, attempt_number, attempt_started_at, attempt_deadline, next_action_at,
-                 decision_id, decided_at, awaiting_reply, reservation_id, vehicle_binding_state, vehicle_plate)
-            VALUES
-                ({{requestId}}, {{UserId!.Value}}, {{accountId}}, {{Guid.NewGuid()}}, 'CREATE_RESERVATION', '{}', 'legacy-intent',
-                 'HOLD_CREATED', {{now}}, {{now.AddSeconds(90)}}, {{Guid.NewGuid()}}, 1, {{now}}, {{now.AddSeconds(5)}},
-                 {{now.AddSeconds(5)}}, {{Guid.NewGuid()}}, {{now}}, false, {{requestId}}, 'ACTIVE', {{plate}});
-
-            INSERT INTO reservation_terms
-                (id, account_id, intent_fingerprint, version, valid_until, snapshot_json, accepted_request_id)
-            VALUES ({{termsId}}, {{accountId}}, 'legacy-selection', {{termsVersion}}, {{start}}, '{}', {{requestId}});
-
-            INSERT INTO reservations
-                (id, request_id, account_id, tenant_id, site_id, vehicle_id, target_slot_id, active_claim_slot_id,
-                 terms_id, terms_version, selected_payment_method, expected_start_time, expected_end_time, claim_end_time,
-                 created_at, hold_expires_at, original_plate, normalized_plate, booked_amount, deposit_amount, currency,
-                 accepted_operational_policy_snapshot, accepted_pricing_snapshot, order_provisioning_state,
-                 order_provisioning_next_action_at)
-            VALUES
-                ({{requestId}}, {{requestId}}, {{accountId}}, {{tenant}}, {{site}}, {{vehicle}}, {{slot}}, {{slot}}, {{termsId}},
-                 {{termsVersion}}, 'PAYOS', {{start}}, {{Intent.End}}, {{Intent.End.AddMinutes(1)}}, {{now}}, {{now.AddMinutes(5)}},
-                 {{plate}}, {{plate}}, 100, 100, 'VND', CAST({{policyJson}} AS jsonb),
-                 CAST({{JsonSerializer.Serialize(commercial)}} AS jsonb), 'PENDING', {{now}});
-            """);
-        db.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, VehicleType = "CAR",
-            TotalPhysicalCapacity = 1, MaxReservationQuota = 1, IsActive = true, CreatedAt = now, UpdatedAt = now });
+        var effects = db.Set<OutboxMessage>().Where(m => m.Body.Contains(id.ToString()));
+        fault.Enabled = true;
+        await Assert.ThrowsAsync<IOException>(() => Send(services, new CommitQuoteHoldCommand(id)));
+        fault.Enabled = false;
+        Assert.False(await db.Reservations.AnyAsync(r => r.Id == id));
+        Assert.False(await effects.AnyAsync(m => m.MessageType.Contains("EnsureReservationOrderV1") || m.MessageType.Contains("ReservationConfirmedV1")));
+        await Send(services, new CommitQuoteHoldCommand(id));
+        Task<ReservationRow> Read() => db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
+        var admitted = await Read();
+        Assert.Equal(("CONFIRMED", slot), (admitted.Status, admitted.ActiveClaimSlotId));
+        Assert.Equal("CONFIRMED", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.State).SingleAsync());
+        Assert.Null(admitted.HoldExpiresAt);
+        Assert.Null(admitted.PaymentOrderId);
+        Assert.Null(admitted.ZeroReceiptId);
+        Assert.Null(admitted.CollectionId);
+        Assert.Single(await effects.Where(m => m.MessageType.Contains("EnsureReservationOrderV1")).ToListAsync());
+        db.Add(new StructureSiteStateRow { SiteId = site, TenantId = tenant, Active = false });
         await db.SaveChangesAsync();
-        await Send(services, new ProvisionReservationOrderCommand(requestId));
-        var transaction = Guid.NewGuid();
-        var signal = new RecordReservationPaymentCommand(new(Guid.NewGuid(), order, transaction, requestId,
-            accountId, tenant, site, 100, "VND", "PAYOS", "legacy-ref", now));
-        await Send(services, signal);
-        await HoldToken(services, requestId, "CONFIRMATION");
-        await Send(services, new ConfirmPaidReservationCommand(requestId, transaction));
-        await Send(services, signal);
-        var persisted = await db.Reservations.AsNoTracking().SingleAsync(b => b.Id == requestId);
-        Assert.Equal("CONFIRMED", persisted.Status);
-        Assert.Equal(termsId, persisted.TermsId);
-        Assert.Equal(vehicle, persisted.VehicleId);
-        Assert.Null(persisted.QuoteId);
-        Assert.Equal(0, proofReads);
+        var link = new LinkReservationZeroReceipt(new(id, AccountId!.Value, tenant, site, quoteId, order, receipt, 0, "VND"));
+        await Send(services, link);
+        await Send(services, link);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Send(services, link with { Evidence = link.Evidence with { ReceiptId = Guid.NewGuid() } }));
+        var linked = await Read();
+        Assert.Equal((order, receipt, admitted.ConfirmedAt, admitted.ConfirmationEffectId, slot),
+            (linked.PaymentOrderId, linked.ZeroReceiptId, linked.ConfirmedAt, linked.ConfirmationEffectId, linked.ActiveClaimSlotId));
+        Assert.Single(await effects.Where(m => m.MessageType.Contains("ReservationConfirmedV1")).ToListAsync());
+        Assert.False(await effects.AnyAsync(m => m.MessageType.Contains("RequestReservationDispositionV1")));
     }
+
     [QuoteDatabaseFact]
-    public async Task CoveredResponseWithoutReceiptRemainsUnknownAndCannotConfirm()
+    public async Task ZeroDispositionUsesTheSameObligationInEitherArrivalOrder()
     {
+        covered = true;
         await using var services = Services();
-        var id = await SeedTimedHold(services, false, true);
-        wrongReceipt = true;
-        await Send(services, new AcceptZeroPriceTermsCommand(id));
-        await Send(services, new ConfirmZeroPriceReservationCommand(id));
-        using var scope = services.CreateScope();
-        var row = await scope.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations.SingleAsync(r => r.Id == id);
-        Assert.Equal("UNKNOWN", row.ZeroPriceAcceptanceState);
-        Assert.Equal("PENDING_PAYMENT", row.Status);
-        Assert.Null(row.ZeroReceiptId);
-        Assert.Null(row.PaymentOrderId);
-        Assert.Null(row.ConfirmationEffectId);
+        foreach (var receiptFirst in new[] { false, true })
+        {
+            quoteId = Guid.NewGuid();
+            var id = await Prepare(services, Guid.NewGuid());
+            await Send(services, new CommitQuoteHoldCommand(id));
+            var link = new LinkReservationZeroReceipt(new(id, AccountId!.Value, tenant, site, quoteId,
+                Guid.NewGuid(), Guid.NewGuid(), 0, "VND"));
+            if (receiptFirst) await Send(services, link);
+            using (var action = services.CreateScope())
+            {
+                var work = action.ServiceProvider.GetRequiredService<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>();
+                await using var transaction = await work.BeginTransactionAsync(default);
+                var row = await action.ServiceProvider.GetRequiredService<IMediator>().Send(new LockReservationBooking(id));
+                row!.Status = "CANCELLED";
+                row.ActiveClaimSlotId = null;
+                action.ServiceProvider.GetRequiredService<ReservationDbContext>().Add(ReservationCancellationEvidence.Record(
+                    Guid.NewGuid(), id, row.AccountId, DateTimeOffset.UtcNow, "ADMIN_CORRECTION", null, "{}"));
+                await work.SaveChangesAsync();
+                await transaction.CommitAsync(default);
+            }
+            await Send(services, link);
+            await Send(services, link);
+            using var verify = services.CreateScope();
+            var db = verify.ServiceProvider.GetRequiredService<ReservationDbContext>();
+            var cancelled = await db.Reservations.SingleAsync(r => r.Id == id);
+            Assert.Equal(("CANCELLED", link.Evidence.ReceiptId), (cancelled.Status, cancelled.ZeroReceiptId));
+            Assert.Null(cancelled.ActiveClaimSlotId);
+            Assert.Single(await db.Set<OutboxMessage>().Where(m => m.MessageType.Contains("RequestReservationDispositionV1") &&
+                m.Body.Contains(id.ToString())).ToArrayAsync());
+        }
     }
+
     [QuoteDatabaseFact]
-    public async Task DefinitiveZeroOrderRejectionReleasesTheClaim()
+    public async Task CompletedZeroVisitCanLinkWithoutReopeningAnInactiveSite()
     {
+        covered = true;
         await using var services = Services();
-        var id = await SeedTimedHold(services, false, true);
-        rejectZero = true;
-        await Send(services, new AcceptZeroPriceTermsCommand(id));
+        var id = await Prepare(services, Guid.NewGuid());
+        await Send(services, new CommitQuoteHoldCommand(id));
         using var scope = services.CreateScope();
-        var row = await scope.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations.SingleAsync(r => r.Id == id);
-        Assert.Equal(("EXPIRED", "REJECTED", "QUOTE_STALE"), (row.Status, row.ZeroPriceAcceptanceState, row.ConfirmationCode));
-        Assert.Null(row.ActiveClaimSlotId);
-        Assert.Null(row.PaymentOrderId);
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        db.Add(new StructureSiteStateRow { SiteId = site, TenantId = tenant, Active = false });
+        await db.SaveChangesAsync();
+        using (var action = services.CreateScope())
+        {
+            var work = action.ServiceProvider.GetRequiredService<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>();
+            await using var transaction = await work.BeginTransactionAsync(default);
+            var row = await action.ServiceProvider.GetRequiredService<IMediator>().Send(new LockReservationBooking(id));
+            row!.EnterParking();
+            await Assert.ThrowsAsync<SmartParking.OperationService.Domain.InvalidStructureEditException>(() => work.SaveChangesAsync());
+        }
+        // Seed a previously completed visit; the financial handler is the operation under test.
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE reservations SET status='COMPLETED',active_claim_slot_id=NULL WHERE id={id}");
+        await Send(services, new LinkReservationZeroReceipt(new(id, AccountId!.Value, tenant, site, quoteId, order, receipt, 0, "VND")));
+        var linked = await db.Reservations.SingleAsync(r => r.Id == id);
+        Assert.Equal(("COMPLETED", receipt), (linked.Status, linked.ZeroReceiptId));
+        Assert.Null(linked.ActiveClaimSlotId);
+        Assert.False(await db.Set<OutboxMessage>().AnyAsync(m => m.MessageType.Contains("RequestReservationDispositionV1") && m.Body.Contains(id.ToString())));
     }
 }

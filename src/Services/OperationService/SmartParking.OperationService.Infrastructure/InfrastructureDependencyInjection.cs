@@ -53,7 +53,6 @@ public static class InfrastructureDependencyInjection
             client.Timeout = TimeSpan.FromSeconds(10);
         }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<IReservationFacilityOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
-        services.AddScoped<IReservationFacilityDependencyOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
         services.AddHttpClient<ParkingGateSlotClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Parking"]

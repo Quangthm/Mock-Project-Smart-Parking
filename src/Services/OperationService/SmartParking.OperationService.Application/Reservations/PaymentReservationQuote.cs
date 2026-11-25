@@ -4,14 +4,14 @@ using SmartParking.OperationService.Application.Common.Models.Exceptions;
 namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed record PaymentReservationQuote(
-    Guid QuoteId, string QuoteVersion, string Status, DateTimeOffset ValidUntil, ReservationQuoteBinding Binding,
+    Guid QuoteId, string Status, DateTimeOffset ValidUntil, ReservationQuoteBinding Binding,
     string TariffVersion, [property: JsonRequired] decimal BookedAmount,
     [property: JsonRequired] decimal CoveredAmount, [property: JsonRequired] decimal DepositAmount,
     string Currency, string PrepaymentMode, string Disclosure)
 {
     public void ValidateFor(ReservationQuoteBinding expected, DateTimeOffset now)
     {
-        if (ValidUntil == default || QuoteId == Guid.Empty || string.IsNullOrWhiteSpace(QuoteVersion) || Binding != expected ||
+        if (ValidUntil == default || QuoteId == Guid.Empty || Binding != expected ||
             string.IsNullOrWhiteSpace(TariffVersion) || string.IsNullOrWhiteSpace(Disclosure) ||
             expected.Coverage is null || string.IsNullOrWhiteSpace(expected.Coverage.Version) ||
             CoveredAmount != (expected.Coverage.IsCovered ? BookedAmount : 0m) || Currency != "VND" ||

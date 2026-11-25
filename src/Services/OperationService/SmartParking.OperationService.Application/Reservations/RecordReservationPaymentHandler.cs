@@ -1,54 +1,85 @@
 using MediatR;
-
+using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
+using SmartParking.OperationService.Domain.Entities;
+using SmartParking.OperationService.Domain.Reservations;
 namespace SmartParking.OperationService.Application.Reservations;
 
-public sealed class RecordReservationPaymentHandler(IReservationBookingRepository bookings, IMediator mediator, IReservationQuoteOwner owner)
+public sealed class RecordReservationPaymentHandler(IReservationBookingRepository bookings, IMediator mediator,
+    IUnitOfWork work, IStructureRepository structure, IReservationPolicyRepository policies, IReservationFactsPublisher facts)
     : IRequestHandler<RecordReservationPaymentCommand>
 {
     public async Task Handle(RecordReservationPaymentCommand command, CancellationToken ct)
     {
-        var payment = command.Evidence;
-        if (payment.EventId == Guid.Empty || payment.PaymentOrderId == Guid.Empty ||
-            payment.PaymentTransactionId == Guid.Empty || payment.ReservationId == Guid.Empty ||
-            payment.AccountId == Guid.Empty || payment.TenantId == Guid.Empty || payment.SiteId == Guid.Empty)
-            return;
-
-        var observed = await bookings.FindOrderProvisioningAsync(payment.ReservationId, ct);
-        if (observed is null) return;
-        if (observed.QuoteId.HasValue)
+        var e = command.Evidence;
+        if (e.EventId == Guid.Empty || e.ReservationId == Guid.Empty || e.AccountId == Guid.Empty ||
+            e.SiteId == Guid.Empty || e.TenantId == Guid.Empty || e.OccurredAt == default)
+            throw new InvalidOperationException("Incomplete reservation settlement.");
+        await using var tx = await work.BeginTransactionAsync(ct);
+        var row = await mediator.Send(new LockReservationBooking(e.ReservationId), ct);
+        if (row?.QuoteId is null) return; // Shared publication also carries unrelated historical references.
+        if (row.AccountId != e.AccountId || row.SiteId != e.SiteId || row.TenantId != e.TenantId ||
+            row.DepositAmount != e.Amount || row.Currency != e.Currency || row.SelectedPaymentMethod != e.PaymentMethod ||
+            e.PlateNumber != null && ReservationCarPlate.Canonicalize(e.PlateNumber) != row.NormalizedPlate)
+            throw new InvalidOperationException("Settlement conflicts with the accepted reservation.");
+        var fingerprint = FormattableString.Invariant($"{e.PaymentTransactionId:N}/{e.PaymentOrderId:N}/{e.OccurredAt.UtcTicks}/{e.Amount:G29}/{e.Currency}/{e.PaymentMethod}");
+        if (!row.BindCollection(e.PaymentOrderId, e.PaymentTransactionId, fingerprint)) return;
+        await bookings.RequireDurableConfirmationAsync(ct);
+        var at = await bookings.DatabaseNowAsync(ct);
+        var denial = await DenialAsync(row, at, ct);
+        if (denial is null)
         {
-            // The shared success event wakes recovery. Only the authenticated Payment lookup attests the transfer.
-            var collections = await owner.ReadCollectionsAsync(payment.PaymentOrderId, ct);
-            var evidence = collections.SingleOrDefault(e => e.PaymentTransactionId == payment.PaymentTransactionId);
-            if (evidence == null || evidence.EventId != payment.EventId || evidence.ReservationId != payment.ReservationId ||
-                evidence.PaymentOrderId != payment.PaymentOrderId)
-                throw new InvalidOperationException("Payment has not attested the notified collection.");
-            await mediator.Send(new RecordReservationDepositCommand(evidence), ct);
-            return;
+            row.ConfirmPaid(at);
+            await facts.ConfirmedAsync(new(row.ConfirmationEffectId!.Value, row.Id, row.AccountId, row.TenantId, row.SiteId, at), ct);
         }
+        else
+        {
+            row.DenyPaidEntitlement(denial);
+            await facts.RequestDispositionAsync(new(row.Id, row.AccountId, row.TenantId, row.SiteId, row.QuoteId.Value,
+                e.PaymentOrderId, e.PaymentTransactionId, null, e.Amount, e.Currency, denial), ct);
+        }
+        await facts.AvailabilityChangedAsync(new(Guid.NewGuid(), at, row.TenantId, row.SiteId, row.TargetSlotId!.Value,
+            row.ExpectedStartTime, row.ClaimEndTime!.Value, row.Status), ct);
+        await work.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+    }
 
-        if (observed.RequestId is not { } operationId || observed.TermsId is not { } termsId ||
-            string.IsNullOrWhiteSpace(observed.TermsVersion))
-            throw new InvalidOperationException("Reservation payment evidence arrived before accepted terms were persisted.");
-
-        if (observed.PaymentOrderId is null)
-            throw new InvalidOperationException("Reservation payment evidence arrived before the order binding was persisted.");
-        if (observed.PaymentOrderId != payment.PaymentOrderId)
-            throw new InvalidOperationException("Reservation payment evidence references a different order.");
-
-        if (observed.AccountId != payment.AccountId || observed.TenantId != payment.TenantId ||
-            observed.SiteId != payment.SiteId || observed.DepositAmount is null or <= 0 ||
-            observed.DepositAmount != payment.Amount ||
-            !string.Equals(observed.Currency, payment.Currency, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Reservation payment evidence does not match the persisted booking binding.");
-
-        var terms = BookingContracts.AcceptedTerms(observed);
-        var collected = new ReservationDepositEvidence(payment.EventId, payment.PaymentTransactionId,
-            payment.PaymentOrderId, payment.PaymentTransactionId, operationId, observed.Id, observed.AccountId,
-            observed.TenantId, observed.SiteId, terms.QuoteId, terms.Version, termsId, observed.TermsVersion,
-            payment.Amount, payment.Currency, payment.Provider, payment.ProviderReference ?? string.Empty,
-            payment.PaidAt, payment.PaidAt);
-
-        await mediator.Send(new RecordReservationDepositCommand(collected), ct);
+    private async Task<string?> DenialAsync(ReservationRow row, DateTimeOffset at, CancellationToken ct)
+    {
+        if (row.Status is "CANCELLED" or "INVALIDATED" or "UNFULFILLABLE") return row.Status;
+        if (row.Status is not ("EXPIRED" or "PENDING_PAYMENT") || row.HoldExpiresAt is null)
+            throw new InvalidOperationException("Inconsistent paid reservation state.");
+        if (at >= row.ExpectedStartTime) return "RESERVATION_START_PASSED";
+        if (await structure.HoldAsync(row.SiteId, ct) != null)
+            throw new InvalidOperationException("Site structure edit in progress.");
+        var site = await structure.StateAsync(row.SiteId, ct);
+        if (site != null && site.TenantId != row.TenantId) throw new InvalidOperationException("Contradictory site scope.");
+        if (site is { Active: false }) return "SITE_INACTIVE";
+        if (row.Status == "PENDING_PAYMENT" && at < row.HoldExpiresAt)
+        {
+            if (row.TargetSlotId == null || row.ActiveClaimSlotId != row.TargetSlotId)
+                throw new InvalidOperationException("Protected hold lost its original slot.");
+            return null;
+        }
+        var revisions = await policies.ReadEffectiveAsync(row.TenantId, row.SiteId, at, ct);
+        var platform = revisions.SingleOrDefault(p => p.TenantId == null && p.SiteId == null);
+        var local = revisions.SingleOrDefault(p => p.TenantId == row.TenantId && p.SiteId == row.SiteId);
+        const string key = "OCCUPANCY_VALIDITY_TIMESPAN";
+        if (platform == null || !platform.Values.TryGetValue(key, out var projection) || projection < 0)
+            throw new ReservationPolicyUnavailableException("Current occupancy projection unavailable.");
+        if (local != null && local.Values.TryGetValue(key, out var minutes) && minutes != projection)
+        {
+            if (minutes < 0 || !platform.OverrideBounds.TryGetValue(key, out var bound) ||
+                minutes < bound.Minimum || minutes > bound.Maximum)
+                throw new ReservationPolicyUnavailableException("Occupancy projection outside approved bounds.");
+            projection = minutes;
+        }
+        try
+        {
+            await bookings.RequirePlateAvailableAsync(row, at, ct);
+            await mediator.Send(new RequireReservationAvailabilityCommand(row, at, projection), ct);
+        }
+        catch (ReservationGateException error) when (error.StatusCode == 409) { return error.Code; }
+        return null;
     }
 }

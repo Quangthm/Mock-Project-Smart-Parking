@@ -27,6 +27,16 @@ internal sealed class ReservationTestSubscription : IDisposable
         }
     }
 
+    public async Task<Guid> ReadCheckoutHintAsync()
+    {
+        while (true)
+        {
+            var message = await ReadAsync();
+            if (message.TryGetProperty("target", out var target) && target.GetString() == "ReservationCheckoutChanged")
+                return message.GetProperty("arguments")[0].GetGuid();
+        }
+    }
+
     public async Task<ReservationProgress> UntilTerminalAsync(Guid request)
     {
         while (true)

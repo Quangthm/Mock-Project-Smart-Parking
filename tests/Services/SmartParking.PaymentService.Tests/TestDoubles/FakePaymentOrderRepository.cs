@@ -25,6 +25,10 @@ public class FakePaymentOrderRepository : IPaymentOrderRepository
         return Task.FromResult(Orders.FirstOrDefault(x => x.IdempotencyKey == idempotencyKey));
     }
 
+    public Task<PaymentOrder?> FindOwnCheckoutAsync(Guid accountId, Guid? reservationId, Guid? orderId, CancellationToken ct) =>
+        Task.FromResult(Orders.SingleOrDefault(o => o.AccountId == accountId &&
+            (reservationId.HasValue ? o.ReferenceId == reservationId && o.ReviewedMethod != null : o.Id == orderId && !o.IsProvisioningFence)));
+
     public Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default)
     {
         Orders.Add(order);

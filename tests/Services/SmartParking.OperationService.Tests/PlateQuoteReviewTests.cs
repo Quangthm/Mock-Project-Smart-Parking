@@ -40,7 +40,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
     private ReservationQuoteBinding Expected => new(AccountId!.Value, "51A12345", tenant, site, slot,
         start, start.AddHours(1), "PAYOS", new(false, "none-v1"), platformPolicy, 1, sitePolicy, 2);
 
-    private PaymentReservationQuote Quote => new(Guid.NewGuid(), "quote-1", "ISSUED", start.AddMinutes(-15),
+    private PaymentReservationQuote Quote => new(Guid.NewGuid(), "ISSUED", start.AddMinutes(-15),
         Expected, "tariff-7", 25000, 0, 25000, "VND", "FULL", "Full prepayment");
 
     [Theory]
@@ -144,7 +144,7 @@ public sealed class PlateQuoteReviewTests : ICurrentActor, IReservationPolicyRep
             Assert.Throws<ReservationGateException>(() => quote.ValidateFor(changed, start.AddHours(-1)));
         PaymentReservationQuote[] invalid = [
             quote with { Status = "ACCEPTED" }, quote with { QuoteId = Guid.Empty },
-            quote with { QuoteVersion = "" }, quote with { TariffVersion = "" },
+            quote with { TariffVersion = "" },
             quote with { Currency = "USD" }, quote with { CoveredAmount = 1 }, quote with { Disclosure = "" },
             quote with { DepositAmount = 0 }, quote with { DepositAmount = 1.25m }, quote with { BookedAmount = -1 }
         ];

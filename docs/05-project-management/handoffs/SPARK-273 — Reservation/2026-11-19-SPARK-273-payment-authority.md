@@ -1,5 +1,23 @@
 # SPARK-273 · Payment authority and reservation settlement
 
+## Checkpoint C v0.7 owner contract (25 November)
+
+Operations accepts the signed immutable quote and commits the reservation and directed order command in its existing MassTransit outbox. The reviewed proof read takes AccountId and QuoteId. Payment verifies the accepted slot, plate, interval, method, coverage, deposit and currency against its stored evidence. An actual historical terms version remains readable. Reviewed records have null `termsVersion`. SPARK-244 collection and reconciliation readers must accept that null and use the genuine financial and quote identities.
+
+| Contract | Owner responsibility |
+|---|---|
+| `EnsureReservationOrderV1` | Operations sends ReservationId, AccountId, TenantId, SiteId, QuoteId, RequestedSlotId, CanonicalPlate, Start, End, PaymentMethod, DepositAmount, Currency, IsCovered, CoverageVersion and nullable HoldExpiresAt. Payment serializes quote and reservation use. First positive creation at or beyond H persists a fence. The zero financial write remains valid after T and quote expiry. |
+| `ReservationCheckoutChangedV1` | Payment stages AccountId and ReservationId with a committed positive order or fence. The existing authenticated SignalR hub relays the hint to that account's reservation group. Frontend loads Payment checkout state and Operations progress after subscription and reconnect. |
+| `PaymentSucceededV1` | Payment publishes once through its existing shared publication. Operations binds the first genuine order and verified collection on processing. PaymentTransactionId is the collection identity used by reconciliation. Gate departure continues to consume parking-session settlement. |
+| `ReservationZeroReceiptIssuedV1` | Payment sends ReservationId, AccountId, TenantId, SiteId, QuoteId, PaymentOrderId, ReceiptId, DepositAmount and Currency with the zero order and invoice. Operations links both IDs once. Original entitlement, time, effect and slot history survive receipt delay. |
+| `RequestReservationDispositionV1` | Operations sends ReservationId, AccountId, TenantId, SiteId, QuoteId, PaymentOrderId, CollectionId or ZeroReceiptId, Amount, Currency and Reason. Payment validates its financial evidence and reuses the existing reconciliation or zero-disposition writer. An independent cancellation obligation and a late receipt can arrive in either order. |
+
+Driver reads are `GET /api/v1/payments/reservations/{id}/checkout-state` and `GET /api/v1/payments/orders/{id}/reservation`. A foreign or absent order returns MISSING. Positive checkout needs both PAYABLE and the matching live Operations hold. The order reverse read works before Operations binds the collection. Reviewed settlement needs no HTTP acknowledgement. The older collection/reconciliation HTTP contracts remain available to independent callers. See the [manual acceptance procedure and queue names](../../../04-testing/postman/SPARK-273-manual-test-guide.md#checkpoint-c-delivery-and-recovery).
+
+## Historical 19 November baseline
+
+The original handoff below records the pre-C integration. Use the v0.7 section above for current reviewed creation, settlement and linkage.
+
 Working tree on `feature/SPARK-273-driver-book-parking-ahead-of-arrival`, based on `41dd3e7522c6658d48d3617fcb0578bf39bb09c9`. Its parent is `f06ff1a96`. The committed Operations and Facility implementation is the integration baseline. The index was empty. Pre-existing router, user-instructions, SPARK-243 session and seed-script edits were excluded.
 
 ## Owner agreement and wire contracts

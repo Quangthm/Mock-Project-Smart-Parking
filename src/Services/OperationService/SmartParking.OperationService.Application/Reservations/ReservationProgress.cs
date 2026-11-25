@@ -4,8 +4,8 @@ using SmartParking.OperationService.Domain.Reservations;
 namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed record ReservationProgress(Guid RequestId, long Version, string AdmissionState,
-    ReservationChecks Checks, Guid? ReservationId, string? ReservationState, string? PaymentReadiness,
-    string? CommercialReadiness, string? OutcomeCode, Guid? OrderId, DateTimeOffset? HoldExpiresAt,
+    ReservationChecks Checks, Guid? ReservationId, string? ReservationState,
+    string? OutcomeCode, Guid? OrderId, DateTimeOffset? HoldExpiresAt,
     decimal? BookedAmount, decimal? DepositAmount, string? Currency)
 {
     // Several outbox triggers may read the same (or a later) committed snapshot.
@@ -30,18 +30,9 @@ public sealed record ReservationProgress(Guid RequestId, long Version, string Ad
         var evaluation = booking is not null ? "SUCCEEDED" :
             request.State == "FAILED_DEPENDENCY" && plate == "SUCCEEDED" && slot == "SUCCEEDED" ? "FAILED_DEPENDENCY" :
             request.State == "REJECTED" && plate == "SUCCEEDED" && slot == "SUCCEEDED" ? "REJECTED" : remaining;
-        var readiness = booking?.OrderProvisioningState switch
-        {
-            null => null,
-            _ when booking.Status != "PENDING_PAYMENT" => "CLOSED",
-            "CREATED" when booking.PaymentOrderId.HasValue => "AVAILABLE",
-            "PENDING" or "IN_PROGRESS" => "PREPARING",
-            "UNKNOWN" => "UNKNOWN",
-            _ => "CLOSED"
-        };
         return new(request.Id, checked(request.ProgressVersion + (booking?.Version ?? 0)), request.State,
-            new(account, plate, slot, evaluation), booking?.Id, booking?.Status, readiness, null,
-            booking?.ConfirmationCode ?? booking?.OrderProvisioningCode ?? request.Code,
+            new(account, plate, slot, evaluation), booking?.Id, booking?.Status,
+            booking?.ConfirmationCode ?? request.Code,
             booking?.PaymentOrderId, booking?.HoldExpiresAt, booking?.BookedAmount, booking?.DepositAmount,
             booking?.Currency);
     }

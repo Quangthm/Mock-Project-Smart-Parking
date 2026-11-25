@@ -179,7 +179,7 @@ public sealed class ReviewedSettlementDatabaseTests
         var order = new PaymentOrder
         {
             Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), SiteId = Guid.NewGuid(), AccountId = Guid.NewGuid(),
-            ReferenceId = Guid.NewGuid(), QuoteId = Guid.NewGuid(), TermsVersion = "rq1-test",
+            ReferenceId = Guid.NewGuid(), QuoteId = Guid.NewGuid(),
             OrderCode = RandomNumberGenerator.GetInt32(100_000_000, int.MaxValue).ToString(),
             IdempotencyKey = Guid.NewGuid().ToString(), OrderType = OrderType.RESERVATION_FEE,
             ReferenceType = ReferenceType.RESERVATION, ReviewedMethod = "PAYOS", ReviewedCurrency = "VND",

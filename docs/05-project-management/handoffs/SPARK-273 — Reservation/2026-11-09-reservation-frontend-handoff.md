@@ -1,5 +1,7 @@
 # SPARK-273 Driver frontend handoff
 
+**25 November update.** The original handoff below records the earlier integration. For current Checkpoint C ownership, financial linkage and checkout recovery use the [v0.7 contract](2026-11-19-SPARK-273-payment-authority.md#checkpoint-c-v07-owner-contract-25-november) and [manual acceptance guide](../../../04-testing/postman/SPARK-273-manual-test-guide.md#7-manual-checkpoint-c-acceptance).
+
 Use this handoff for the reviewed CAR booking and payment cutover. The backend supports quote review, guarded admission, linked Payment order, payOS checkout and verified reservation confirmation. The checked-in browser review still calls `/api/reservation-terms` with the VehicleId/terms contract. The project lead's local manual Postman run passed through **05.1**, with an active `PENDING_PAYMENT` reservation and a genuine linked unpaid order. Reviewed browser and live merchant acceptance are pending. [Current client](../../../FE/src/lib/reservationsApi.ts) · [Postman guide and result](../../04-testing/postman/SPARK-273-manual-test-guide.md#6-optional-cases-and-verification)
 
 ## Review and submit

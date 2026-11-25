@@ -30,7 +30,7 @@ public class ReservationQuoteConfiguration : IEntityTypeConfiguration<Reservatio
 
         builder.Property(x => x.TariffId).HasColumnName("tariff_id");
         builder.Property(x => x.TariffRevisionId).HasColumnName("tariff_revision_id");
-        builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50).HasDefaultValue("v1").IsRequired();
+        builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50);
         builder.Property(x => x.CoverageVersion).HasColumnName("coverage_version").HasMaxLength(100);
 
         builder.Property(x => x.ValidUntil).HasColumnName("valid_until").IsRequired();

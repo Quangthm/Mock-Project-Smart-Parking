@@ -6,6 +6,10 @@ namespace SmartParking.OperationService.API.Realtime;
 
 public sealed class ReservationProgressRelay(IHubContext<ReservationProgressHub> hub) : IReservationProgressRelay
 {
+    public Task CheckoutChangedAsync(Guid accountId, Guid reservationId, CancellationToken ct) =>
+        hub.Clients.Group(ReservationProgressHub.Group(accountId, reservationId))
+            .SendAsync("ReservationCheckoutChanged", reservationId, ct);
+
     public Task DeliverAsync(Guid accountId, ReservationProgress progress, CancellationToken ct) =>
         hub.Clients.Group(ReservationProgressHub.Group(accountId, progress.RequestId))
             .SendAsync("ReservationProgress", progress, ct);

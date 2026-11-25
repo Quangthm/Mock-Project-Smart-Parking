@@ -2031,7 +2031,7 @@
       "description": "Khởi tạo đơn hàng thanh toán trước, sinh liên kết VietQR payOS, xác thực chữ ký Webhook IPN và demo thanh toán dev.",
       "item": [
         {
-          "name": "3.1 Create Payment Order - Advance Reservation (Happy Path 200 OK)",
+          "name": "3.1 Create Payment Order - Parking Session (Happy Path 200 OK)",
           "event": [
             {
               "listen": "prerequest",
@@ -2090,7 +2090,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{onlineReferenceId}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": 25000,\n  \"accountId\": \"{{driverAccountId}}\",\n  \"idempotencyKey\": \"{{onlineIdempotencyKey}}\"\n}",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{onlineReferenceId}}\",\n  \"referenceType\": \"PARKING_SESSION\",\n  \"amount\": 25000,\n  \"accountId\": \"{{driverAccountId}}\",\n  \"idempotencyKey\": \"{{onlineIdempotencyKey}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2139,7 +2139,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{onlineReferenceId}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": 25000,\n  \"accountId\": \"{{driverAccountId}}\",\n  \"idempotencyKey\": \"{{onlineIdempotencyKey}}\"\n}",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{onlineReferenceId}}\",\n  \"referenceType\": \"PARKING_SESSION\",\n  \"amount\": 25000,\n  \"accountId\": \"{{driverAccountId}}\",\n  \"idempotencyKey\": \"{{onlineIdempotencyKey}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2189,7 +2189,55 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{$guid}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": -50000,\n  \"accountId\": \"{{driverAccountId}}\"\n}",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{$guid}}\",\n  \"referenceType\": \"PARKING_SESSION\",\n  \"amount\": -50000,\n  \"accountId\": \"{{driverAccountId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Generic creation rejects reservation references",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Reservation orders belong to the reservation workflow\", () => {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json().errorCode).to.eql(\"FORBIDDEN_RESERVATION_DEPOSIT_CREATION\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"siteId\": \"{{siteId}}\",\n  \"referenceId\": \"{{$guid}}\",\n  \"referenceType\": \"RESERVATION\",\n  \"amount\": 50000,\n  \"accountId\": \"{{driverAccountId}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

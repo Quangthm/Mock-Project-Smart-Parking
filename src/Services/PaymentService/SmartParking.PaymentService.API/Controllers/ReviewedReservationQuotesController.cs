@@ -18,6 +18,6 @@ public sealed class ReviewedReservationQuotesController(IMediator mediator, ICon
             : StatusCode(StatusCodes.Status503ServiceUnavailable);
 
     [HttpGet("{quoteId:guid}")]
-    public async Task<IActionResult> Read(Guid quoteId, [FromQuery] Guid accountId, [FromQuery] string version, CancellationToken ct) =>
-        Ok(new { success = true, data = await mediator.Send(new ReadReviewedQuote(accountId, quoteId, version), ct) });
+    public async Task<IActionResult> Read(Guid quoteId, [FromQuery] Guid accountId, CancellationToken ct) =>
+        Ok(new { success = true, data = await mediator.Send(new ReadReviewedQuote(accountId, quoteId), ct) });
 }

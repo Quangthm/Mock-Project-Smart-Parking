@@ -23,9 +23,9 @@ public class ReservationQuoteRepository : IReservationQuoteRepository
         await _dbContext.ReservationQuotes.AddAsync(quote, cancellationToken);
     }
 
-    public Task<ReservationQuote?> FindReviewedAsync(Guid accountId, Guid id, string version, CancellationToken ct) =>
+    public Task<ReservationQuote?> FindReviewedAsync(Guid accountId, Guid id, CancellationToken ct) =>
         _dbContext.ReservationQuotes.AsNoTracking().SingleOrDefaultAsync(q => q.AccountId == accountId &&
-            q.Id == id && q.TermsVersion == version && q.ReviewedEvidence != null, ct);
+            q.Id == id && q.ReviewedEvidence != null, ct);
 
     public void Update(ReservationQuote quote)
     {

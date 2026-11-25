@@ -95,13 +95,13 @@ public sealed class ReservationRequest
         FailDependency(code);
     }
 
-    public void AttachQuoteHold(Guid reservationId)
+    public void CompleteAdmission(Guid reservationId, bool confirmed)
     {
         if (reservationId != Id || State != "EVALUATING" || AccountCheck != "SUCCEEDED" ||
             PlateCheck != "SUCCEEDED" || SlotCheck != "SUCCEEDED" || DecisionId is null)
             throw new InvalidOperationException("All owner checks are required for a quote hold.");
         ReservationId = reservationId;
-        State = "HOLD_CREATED";
+        State = confirmed ? "CONFIRMED" : "HOLD_CREATED";
         Code = null;
     }
 

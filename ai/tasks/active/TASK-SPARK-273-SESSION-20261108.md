@@ -869,3 +869,273 @@ Scope for review only. Staging has not been performed. Exclude the three unrelat
 - A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PreviewReservationPriceHandler.cs`
 - A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PreviewReservationValidator.cs`
 - A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFactsPublisher.cs`
+
+
+## Checkpoint C v0.7 implementation review — 25 November 2026
+
+**C IMPLEMENTATION COMPLETE — MANUAL ACCEPTANCE PENDING.** This entry supersedes earlier C proposals and preliminary evidence. B4 remains accepted. Local branch `feature/SPARK-273-driver-book-parking-ahead-of-arrival` and its local origin tracking ref both point to `31a66a24964b3782643e98789980f05d95e52875` at recovery. The accepted tracking baseline was `2756ef707f3c8caa89594092389f65deb850f104`, two commits behind this HEAD. The index was empty. The following inventory excludes the user's router, SPARK-243 session and untracked coding instructions.
+
+### Review units and handoffs
+
+| Unit | Implementation, ownership and review focus |
+|---|---|
+| Payment | The generic writer rejects RESERVATION before idempotency lookup for every order type. Reviewed creation validates the persisted immutable quote, Account and binding under transaction-scoped locks and unique reservation/quote indexes. Positive first creation at H fences. True zero creates a paid zero order, settled invoice and directed receipt in one transaction after valid admission, including after T. Exact replay preserves identity. Two owner-scoped reads expose readiness and return linkage. Verify deployed broker access and service-signed proof reads. |
+| Operations admission | The existing three-branch Saga and guarded whole-interval decision atomically persist either a named-slot PENDING_PAYMENT hold with H and HOLD_CREATED, or a CONFIRMED zero commitment, no H, original time and unique confirmation effect. Both commit the order command through the existing EF outbox. A zero deposit requires explicit validated amounts and coverage. Ordinary provisioning acknowledgements, retries and intermediate zero acceptance have been retired. Hold expiry and admission timing remain. |
+| Operations settlement and lifecycle | The existing shared PaymentSucceededV1 establishes positive order and collection identity in the first atomic entitlement decision. Before H the protected claim stands subject to independent invalidation. Between H and T, reacquisition considers the original slot, accepted buffer and current occupancy projection. At or after T a first settlement cannot grant entitlement. A verified denial stages one obligation using the original collection. A genuine zero receipt only links two financial IDs under guards. Independent zero cancellation evidence works in either ordering. Only paired, first financial linkage on an already-confirmed zero booking gets the narrow structure-eligibility exception. |
+| Gate departure | Reserved check-in creates a distinct physical session ID. The pre-C reservation checkout caller supplied its reservation ID as Payment sessionId; the shared PARKING_SESSION event could miss the visit. Both departure paths now send the physical session ID, retaining their previous business idempotency keys. A pre-existing financially misbound order produces the existing conflict under its original key. Such records require owner review and were not modified. |
+| Facility | Retain signed slot metadata and eligibility, physical site locking, occupancy facts and structural edit responsibilities. The former token repository, reverse workflow, retry and token schema are retired. The retained slot-read logic and physical site guard have dedicated names. |
+| Frontend | The existing authenticated SignalR group carries a presentation hint. Frontend subscribes before the two owner reads, fences older responses and recovers after reconnect. Positive checkout needs matching unexpired H. Return navigation resolves the Payment order before Operations settlement. Zero confirmation works with both financial IDs null. History conditionally displays the genuine zero receipt ID. Historic order return retains the existing own-request lookup for legacy records. |
+| Schema and contracts | Review the three owning SQL initializers with the corresponding EF mappings. They cover terminal CONFIRMED admission, permanent INVALIDATED, null zero H, joint zero IDs, protected claim/identity constraints, and zero orders with null expiry. Reviewed quote version, order-provisioning and Facility token storage are removed. Historical terms, collections, refund obligations and financial records are retained. No populated database migration or reset was executed. |
+| SPARK-244 and later work | Reviewed collection readers must accept a null termsVersion and bind by quote, order and collection identity. Independent collections and reconciliation HTTP remain available. The verified PaymentTransactionId is the collection ID. SPARK-244 owners retain responsibility for independent cancellation and financial workflow acceptance. D timing replacement, E's later integration scope and D08 affected-slot invalidation/reallocation remain separate. |
+
+See the [current Payment contract and queue handoff](../../../docs/05-project-management/handoffs/SPARK-273%20%E2%80%94%20Reservation/2026-11-19-SPARK-273-payment-authority.md#checkpoint-c-v07-owner-contract-25-november) and the [manual startup, preflight and acceptance guide](../../../docs/04-testing/postman/SPARK-273-manual-test-guide.md#7-manual-checkpoint-c-acceptance).
+
+### Execution evidence
+
+| Classification | Command or scenario | Observed result |
+|---|---|---|
+| Previously verified | `dotnet test tests/Services/SmartParking.PaymentService.Tests --no-restore --nologo -m:1` | Latest log `spark273c-payment-evidence.log`: 281 passed, 0 failed, 0 skipped. Earlier counts were 279 and 280. Additional tests cover the exact H fence using a controlled clock and late zero order/invoice/outbox rollback using real PostgreSQL, then simultaneous redelivery. |
+| Previously verified | `dotnet test tests/Services/SmartParking.OperationService.Tests --no-restore --nologo -m:1` | Latest log `spark273c-operations-evidence.log`: 103 passed, 0 failed, 0 skipped. The initial paired timeout (99/100) came from a shared test Payment outbox with intentionally disabled delivery. A separate fixture database removed that interference (102/102). The last added case proved denial and one disposition after T. |
+| Previously verified | `dotnet test tests/Services/SmartParking.FacilityService.Tests --no-restore --nologo -m:1` | `spark273c-Facility.log`: 251 passed, 0 failed, 0 skipped on disposable fixtures. Combined latest backend results: 635 passed, zero failures and skips. Recorded warnings include NU1900 (vulnerability feed unavailable), xUnit1031 and CS9107. |
+| Previously verified | Paired signed HTTP and real RabbitMQ/PostgreSQL | A noncharging fixture webhook produced a genuine Payment collection and shared settlement. The reverse read returned the order before Operations processed settlement. The paired test checks foreign and unauthenticated reads, then receives the shared event and commits the outcome. Distinguish fixture gateway behavior from merchant acceptance. SignalR transport regressions exercised owned groups and reconnect using test authentication. |
+| Previously verified | Four normal API processes, fresh service databases, RabbitMQ, real Driver login/JWKS | A registered CAR and accepted quote reached positive admission and Payment-owned readiness/return lookup with Operations order ID still null. An effective zero tariff reached direct confirmation followed by actual zero financial linkage. This run did not charge a provider. Fixture broker credentials were local to the disposable vhost. Deployment permissions still need owner verification. |
+| Previously verified | `node --test tests/frontend/reservation-happy-path.test.cjs tests/frontend/payment-checkout.test.cjs tests/frontend/request-scheduling.test.cjs` and `npm --prefix FE run build` | 22 passed, 0 failed, 0 skipped. These are controlled client regressions. Vite built 1,353 modules with chunk-size and ineffective dynamic-import warnings. The resume changed only the conditional receipt label in the frontend. |
+| Newly verified | `dotnet test tests/Services/SmartParking.OperationService.Tests --no-build --no-restore --nologo --filter FullyQualifiedName~DepartureUsesPhysicalSessionAndPreservesItsExistingRetryKey` | 2 passed, 0 failed, 0 skipped. Reserved and walk-in preparation sent the actual session ID and preserved their respective retry keys. The initial build succeeded; its sandboxed test host timed out before execution. A single no-build run of the same filter completed in 633 ms outside the sandbox. No services or databases were started. |
+| Newly verified | Git status, revision comparison, worktree inventory, `git diff --check`, owning contract byte comparison, scoped retired-symbol search, Postman JSON/script syntax | Matching copies of four messages and the endpoint-address file. The two Postman collections parsed, including 76 Payment and 33 reservation scripts compiled in async context. Environment JSON parsed. No retained production references found for the removed reviewed version or acknowledgement paths. |
+| Blocked | `FE/node_modules/.bin/tsc.cmd --noEmit -p FE/tsconfig.json` | Exit 1. Installed TypeScript library targets lack replaceAll/hasOwn in two unrelated assistant modules. Vitest, Testing Library and MSW declarations are missing in existing tests. No errors in touched C files after correcting the payment-return lookup type. No dependencies installed. |
+| Requires manual verification | Customer UI, QR, real notification delivery/reconnect, payment return, history, gate, deployment permissions, supported provider test mode | Use section 7 of the manual guide and Postman 04.4, 05.1, 05.2 and 06.1. An earlier headless attempt could not access browser session storage. No browser pass is claimed. Provider test capability depends on the operator's environment. |
+| Not executed on resume | Service suites, browser workflows, Postman requests, provider charges or production acceptance | Existing backend evidence was reused. No full-solution result is claimed for C. |
+
+### Temporary infrastructure and release considerations
+
+The recovery inventory found no remaining containers named `spark273c-verify-pg` or `spark273c-verify-mq` and no matching fixture API, Vite or headless Edge processes. No temporary Edge profile matching `spark273c-edge-*` remained in the user's temp directory. The task-specific logs and `%TEMP%\spark273c-full-check` remain; the directory includes development-only key material. Keep them local. For cleanup after review, list `Get-ChildItem $env:TEMP -Filter 'spark273c-*'` and remove only individually verified task artifacts. Existing frontend build output under `FE/dist` is generated and excluded from staging. No test packages, virtual environment or development database changes were needed on resume. Use newly initialized C schemas for manual acceptance. An existing populated deployment needs a separately coordinated cutover. A missing order or a retrying technical fault remains unknown until Payment commits a result; the cutoff fence is a committed closure.
+
+### Proposed staging inventory
+
+Exact unstaged C paths grouped by review unit (123 modified, 41 added and 47 deleted). A denotes a new path, M an edit and D a deletion. Git currently exposes logical moves as separate additions and deletions, including the Facility slot reader/physical guard extraction and the replacement of the Operations provisioning worker by the retained hold-expiry worker. The two changes to existing user-owned files and the user's untracked instructions are excluded. Suggested atomic commit: `feat(reservations): settle reviewed bookings and confirm zero deposits at admission`.
+
+#### Payment order, checkout, collection and disposition
+
+- M `scripts/database/microservices/04-payment-pricing-service-db.sql`
+- M `src/Services/PaymentService/SmartParking.PaymentService.API/Controllers/InternalReservationOrdersController.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.API/Controllers/PaymentsController.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.API/Controllers/ReviewedReservationQuotesController.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Common/Interfaces/Persistence/IPaymentOrderRepository.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Common/Interfaces/Persistence/IReservationQuoteRepository.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Contracts/ReservationPayments/EnsureReservationOrderV1.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Contracts/ReservationPayments/RequestReservationDispositionV1.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Contracts/ReservationPayments/ReservationCheckoutChangedV1.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Contracts/ReservationPayments/ReservationPaymentEndpoints.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Contracts/ReservationPayments/ReservationZeroReceiptIssuedV1.cs`
+- D `src/Services/PaymentService/SmartParking.PaymentService.Application/DTOs/Reservations/EnsureReservationDepositOrderRequestDto.cs`
+- D `src/Services/PaymentService/SmartParking.PaymentService.Application/DTOs/Reservations/EnsureReservationDepositOrderResponseDto.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/DTOs/Reservations/VerifiedCollectionDto.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/IReservationFinancialNotifications.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/IssueReviewedQuoteHandler.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReadReservationCheckout.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReadReservationCheckoutHandler.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReadReviewedQuote.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReadReviewedQuoteHandler.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/RecordZeroDisposition.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/RecordZeroDispositionHandler.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/RequestReservationDisposition.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/RequestReservationDispositionHandler.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReservationCheckoutState.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReviewedQuoteProof.cs`
+- D `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ZeroQuoteSelection.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Usecase/CreatePaymentOrder/CreatePaymentOrderCommandHandler.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Usecase/Reservations/Commands/EnsureReservationDepositOrder/EnsureReservationDepositOrderCommand.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Usecase/Reservations/Commands/EnsureReservationDepositOrder/EnsureReservationDepositOrderCommandHandler.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Usecase/Reservations/Commands/EnsureReservationDepositOrder/EnsureReservationDepositOrderCommandValidator.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Application/Usecase/Reservations/Queries/GetReservationCollections/GetReservationCollectionsQueryHandler.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Domain/Entities/ReservationQuote.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/InfrastructureDependencyInjection.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/Messaging/EnsureReservationOrderConsumer.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/Messaging/ReservationDispositionConsumer.cs`
+- A `src/Services/PaymentService/SmartParking.PaymentService.Infrastructure/Messaging/ReservationFinancialNotifications.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Persistence/Configurations/ReservationQuoteConfiguration.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Persistence/Outbox/PaymentOutboxRegistration.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Persistence/Repositories/PaymentOrderRepository.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Persistence/Repositories/ReservationQuoteRepository.cs`
+- M `src/Services/PaymentService/SmartParking.PaymentService.Persistence/Repositories/UnitOfWork.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/Application/CreatePaymentOrderCommandHandlerTests.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/Application/EnsureReservationDepositOrderCommandHandlerTests.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/Application/ReviewedPaymentSettlementTests.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/Persistence/ReviewedOrderDatabaseTests.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/Persistence/ReviewedSettlementDatabaseTests.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/TestDoubles/FakePaymentOrderRepository.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/TestDoubles/FakeReservationQuoteRepository.cs`
+- M `tests/Services/SmartParking.PaymentService.Tests/TestDoubles/FakeUnitOfWork.cs`
+- A `tests/Services/SmartParking.PaymentService.Tests/TestDoubles/RecordingReservationNotifications.cs`
+
+#### Operations admission, entitlement, linkage and reconciliation
+
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Common/Interfaces/Services/ICheckoutPaymentClient.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Usecase/ReservationGate/ReservationUseCases.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Clients/CheckoutPaymentClient.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/CheckoutReturnUrlTests.cs`
+- M `scripts/database/microservices/03b-reservation-operations-service-db.sql`
+- M `scripts/database/seeds/demo/06-reservation-history.sql`
+- M `src/Services/OperationService/SmartParking.OperationService.API/Realtime/ReservationProgressRelay.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Contracts/ReservationPayments/EnsureReservationOrderV1.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Contracts/ReservationPayments/RequestReservationDispositionV1.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Contracts/ReservationPayments/ReservationCheckoutChangedV1.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Contracts/ReservationPayments/ReservationPaymentEndpoints.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Contracts/ReservationPayments/ReservationZeroReceiptIssuedV1.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AcceptZeroPriceTermsHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdmitQuoteReservationValidator.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdvanceFacilityDependencyHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingView.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingWorkflowContracts.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/CommitQuoteHoldHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ConfirmPaidReservationCommand.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ConfirmReservationHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ConfirmZeroPriceReservationCommand.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/DepositOrderRequest.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/DepositOrderResult.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ExpireReservationHoldCommand.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ExpireReservationHoldHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/FacilityBookingFacts.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/FacilityDependencyContracts.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/FacilityDependencyHandlers.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationBookingRepository.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationCommercialOwner.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationFactsPublisher.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationProgressRelay.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationQuoteOwner.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/LinkReservationZeroReceipt.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/LinkReservationZeroReceiptHandler.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/LockReservationBooking.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/LockReservationBookingHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PaymentReservationQuote.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PreviewReservationPriceQuery.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PricePreview.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProcessReservationHold.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProcessReservationHoldHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProvisionReservationOrderHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/QuoteReservationIntent.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReadOwnReservationProgressHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordReservationDepositCommand.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordReservationDepositHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordReservationDepositValidator.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordReservationPaymentHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RequireReservationAvailabilityCommand.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RequireReservationAvailabilityHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RequireSelectedSlotEvidence.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationConfirmedV1.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationDepositEvidence.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationOrderProvisioning.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationPaymentEvidence.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationPricePreview.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationProgress.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewReservationQuoteHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReviewedReservationQuote.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/VerifiedCollection.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ZeroOrderBinding.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ZeroOrderDecision.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ZeroOrderEvidence.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ZeroPriceAcceptanceRequest.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ZeroQuoteSelection.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Domain/Entities/ReservationRow.Booking.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationFacilityDependency.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationRequest.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/InfrastructureDependencyInjection.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Messaging/PaymentSucceededConsumer.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Messaging/PaymentSucceededV1.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Messaging/ReservationCheckoutChangedConsumer.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Messaging/ReservationPaymentSucceededConsumer.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Messaging/ReservationZeroReceiptIssuedConsumer.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/CollectionItem.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/DisabledReservationFactsPublisher.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/OrderResponse.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationCommercialClient.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFacilityClient.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFacilityDependencyWorker.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFactsPublisher.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationHoldChangedConsumer.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationHoldExpiryWorker.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationMessaging.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationOrderProvisioningWorker.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationProgressConsumer.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/UnavailableReservationQuoteOwner.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/PersistenceDependencyInjection.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationFacilityDependencyRepository.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationRepository.Bookings.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationRepository.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/UnitOfWork.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/ReservationDbContext.cs`
+- D `tests/Services/SmartParking.OperationService.Tests/PaymentAcknowledgementFault.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/PlateQuoteReviewTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.CapacityConcurrency.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.Paired.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationAdmissionBranchTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationCommercialClientTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationHistoryTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationPlateGuardTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationSagaTransportTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationTestSubscription.cs`
+
+#### Facility physical facts and guard retirement
+
+- M `scripts/database/microservices/02-facility-service-db.sql`
+- M `src/Services/FacilityService/SmartParking.FacilityService.API/Controllers/ReservationDependenciesController.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.API/FacilityHost.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Application/Common/Synchronization/StructureEditHandlers.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/BookingFacts.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/CheckReservationSlotEligibilityHandler.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/DependencyIntentValidator.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/IReservationDependencyRepository.cs`
+- A `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/IReservationSlotReader.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReservationDependencyContracts.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReservationDependencyHandlers.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ResolveReservationSlotHandler.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Domain/Entities/ReservationDependency.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Persistence/OccupancyProjectionRepository.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Persistence/OperatorGateSlotRepository.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Persistence/ParkingDbContext.cs`
+- A `src/Services/FacilityService/SmartParking.FacilityService.Persistence/PhysicalSiteGuard.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Persistence/ReservationDependencyGuard.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Persistence/ReservationDependencyRepository.cs`
+- A `src/Services/FacilityService/SmartParking.FacilityService.Persistence/ReservationSlotReader.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ApplicationWorkflowTests.cs`
+- A `tests/Services/SmartParking.FacilityService.Tests/CapturingReservationFacts.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/EmptyReservationDependencies.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/FacilityStructureEndpointTests.cs`
+- D `tests/Services/SmartParking.FacilityService.Tests/FakeBookingRepository.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/OccupancyProjectionRepositoryTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/PostgresStructureWorkflowTests.cs`
+- D `tests/Services/SmartParking.FacilityService.Tests/RecordingHandler.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationAdmissionRuleTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationAvailabilityTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationCreationLifecycleTests.cs`
+- D `tests/Services/SmartParking.FacilityService.Tests/ReservationDependencyTestDoubles.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationEvaluationCheckpointTests.cs`
+- D `tests/Services/SmartParking.FacilityService.Tests/ReservationFacilityDependencyTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationSlotEndpointTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/StructureHoldReleaseTests.cs`
+- A `tests/Services/SmartParking.FacilityService.Tests/StructureTestMediator.cs`
+
+#### Driver checkout, return and history
+
+- M `FE/src/lib/paymentApi.ts`
+- M `FE/src/lib/reservationProgress.ts`
+- M `FE/src/lib/reservationsApi.ts`
+- M `FE/src/roles/driver/booking/ActiveBookings.tsx`
+- M `FE/src/roles/driver/booking/LiveReservations.tsx`
+- M `FE/src/roles/driver/booking/ReservationCheckout.tsx`
+- M `FE/src/roles/driver/history/BookingHistory.tsx`
+- M `FE/src/roles/driver/payments/PaymentResultPage.tsx`
+- M `tests/frontend/reservation-happy-path.test.cjs`
+
+#### API examples, owner handoffs and review evidence
+
+- M `ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md`
+- M `docs/04-testing/postman/PaymentService.postman_collection.json`
+- M `docs/04-testing/postman/SPARK-273-Local.postman_environment.example.json`
+- M `docs/04-testing/postman/SPARK-273-Reservation-Flow.postman_collection.json`
+- M `docs/04-testing/postman/SPARK-273-manual-test-guide.md`
+- M `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-09-reservation-frontend-handoff.md`
+- M `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-18-SPARK-273-reservation-owner-handoffs.md`
+- M `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-19-SPARK-273-payment-authority.md`

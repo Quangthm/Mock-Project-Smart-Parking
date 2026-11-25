@@ -8,7 +8,7 @@ public sealed record VerifiedCollectionDto(
     Guid TenantId,
     Guid SiteId,
     Guid QuoteId,
-    string TermsVersion,
+    string? TermsVersion,
     decimal Amount,
     string Currency,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

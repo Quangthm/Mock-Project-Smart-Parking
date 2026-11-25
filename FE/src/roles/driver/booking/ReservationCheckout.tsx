@@ -25,7 +25,7 @@ type Attempt =
 const isId = (value: unknown): value is string =>
   typeof value === "string" && /^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
 
-const terminal = new Set(["REJECTED", "DENIED", "EXPIRED", "FAILED_DEPENDENCY", "TIMED_OUT", "DEPENDENCY_UNAVAILABLE", "CANCELLED", "UNFULFILLABLE"])
+const terminal = new Set(["REJECTED", "DENIED", "EXPIRED", "FAILED_DEPENDENCY", "TIMED_OUT", "DEPENDENCY_UNAVAILABLE", "CANCELLED", "UNFULFILLABLE", "INVALIDATED"])
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })
 const dateOnly = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" })
 const timeOnly = new Intl.DateTimeFormat(undefined, { timeStyle: "short" })
@@ -129,11 +129,11 @@ export function readReservationAttempt(storageKey: string): Attempt | null {
 
     const intent = saved.intent
     if (!intent || !isId(intent.quoteId) || !isId(intent.requestedSlotId) ||
-        typeof intent.quoteVersion !== "string" || !intent.quoteVersion.trim() || intent.quoteVersion.length > 256 ||
         typeof intent.licensePlate !== "string" || !intent.licensePlate.trim() ||
         intent.paymentMethod !== "PAYOS" || typeof intent.start !== "string" || typeof intent.end !== "string" ||
         !Number.isFinite(Date.parse(intent.start)) || !(Date.parse(intent.end) > Date.parse(intent.start))) return null
-    return { key: saved.key, intent: intent as ReviewedReservationIntent }
+    const { quoteId, licensePlate, requestedSlotId, start, end, paymentMethod } = intent
+    return { key: saved.key, intent: { quoteId, licensePlate, requestedSlotId, start, end, paymentMethod } }
   } catch {
     return null
   }
@@ -149,7 +149,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
   const [reviewed, setReviewed] = useState<{ quote: ReviewedReservationQuote; selection: ReviewedReservationSelection } | null>(null)
   const [accepted, setAccepted] = useState(false)
   const [receipt, setReceipt] = useState<ReservationReceipt | null>(null)
-  const { snapshot, connected, reconnect } = useReservationProgress(attempt?.requestId)
+  const { snapshot, checkout, connected, reconnect } = useReservationProgress(attempt?.requestId, true)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(Date.now)
@@ -249,7 +249,6 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
           end: quote.end,
           paymentMethod: quote.paymentMethod,
           quoteId: quote.quoteId,
-          quoteVersion: quote.quoteVersion,
         },
       }
       // Persist before the HTTP request so retries cannot create a second intent.
@@ -278,9 +277,11 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
   }, [activeDeadline, confirmed, failed])
 
   const holdExpired = Boolean(snapshot?.holdExpiresAt && Date.parse(snapshot.holdExpiresAt) <= now)
+  const paymentState = checkout === "UNAVAILABLE" ? checkout : checkout?.state
   const orderId = connected && !failed && snapshot?.reservationState === "PENDING_PAYMENT" &&
-    snapshot.paymentReadiness === "AVAILABLE" && snapshot.holdExpiresAt &&
-    Date.parse(snapshot.holdExpiresAt) > now ? snapshot.orderId : null
+    checkout && checkout !== "UNAVAILABLE" && checkout.state === "PAYABLE" && checkout.holdExpiresAt &&
+    Date.parse(checkout.holdExpiresAt) === Date.parse(snapshot.holdExpiresAt ?? "") && snapshot.holdExpiresAt &&
+    Date.parse(snapshot.holdExpiresAt) > now ? checkout.orderId : null
   const needsReview = reviewed && (Date.parse(reviewed.quote.validUntil) <= now ||
     JSON.stringify(selection) !== JSON.stringify(reviewed.selection))
 
@@ -364,6 +365,10 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
         : snapshot?.reservationState === "PENDING_PAYMENT"
           ? holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
             : orderId ? "Your payment order is ready."
+            : paymentState === "PAID" ? "Payment received. Awaiting reservation confirmation."
+            : paymentState === "FAILED" ? "Payment order creation failed."
+            : paymentState === "CLOSED" ? "This payment order is closed."
+            : paymentState === "UNAVAILABLE" ? "Payment Service is unavailable. Reconnect to check checkout."
             : "Waiting for the reservation payment order."
           : attempt.requestId ? "We’re checking your reservation."
           : busy ? "Sending your reservation…" : "The request has no receipt yet. Retry with the same request key."}</p>
@@ -372,17 +377,17 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
 
     {snapshot && <ReservationChecks snapshot={snapshot} />}
 
-    {snapshot && (snapshot.reservationId || snapshot.reservationState || snapshot.paymentReadiness) &&
+    {snapshot && (snapshot.reservationId || snapshot.reservationState || paymentState) &&
       <section className="reservation-payment-summary" aria-labelledby="reservation-payment-summary-title">
         <h4 id="reservation-payment-summary-title">Payment summary</h4>
-        {(snapshot.reservationState || snapshot.paymentReadiness) && <dl className="reservation-payment-states">
+        {(snapshot.reservationState || paymentState) && <dl className="reservation-payment-states">
           {snapshot.reservationState && <div>
             <dt>Reservation</dt>
             <dd data-status={snapshot.reservationState}>{formatStatus(snapshot.reservationState)}</dd>
           </div>}
-          {snapshot.paymentReadiness && <div>
+          {paymentState && <div>
             <dt>Payment order</dt>
-            <dd data-status={snapshot.paymentReadiness}>{formatStatus(snapshot.paymentReadiness)}</dd>
+            <dd data-status={paymentState}>{formatStatus(paymentState)}</dd>
           </div>}
         </dl>}
         {snapshot.reservationId && <dl className="reservation-payment-totals">
@@ -399,8 +404,8 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
     {orderId && <PaymentCheckout key={orderId} showMethodPicker={false} reservationOrderId={orderId}
       reservationRequestId={attempt?.requestId} holdExpiresAt={snapshot?.holdExpiresAt} />}
 
-    {(failed || confirmed || !attempt.requestId || !connected) && <div className="reservation-checkout-actions">
-      {attempt && !failed && !confirmed && (!attempt.requestId || !connected) && <button type="button" className="btn-outline" disabled={busy} onClick={() => "intent" in attempt ? void run(() => submit(attempt)) : reconnect()}>
+    {(failed || confirmed || !attempt.requestId || !connected || paymentState === "UNAVAILABLE") && <div className="reservation-checkout-actions">
+      {attempt && !failed && !confirmed && (!attempt.requestId || !connected || paymentState === "UNAVAILABLE") && <button type="button" className="btn-outline" disabled={busy} onClick={() => "intent" in attempt ? void run(() => submit(attempt)) : reconnect()}>
         {busy ? "Checking…" : attempt.requestId ? "Reconnect" : "Retry same request"}
       </button>}
       {(failed || confirmed) && <button type="button" className="btn-primary" onClick={closeAttempt}>Done</button>}

@@ -30,7 +30,6 @@ public sealed partial class QuoteBookingDatabaseTests
         await db.SaveChangesAsync();
         await Send(services, new CommitQuoteHoldCommand(request));
         Assert.Equal("PENDING_PAYMENT", await db.Reservations.Where(r => r.Id == request).Select(r => r.Status).SingleAsync());
-        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == request));
         Assert.False(await db.SlotAllocations.AnyAsync(a => a.SiteId == site));
     }
 
@@ -173,7 +172,7 @@ public sealed partial class QuoteBookingDatabaseTests
             var request = ReservationRequest.AdmitQuote(Guid.NewGuid(), account, Guid.NewGuid(), "{}", "test", at);
             var row = ReservationRow.PrepareQuote(request.Id, account, canonicalPlate, tenant, site, selected,
                 "PAYOS", from, until, until, at, at.AddMinutes(5), 100, 0, 100, "VND",
-                """{"Values":{"OCCUPANCY_VALIDITY_TIMESPAN":240}}""", Guid.NewGuid(), "q1", start, "tariff", "none", false);
+                """{"Values":{"OCCUPANCY_VALIDITY_TIMESPAN":240}}""", Guid.NewGuid(), start, "tariff", "none", false);
             try
             {
                 await bookings.RequirePlateAvailableAsync(row, at, ct);
@@ -187,7 +186,7 @@ public sealed partial class QuoteBookingDatabaseTests
             request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), at, true, at);
             request.RecordPlate(true, canonicalPlate, 1, at);
             request.RecordSlot(true, site, tenant);
-            request.AttachQuoteHold(row.Id);
+            request.CompleteAdmission(row.Id, false);
             db.Add(request);
             await bookings.AddAsync(row, ct);
             await provider.GetRequiredService<IReservationFactsPublisher>().HoldChangedAsync(new(Guid.NewGuid(), at,

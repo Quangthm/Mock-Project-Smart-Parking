@@ -29,7 +29,6 @@ export interface ReviewedReservationSelection {
 }
 export interface ReviewedReservationIntent extends ReviewedReservationSelection {
   quoteId: string
-  quoteVersion: string
 }
 export interface ReviewedReservationQuote extends Omit<ReviewedReservationIntent, "licensePlate"> {
   canonicalPlate: string
@@ -58,8 +57,7 @@ export interface OwnReservation {
   end: string
   holdExpiresAt: string | null
   orderId: string | null
-  orderProvisioningState: string
-  orderProvisioningCode: string | null
+  zeroReceiptId?: string | null
   bookedAmount: number | null
   depositAmount: number | null
   currency: string | null
@@ -85,8 +83,6 @@ export interface ReservationProgress {
   checks: { account: string; vehicle: string; facility: string; booking: string }
   reservationId: string | null
   reservationState: string | null
-  paymentReadiness: string | null
-  commercialReadiness: string | null
   outcomeCode: string | null
   orderId: string | null
   holdExpiresAt: string | null

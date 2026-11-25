@@ -1,3 +1,4 @@
+using SmartParking.Contracts.ReservationPayments;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using MassTransit;
 using SmartParking.Contracts.Audit;
@@ -80,7 +81,8 @@ public static class ReservationMessaging
             if (admissionEnabled)
             {
                 registration.AddConsumer<ReservationProgressConsumer>();
-                registration.AddConsumer<ReservationHoldChangedConsumer>();
+                registration.AddConsumer<ReservationZeroReceiptIssuedConsumer>();
+                registration.AddConsumer<ReservationCheckoutChangedConsumer>();
                 registration.AddConsumer<ReservationPaymentSucceededConsumer>();
             }
             if (gateCheckoutEnabled)
@@ -121,6 +123,7 @@ public static class ReservationMessaging
                     {
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
                         endpoint.ConfigureConsumer<ReservationPaymentSucceededConsumer>(context);
                     });
                 }
@@ -135,11 +138,18 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(1)));
                         endpoint.ConfigureConsumer<ReservationProgressConsumer>(context);
                     });
-                    bus.ReceiveEndpoint("smartpark-operation-reservation-hold-changed-v1", endpoint =>
+                    bus.ReceiveEndpoint(ReservationPaymentEndpoints.ZeroReceipt, endpoint =>
                     {
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<ReservationHoldChangedConsumer>(context);
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
+                        endpoint.ConfigureConsumer<ReservationZeroReceiptIssuedConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint(ReservationPaymentEndpoints.CheckoutChanged, endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.ConfigureConsumer<ReservationCheckoutChangedConsumer>(context);
                     });
                 }
                 bus.Message<ReservationAvailabilityChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-availability-changed.v1"));
@@ -204,8 +214,7 @@ public static class ReservationMessaging
         if (admissionEnabled)
         {
             services.AddScoped<IReservationProgressPublisher, ReservationProgressPublisher>();
-            services.AddHostedService<ReservationFacilityDependencyWorker>();
-            services.AddHostedService<ReservationOrderProvisioningWorker>();
+            services.AddHostedService<ReservationHoldExpiryWorker>();
         }
         return services;
     }

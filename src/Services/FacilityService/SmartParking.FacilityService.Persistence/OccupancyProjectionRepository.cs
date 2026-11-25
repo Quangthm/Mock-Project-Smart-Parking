@@ -38,7 +38,7 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
         {
             // The reservation snapshot includes operational slot state. Share the site fence before
             // reading the watermark or changing eligibility. A busy token rolls back the event receipt.
-            await ReservationDependencyGuard.RequireAvailableAsync(db, tx, projectionEvent.SiteId, ct);
+            await PhysicalSiteGuard.RequireAvailableAsync(db, tx, projectionEvent.SiteId, ct);
             // G5 rules 2-4: apply only when the sequence number advances the slot watermark.
             if (!await IsFreshAsync(db, tx, slot, projectionEvent.SequenceNumber, ct))
                 return false;

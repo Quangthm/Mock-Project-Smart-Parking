@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     slot_check TEXT,
     resolved_site_id UUID,
     resolved_tenant_id UUID,
-    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
+    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING', 'HOLD_CREATED', 'CONFIRMED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,
     overall_deadline TIMESTAMPTZ NOT NULL,
@@ -60,37 +60,6 @@ CREATE TABLE IF NOT EXISTS reservation_terms (
     snapshot_json JSONB NOT NULL CHECK (jsonb_typeof(snapshot_json) = 'object'),
     accepted_request_id UUID UNIQUE REFERENCES reservation_requests(id)
 );
-
--- Reverse Facility handshake: per-workflow evidence, not a mirrored structure catalogue or audit log.
-CREATE TABLE IF NOT EXISTS reservation_facility_dependencies (
-    id UUID PRIMARY KEY,
-    workflow_id UUID NOT NULL REFERENCES reservation_requests(id),
-    purpose TEXT NOT NULL CHECK (purpose IN ('ADMISSION', 'CONFIRMATION')),
-    tenant_id UUID NOT NULL,
-    site_id UUID NOT NULL,
-    slot_id UUID NOT NULL,
-    intent_fingerprint TEXT NOT NULL,
-    deadline TIMESTAMPTZ NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PREPARING', 'HELD', 'READY', 'ABORTING', 'COMPLETED')),
-    snapshot_json JSONB,
-    snapshot_fingerprint TEXT,
-    outcome_json JSONB,
-    abort_reason TEXT,
-    resolution TEXT CHECK (resolution IN ('COMMITTED', 'ABORTED')),
-    version INTEGER NOT NULL CHECK (version > 0),
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    next_action_at TIMESTAMPTZ NOT NULL,
-    completed_at TIMESTAMPTZ,
-    UNIQUE (workflow_id, purpose),
-    CHECK (created_at < deadline),
-    CHECK (state NOT IN ('HELD', 'READY') OR (snapshot_json IS NOT NULL AND snapshot_fingerprint IS NOT NULL)),
-    CHECK (state <> 'READY' OR outcome_json IS NOT NULL),
-    CHECK (state <> 'ABORTING' OR abort_reason IS NOT NULL),
-    CHECK ((state = 'COMPLETED') = (completed_at IS NOT NULL AND resolution IS NOT NULL))
-);
-CREATE INDEX IF NOT EXISTS ix_reservation_facility_dependencies_due
-    ON reservation_facility_dependencies(next_action_at, id) WHERE state <> 'COMPLETED';
 
 -- MassTransit 8.5.7 EF inbox/outbox mapping, same owning ReservationDbContext.
 CREATE TABLE IF NOT EXISTS "InboxState" (
@@ -301,7 +270,6 @@ CREATE TABLE IF NOT EXISTS reservations (
     terms_id UUID REFERENCES reservation_terms(id),
     terms_version TEXT,
     quote_id UUID UNIQUE,
-    quote_version TEXT,
     quote_valid_until TIMESTAMPTZ,
     tariff_version TEXT,
     coverage_version TEXT,
@@ -313,19 +281,8 @@ CREATE TABLE IF NOT EXISTS reservations (
     deposit_amount NUMERIC(18,2) CHECK (deposit_amount >= 0),
     currency TEXT,
     payment_order_id UUID UNIQUE,
-    order_provisioning_state TEXT NOT NULL DEFAULT 'NOT_REQUIRED'
-        CHECK (order_provisioning_state IN ('NOT_REQUIRED', 'PENDING', 'IN_PROGRESS', 'UNKNOWN', 'CREATED', 'CLOSED_NO_ORDER')),
-    order_provisioning_next_action_at TIMESTAMPTZ,
-    order_provisioning_attempts INT NOT NULL DEFAULT 0 CHECK (order_provisioning_attempts >= 0),
-    order_provisioning_code TEXT,
-    zero_price_acceptance_state TEXT NOT NULL DEFAULT 'NOT_REQUIRED'
-        CHECK (zero_price_acceptance_state IN ('NOT_REQUIRED', 'PENDING', 'IN_PROGRESS', 'UNKNOWN', 'ACCEPTED', 'REJECTED')),
-    zero_price_acceptance_next_action_at TIMESTAMPTZ,
-    zero_price_acceptance_attempts INT NOT NULL DEFAULT 0 CHECK (zero_price_acceptance_attempts >= 0),
-    zero_price_acceptance_code TEXT,
     confirmation_state TEXT NOT NULL DEFAULT 'AWAITING_COLLECTION'
-        CHECK (confirmation_state IN ('AWAITING_COLLECTION', 'AWAITING_ZERO_PRICE_ACCEPTANCE', 'PENDING', 'CONFIRMED', 'NO_ENTITLEMENT', 'RECONCILIATION_REQUIRED')),
-    confirmation_next_action_at TIMESTAMPTZ,
+        CHECK (confirmation_state IN ('AWAITING_COLLECTION', 'CONFIRMED', 'NO_ENTITLEMENT')),
     confirmation_code TEXT,
     collection_id UUID UNIQUE,
     collection_fingerprint TEXT,
@@ -348,7 +305,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     confirmed_at TIMESTAMPTZ,
     accepted_operational_policy_snapshot JSONB NULL CHECK (jsonb_typeof(accepted_operational_policy_snapshot) = 'object'),
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING_PAYMENT' 
-        CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'UNFULFILLABLE')),
+        CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'INVALIDATED', 'UNFULFILLABLE')),
     hold_expires_at TIMESTAMPTZ,
     cancelled_at TIMESTAMPTZ,
     accepted_pricing_snapshot JSONB,
@@ -360,9 +317,12 @@ CREATE TABLE IF NOT EXISTS reservations (
         deposit_amount IS NOT NULL AND currency IS NOT NULL AND currency = 'VND' AND accepted_operational_policy_snapshot IS NOT NULL AND
         ((quote_id IS NULL AND vehicle_id IS NOT NULL AND terms_id IS NOT NULL AND terms_version IS NOT NULL AND accepted_pricing_snapshot IS NOT NULL)
          OR (quote_id IS NOT NULL AND vehicle_id IS NULL AND terms_id IS NULL AND terms_version IS NULL AND accepted_pricing_snapshot IS NULL
-             AND quote_version IS NOT NULL AND quote_valid_until IS NOT NULL AND created_at < quote_valid_until
+             AND quote_valid_until IS NOT NULL AND created_at < quote_valid_until
              AND coverage_version IS NOT NULL AND tariff_version IS NOT NULL AND selected_payment_method IS NOT NULL
-             AND target_slot_id IS NOT NULL AND hold_expires_at IS NOT NULL AND created_at < hold_expires_at AND hold_expires_at <= expected_start_time
+             AND target_slot_id IS NOT NULL AND
+             ((deposit_amount > 0 AND zero_receipt_id IS NULL AND hold_expires_at IS NOT NULL AND created_at < hold_expires_at AND hold_expires_at <= expected_start_time)
+               OR (deposit_amount = 0 AND hold_expires_at IS NULL AND collection_id IS NULL AND confirmation_effect_id IS NOT NULL
+                 AND ((payment_order_id IS NULL) = (zero_receipt_id IS NULL))))
              AND is_covered IS NOT NULL AND covered_amount IS NOT NULL AND covered_amount = CASE WHEN is_covered THEN booked_amount ELSE 0 END AND booked_amount = deposit_amount + covered_amount)))),
     CHECK (request_id IS NULL OR status NOT IN ('CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED') OR
         (confirmation_evaluated_at IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_at = confirmation_evaluated_at AND confirmed_at < expected_start_time AND confirmation_effect_id IS NOT NULL)),
@@ -377,15 +337,6 @@ CREATE INDEX IF NOT EXISTS idx_reservations_tenant_site ON reservations(tenant_i
 CREATE INDEX IF NOT EXISTS idx_reservations_account ON reservations(account_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status_times ON reservations(status, expected_start_time, expected_end_time);
 CREATE INDEX IF NOT EXISTS idx_reservations_plate ON reservations(normalized_plate);
-CREATE INDEX IF NOT EXISTS ix_reservations_order_provisioning_due
-    ON reservations(order_provisioning_next_action_at, id)
-    WHERE order_provisioning_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
-CREATE INDEX IF NOT EXISTS ix_reservations_no_payment_confirmation_due
-    ON reservations(confirmation_next_action_at, id)
-    WHERE deposit_amount = 0 AND confirmation_state IN ('PENDING', 'RECONCILIATION_REQUIRED');
-CREATE INDEX IF NOT EXISTS ix_reservations_zero_price_acceptance_due
-    ON reservations(zero_price_acceptance_next_action_at, id)
-    WHERE deposit_amount = 0 AND zero_price_acceptance_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
 
 -- Business enforcement evidence, not an audit repository. Future cancellation handlers
 -- write this atomically with cancellation under reservation-account:<account_id>.

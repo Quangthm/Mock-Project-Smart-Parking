@@ -31,20 +31,6 @@ public sealed class ReservationAdmissionBranchTests
     }
 
     [Fact]
-    public void HeldTokenRequiresTheSameSnapshotOnReplay()
-    {
-        var token = ReservationFacilityDependency.Prepare(Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION",
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "intent", Now.AddMinutes(1), Now);
-        var original = """{"complete":true}""";
-        var changed = """{"complete":false}""";
-        token.RecordHeld(original, FacilityDependencyProtocol.Fingerprint(original), Now);
-        token.RecordHeld(original, FacilityDependencyProtocol.Fingerprint(original), Now);
-        Assert.Throws<InvalidOperationException>(() =>
-            token.RecordHeld(changed, FacilityDependencyProtocol.Fingerprint(changed), Now));
-        Assert.Equal(original, token.SnapshotJson);
-    }
-
-    [Fact]
     public void ReplayedAccountResultJoinsOnlyAfterBothOwnerChecks()
     {
         var request = NewRequest();
@@ -58,6 +44,6 @@ public sealed class ReservationAdmissionBranchTests
         request.RecordPlate(true, "51A12345", 3, Now.AddSeconds(17));
         Assert.Equal("EVALUATING", request.State);
         Assert.Null(request.ReservationId);
-        Assert.Throws<InvalidOperationException>(() => request.AttachQuoteHold(Guid.NewGuid()));
+        Assert.Throws<InvalidOperationException>(() => request.CompleteAdmission(Guid.NewGuid(), false));
     }
 }

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "95ef8f73-2730-4bb5-bf11-2ea005a770c4",
     "name": "SPARK-273 Reservation Flow",
-    "description": "Manual Driver-to-PENDING_PAYMENT workflow with live Payment order readiness. Send each request individually. Review the exact quote before entering acceptedQuoteId. Payment is outside this suite.",
+    "description": "Send requests individually. Review the immutable quote before setting acceptedQuoteId. Check positive Payment readiness or immediate zero confirmation. Provider checkout is a separate manual step.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -222,7 +222,7 @@
                   "    pm.execution.skipRequest();",
                   "    throw new Error('An existing submission is retained. Resolve or replay it before starting a fresh scenario.');",
                   "}",
-                  "for (const key of ['acceptedQuoteId','quoteId','quoteVersion','reviewedQuoteExpiresAt','reviewedAccountId',",
+                  "for (const key of ['acceptedQuoteId','quoteId','reviewedQuoteExpiresAt','reviewedAccountId',",
                   "    'resolvedSiteId','reviewedBookedAmount','reviewedDepositAmount','reviewedCurrency','reviewedSelection']) env.unset(key);",
                   "const selection = {licensePlate: env.get('licensePlate'), requestedSlotId: env.get('slotId'),",
                   "    start: env.get('start'), end: env.get('end'), paymentMethod: env.get('paymentMethod')};",
@@ -251,19 +251,18 @@
                   "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
                   "const sameTime = (a, b) => Number.isFinite(Date.parse(a)) && Date.parse(a) === Date.parse(b);",
                   "const selection = JSON.parse(pm.variables.get('requestJson'));",
-                  "const binds = isId(data.quoteId) && /^rq1-.+/.test(data.quoteVersion || '') && isId(data.siteId) &&",
+                  "const binds = isId(data.quoteId) && isId(data.siteId) &&",
                   "    data.canonicalPlate === selection.licensePlate && data.requestedSlotId === selection.requestedSlotId &&",
                   "    sameTime(data.start, selection.start) && sameTime(data.end, selection.end) && data.paymentMethod === selection.paymentMethod;",
-                  "const terms = data.isCovered === false && data.coveredAmount === 0 &&",
-                  "    Number.isSafeInteger(data.bookedAmount) && data.bookedAmount > 0 && data.depositAmount === data.bookedAmount &&",
+                  "const terms = typeof data.isCovered === 'boolean' && data.coveredAmount === (data.isCovered ? data.bookedAmount : 0) &&",
+                  "    Number.isSafeInteger(data.bookedAmount) && data.bookedAmount >= 0 && Number.isSafeInteger(data.depositAmount) && data.depositAmount >= 0 && Number.isSafeInteger(data.coveredAmount) && data.coveredAmount >= 0 && data.depositAmount + data.coveredAmount === data.bookedAmount &&",
                   "    data.currency === 'VND' && typeof data.disclosure === 'string' && data.disclosure.trim().length > 0 &&",
                   "    typeof data.tariffVersion === 'string' && data.tariffVersion.length > 0 &&",
                   "    typeof data.coverageVersion === 'string' && data.coverageVersion.length > 0 && Date.parse(data.validUntil) > Date.now();",
                   "pm.test('Quote matches the reviewed selection', () => pm.expect(binds).to.eql(true));",
-                  "pm.test('Valid disclosed positive whole-VND terms', () => pm.expect(terms).to.eql(true));",
+                  "pm.test('Valid disclosed whole-VND terms', () => pm.expect(terms).to.eql(true));",
                   "if (!binds || !terms) throw new Error('The paid review does not match the expected commercial terms.');",
                   "env.set('quoteId', data.quoteId);",
-                  "env.set('quoteVersion', data.quoteVersion);",
                   "env.set('reviewedQuoteExpiresAt', data.validUntil);",
                   "env.set('reviewedAccountId', env.get('driverAccountId'));",
                   "env.set('resolvedSiteId', data.siteId);",
@@ -328,7 +327,7 @@
                   "    pm.variables.set('requestJson', frozen);",
                   "} else {",
                   "    const selection = JSON.parse(env.get('reviewedSelection'));",
-                  "    if (!isId(env.get('quoteId')) || !env.get('quoteVersion') ||",
+                  "    if (!isId(env.get('quoteId')) ||",
                   "        env.get('acceptedQuoteId') !== env.get('quoteId') ||",
                   "        !(Date.parse(env.get('reviewedQuoteExpiresAt')) > Date.now()) ||",
                   "        selection.licensePlate !== env.get('licensePlate') || selection.requestedSlotId !== env.get('slotId') ||",
@@ -339,7 +338,7 @@
                   "    }",
                   "    const key = env.get('reservationIdempotencyKey') || pm.variables.replaceIn('{{$guid}}');",
                   "    if (!isId(key)) { pm.execution.skipRequest(); throw new Error('Use a UUID idempotency key.'); }",
-                  "    const value = JSON.stringify({...selection, quoteId: env.get('quoteId'), quoteVersion: env.get('quoteVersion')});",
+                  "    const value = JSON.stringify({...selection, quoteId: env.get('quoteId')});",
                   "    env.set('reservationIdempotencyKey', key);",
                   "    env.set('submittedIntent', value);",
                   "    pm.variables.set('requestJson', value);",
@@ -441,7 +440,7 @@
             "method": "GET",
             "header": [],
             "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}/progress",
-            "description": "Manual diagnostic snapshot. Repeat only as needed after processing. Look for all four succeeded and HOLD_CREATED."
+            "description": "Manual diagnostic snapshot. Repeat only as needed after processing. Look for four successful checks and the accepted outcome HOLD_CREATED or CONFIRMED."
           },
           "event": [
             {
@@ -474,9 +473,9 @@
                   "if (['CHECKING', 'EVALUATING'].includes(data.admissionState)) {",
                   "    throw new Error('ADMISSION_IN_PROGRESS. Re-read this request manually after processing.');",
                   "}",
-                  "const hold = data.admissionState === 'HOLD_CREATED' && isId(data.reservationId) &&",
+                  "const hold = ['HOLD_CREATED','CONFIRMED'].includes(data.admissionState) && isId(data.reservationId) &&",
                   "    ['account','vehicle','facility','booking'].every(name => data.checks[name] === 'SUCCEEDED');",
-                  "pm.test('All four checks succeeded and the hold was committed', () => pm.expect(hold).to.eql(true));",
+                  "pm.test('All four checks succeeded and admission committed', () => pm.expect(hold).to.eql(true));",
                   "if (!hold) throw new Error('Admission stopped. Inspect admissionState, outcomeCode and checks.');",
                   "env.set('progressReservationId', data.reservationId);"
                 ]
@@ -518,11 +517,11 @@
                   "const valid = data.requestId === env.get('requestId') && data.contractVersion === 3;",
                   "pm.test('Receipt is version 3 and preserves request identity', () => pm.expect(valid).to.eql(true));",
                   "if (!valid) throw new Error('Receipt binding mismatch.');",
-                  "if (data.state !== 'HOLD_CREATED') throw new Error('Hold is not available yet. Inspect receipt state and code.');",
+                  "if (!['HOLD_CREATED','CONFIRMED'].includes(data.state)) throw new Error('Admission has not succeeded. Inspect receipt state and code.');",
                   "const hold = isId(data.reservationId) && data.reservationId === env.get('progressReservationId') &&",
                   "    (!env.get('reservationId') || data.reservationId === env.get('reservationId'));",
-                  "pm.test('Receipt and Saga progress identify the same single hold', () => pm.expect(hold).to.eql(true));",
-                  "if (!hold) throw new Error('Run 04.1 and compare the hold identity.');",
+                  "pm.test('Receipt and Saga progress identify the same reservation', () => pm.expect(hold).to.eql(true));",
+                  "if (!hold) throw new Error('Run 04.1 and compare the reservation identity.');",
                   "env.set('reservationId', data.reservationId);"
                 ]
               }
@@ -530,12 +529,12 @@
           ]
         },
         {
-          "name": "04.3 Read own reservation and order readiness",
+          "name": "04.3 Read own reservation",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}",
-            "description": "Stop and inspect H, state and orderProvisioningCode when the order is not ready. Repeat this read manually if still preparing."
+            "description": "Verify the admitted lifecycle and accepted deposit. A zero deposit confirms immediately. Financial identifiers may arrive later."
           },
           "event": [
             {
@@ -570,16 +569,48 @@
                   "pm.test('Own reservation matches the accepted quote and receipt', () => pm.expect(binds).to.eql(true));",
                   "if (!binds) throw new Error('Own reservation binding mismatch.');",
                   "env.set('reservationState', data.state);",
-                  "env.set('orderProvisioningState', data.orderProvisioningState);",
                   "env.set('holdExpiresAt', data.holdExpiresAt || '');",
                   "env.unset('paymentOrderId');",
-                  "const active = data.state === 'PENDING_PAYMENT' && data.confirmedAt == null && Date.parse(data.holdExpiresAt) > Date.now();",
-                  "pm.test('Booking is unpaid and H is still in the future', () => pm.expect(active).to.eql(true));",
-                  "if (!active) throw new Error('Hold is not an active PENDING_PAYMENT booking.');",
-                  "const ready = data.orderProvisioningState === 'CREATED' && isId(data.orderId);",
-                  "pm.test('Operations recorded the actual linked Payment order', () => pm.expect(ready).to.eql(true));",
-                  "if (!ready) throw new Error('ORDER_NOT_READY. Inspect orderProvisioningState and orderProvisioningCode.');",
-                  "env.set('paymentOrderId', data.orderId);"
+                  "env.unset('checkoutState');",
+                  "pm.test('Admission matches the accepted deposit', () => pm.expect(data.depositAmount === 0 ? data.state === 'CONFIRMED' && data.holdExpiresAt === null && !!data.confirmedAt : data.state === 'PENDING_PAYMENT' && data.orderId === null && Date.parse(data.holdExpiresAt) > Date.now()).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.4 Read own Payment checkout state",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{paymentBaseUrl}}/api/v1/payments/reservations/{{reservationId}}/checkout-state",
+            "description": "Payment owns checkout state. Continue to checkout only while the Operations hold is live and Payment reports PAYABLE."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('reservationId') && env.get('submittedIntent'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Payment returns checkout state', () => pm.response.to.have.status(200));",
+                  "pm.environment.unset('paymentOrderId');",
+                  "pm.environment.unset('checkoutState');",
+                  "if (pm.response.code !== 200) throw new Error('Payment read failed.');",
+                  "const {data} = pm.response.json();",
+                  "pm.expect(['MISSING','PAYABLE','CLOSED','PAID','FAILED']).to.include(data.state);",
+                  "pm.environment.set('checkoutState', data.state);",
+                  "if (data.state !== 'MISSING') pm.expect(data.reservationId).to.equal(pm.environment.get('reservationId'));",
+                  "if (data.state === 'PAYABLE') { pm.expect(Date.parse(data.holdExpiresAt)).to.equal(Date.parse(pm.environment.get('holdExpiresAt'))); pm.expect(data.orderId).to.be.a('string'); pm.environment.set('paymentOrderId', data.orderId); }"
                 ]
               }
             }
@@ -595,8 +626,8 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{operationBaseUrl}}/api/me/reservations/by-order/{{paymentOrderId}}/request",
-            "description": "Final no-payment assertion. This verifies the Operations association saved from the signed Payment order response."
+            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{paymentOrderId}}/reservation",
+            "description": "Final no-payment assertion. Payment resolves the authenticated order before Operations binds settlement."
           },
           "event": [
             {
@@ -605,7 +636,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const env = pm.environment;",
-                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('paymentOrderId') && env.get('orderProvisioningState') === 'CREATED' && env.get('reservationState') === 'PENDING_PAYMENT' && Date.parse(env.get('holdExpiresAt')) > Date.now())) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('paymentOrderId') && env.get('checkoutState') === 'PAYABLE' && env.get('reservationState') === 'PENDING_PAYMENT' && Date.parse(env.get('holdExpiresAt')) > Date.now())) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
                 ]
               }
             },
@@ -614,13 +645,50 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Operations resolves the genuine order to its original request', () => pm.response.to.have.status(200));",
+                  "pm.test('Payment resolves the genuine order to its original reservation', () => pm.response.to.have.status(200));",
                   "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
                   "const response = pm.response.json();",
                   "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
                   "const data = response.data;",
                   "const env = pm.environment;",
-                  "pm.test('Order points to the original active unpaid request', () => pm.expect(data.requestId === env.get('requestId') && Date.parse(env.get('holdExpiresAt')) > Date.now()).to.eql(true));"
+                  "pm.test('Order points to the original active unpaid request', () => pm.expect(data.state === 'PAYABLE' && data.reservationId === env.get('reservationId') && data.orderId === env.get('paymentOrderId') && Date.parse(env.get('holdExpiresAt')) > Date.now()).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05.2 Verify settled positive reservation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}",
+            "description": "Send after a supported test settlement, using the genuine order captured in 04.4. A delayed Operations consumer can still show the earlier pending state."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('paymentOrderId') && env.get('reservationId') && Number(env.get('reviewedDepositAmount')) > 0 && env.get('driverAccountId') === env.get('reviewedAccountId'))) { pm.execution.skipRequest(); throw new Error('Capture the positive scenario in 04.4 first.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Owner read succeeds\", () => pm.response.to.have.status(200));",
+                  "const booking = pm.response.json().data;",
+                  "pm.test(\"Operations confirmed the original reservation against the captured Payment order\", () => {",
+                  "    pm.expect(booking.reservationId).to.equal(pm.environment.get('reservationId'));",
+                  "    pm.expect(booking.state).to.equal('CONFIRMED');",
+                  "    pm.expect(booking.orderId).to.equal(pm.environment.get('paymentOrderId'));",
+                  "    pm.expect(booking.confirmedAt).to.be.a('string');",
+                  "});"
                 ]
               }
             }
@@ -629,9 +697,47 @@
       ]
     },
     {
-      "name": "06 – Zero Amount / Subscription Coverage (Blocked)",
-      "description": "Production plate entitlement always returns uncovered. No requests are enabled. See the guide.",
-      "item": []
+      "name": "06 – Confirmed zero deposit",
+      "description": "Use an authoritative zero-deposit quote in steps 02–04. A zero tariff is sufficient. A covered positive tariff requires genuine coverage from its owner.",
+      "item": [
+        {
+          "name": "06.1 Verify immediate confirmation and optional receipt linkage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{reservationId}}",
+            "description": "Run after zero admission and repeat after financial record creation to see linkage."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const env = pm.environment;",
+                  "if (!(env.get('requestId') && env.get('driverAccountId') === env.get('reviewedAccountId') && env.get('reservationId') && env.get('submittedIntent'))) { pm.execution.skipRequest(); throw new Error('Missing scenario prerequisite. Follow the manual guide.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const booking = pm.response.json().data;",
+                  "pm.expect(booking.reservationId).to.equal(pm.environment.get('reservationId'));",
+                  "pm.expect(booking.depositAmount).to.equal(0);",
+                  "pm.expect(booking.state).to.equal('CONFIRMED');",
+                  "pm.expect(booking.confirmedAt).to.be.a('string');",
+                  "pm.expect(booking.holdExpiresAt).to.equal(null);",
+                  "pm.expect(booking.orderId == null).to.equal(booking.zeroReceiptId == null);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "name": "07 – Optional negative tests",

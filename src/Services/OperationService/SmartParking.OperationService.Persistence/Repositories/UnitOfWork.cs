@@ -11,7 +11,8 @@ public sealed class UnitOfWork(
     IReservationRepository reservations,
     IParkingSessionRepository parkingSessions,
     ISlotAllocationRepository slotAllocations, OperationsConcurrency guards, TimeProvider clock,
-    Application.Reservations.IReservationProgressPublisher? progress = null) : IUnitOfWork
+    Application.Reservations.IReservationProgressPublisher? progress = null,
+    Application.Reservations.IReservationFactsPublisher? facts = null) : IUnitOfWork
 {
     public IReservationRepository Reservations => reservations;
     public IParkingSessionRepository ParkingSessions => parkingSessions;
@@ -37,7 +38,14 @@ public sealed class UnitOfWork(
                 !Equals(entry.Property("TenantId").OriginalValue, tenant)))
                 throw new InvalidOperationException("Commitment scope cannot change.");
             if (entry.Entity is StructureEditHoldRow or StructureSiteStateRow || entry.State == EntityState.Deleted) continue;
-            if (await db.StructureEditHolds.AsNoTracking().AnyAsync(h => h.SiteId == site, cancellationToken)) throw new HoldConflictException();
+            // A verified first receipt links two unique financial IDs to an already-confirmed zero booking.
+            // Any other modified property, including lifecycle, allocation or version, takes the normal guards.
+            var zeroLinkOnly = entry.State == EntityState.Modified &&
+                entry.Entity is ReservationRow { QuoteId: not null, DepositAmount: 0, ConfirmationEffectId: not null,
+                    PaymentOrderId: not null, ZeroReceiptId: not null } &&
+                entry.Property("PaymentOrderId").OriginalValue is null && entry.Property("ZeroReceiptId").OriginalValue is null &&
+                entry.Properties.Where(p => p.IsModified).All(p => p.Metadata.Name is "PaymentOrderId" or "ZeroReceiptId");
+            if (!zeroLinkOnly && await db.StructureEditHolds.AsNoTracking().AnyAsync(h => h.SiteId == site, cancellationToken)) throw new HoldConflictException();
             var live = entry.Entity switch
             {
                 ReservationRow r => r.Status is "PENDING_PAYMENT" or "CONFIRMED" or "ALLOCATED" or "PARKING",
@@ -46,7 +54,7 @@ public sealed class UnitOfWork(
                 SiteCapacityPoolRow p => p.CurrentReservedCount > 0 || p.PendingPaymentCount > 0 || p.OccupiedCount > 0 || p.ProtectedCount > 0 || p.BackupCount > 0,
                 _ => false
             };
-            if (live && await db.StructureSiteStates.AsNoTracking().AnyAsync(s => s.SiteId == site && (!s.Active || s.TenantId != tenant), cancellationToken))
+            if (live && await db.StructureSiteStates.AsNoTracking().AnyAsync(s => s.SiteId == site && (s.TenantId != tenant || !zeroLinkOnly && !s.Active), cancellationToken))
                 throw new InvalidStructureEditException("Resource is inactive or belongs to another tenant.");
             if (entry.Entity is ReservationRow reservation)
             {
@@ -60,7 +68,7 @@ public sealed class UnitOfWork(
                      reservation.QuoteId.HasValue && entry.Properties.Any(p => p.IsModified && p.Metadata.Name is
                          nameof(reservation.AccountId) or nameof(reservation.RequestId) or nameof(reservation.TargetSlotId) or
                          nameof(reservation.ExpectedStartTime) or nameof(reservation.ExpectedEndTime) or nameof(reservation.ClaimEndTime) or
-                         nameof(reservation.CreatedAt) or nameof(reservation.HoldExpiresAt) or nameof(reservation.QuoteVersion) or
+                         nameof(reservation.CreatedAt) or nameof(reservation.HoldExpiresAt) or
                          nameof(reservation.QuoteValidUntil) or nameof(reservation.TariffVersion) or nameof(reservation.CoverageVersion) or
                          nameof(reservation.IsCovered) or nameof(reservation.CoveredAmount) or nameof(reservation.SelectedPaymentMethod) or
                          nameof(reservation.BookedAmount) or nameof(reservation.DepositAmount) or nameof(reservation.Currency))))
@@ -78,6 +86,9 @@ public sealed class UnitOfWork(
                 if (entry.State == EntityState.Modified && entry.Property("AcceptedOperationalPolicySnapshot").OriginalValue is string accepted &&
                     reservation.AcceptedOperationalPolicySnapshot != accepted)
                     throw new InvalidOperationException("Accepted operational policies are immutable.");
+                foreach (var name in new[] { "PaymentOrderId", "ZeroReceiptId", "CollectionId", "CollectionFingerprint" })
+                    if (entry.State == EntityState.Modified && entry.Property(name).IsModified && entry.Property(name).OriginalValue != null)
+                        throw new InvalidOperationException("First financial identity is immutable.");
                 reservation.RecordFirstConfirmation(clock.GetUtcNow());
                 if (entry.State == EntityState.Modified)
                     reservation.Version = checked((int)entry.Property("Version").OriginalValue! + 1);
@@ -92,6 +103,19 @@ public sealed class UnitOfWork(
                     session.Version = checked((int)entry.Property("Version").OriginalValue! + 1);
                 }
             }
+        }
+        foreach (var evidence in entries.Where(e => e.State == EntityState.Added).Select(e => e.Entity)
+            .OfType<Domain.Reservations.ReservationCancellationEvidence>())
+        {
+            var booking = await db.Reservations.FindAsync([evidence.ReservationId], cancellationToken);
+            if (booking is not { QuoteId: Guid quote, DepositAmount: 0 }) continue;
+            if (booking.AccountId != evidence.AccountId || !guards.HoldsSite(booking.SiteId) ||
+                !guards.HoldsPlate(booking.NormalizedPlate) || booking.Status is not ("CANCELLED" or "INVALIDATED"))
+                throw new InvalidOperationException("Cancellation evidence requires the guarded lifecycle decision.");
+            if (booking.ZeroReceiptId is Guid receipt && booking.PaymentOrderId is Guid order)
+                await (facts ?? throw new InvalidOperationException("Financial outbox is unavailable."))
+                    .RequestDispositionAsync(new(booking.Id, booking.AccountId, booking.TenantId, booking.SiteId,
+                        quote, order, null, receipt, 0m, booking.Currency!, evidence.Reason), cancellationToken);
         }
         var changes = new HashSet<(Guid Request, Guid Account)>();
         foreach (var entry in entries)

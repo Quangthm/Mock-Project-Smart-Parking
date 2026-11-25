@@ -51,7 +51,7 @@ public sealed class ReservationSagaTransportTests
         await host.StartAsync();
         using var http = new HttpClient { BaseAddress = new Uri(host.Urls.Single()) };
         var intent = new QuoteReservationIntent("51A12345", slot, clock.Now.AddDays(1),
-            clock.Now.AddDays(1).AddHours(1), "PAYOS", Guid.NewGuid(), "rq1-test");
+            clock.Now.AddDays(1).AddHours(1), "PAYOS", Guid.NewGuid());
         using var unauthenticated = await http.PostAsJsonAsync("/api/reservation-requests", intent);
         Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
         http.DefaultRequestHeaders.Add("Test-Account", account.ToString());
@@ -62,7 +62,6 @@ public sealed class ReservationSagaTransportTests
         http.DefaultRequestHeaders.Remove("Idempotency-Key");
         http.DefaultRequestHeaders.Add("Idempotency-Key", key.ToString());
         await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", intent with { QuoteId = Guid.Empty }));
-        await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", intent with { QuoteVersion = "" }));
         foreach (var body in new[] { "{", "null", "[]", """{"quoteId":"not-a-guid"}""" })
         {
             using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
@@ -143,7 +142,7 @@ public sealed class ReservationSagaTransportTests
     public async Task DurableCaptureOwnerRepliesTerminalFencingAndRestart()
     {
         var intent = new QuoteReservationIntent("51A-12345", slot, clock.Now.AddDays(1),
-            clock.Now.AddDays(1).AddHours(1), "PAYOS", Guid.NewGuid(), "quote-v1");
+            clock.Now.AddDays(1).AddHours(1), "PAYOS", Guid.NewGuid());
         Guid pending;
         await using (var host = Build())
         {
@@ -196,6 +195,15 @@ public sealed class ReservationSagaTransportTests
             using var foreign = new ReservationTestSubscription();
             Assert.False(await foreign.SubscribeAsync(http.BaseAddress!, Guid.NewGuid(), first));
             using var scope = host.Services.CreateScope();
+            var relay = scope.ServiceProvider.GetRequiredService<IReservationProgressRelay>();
+            await relay.CheckoutChangedAsync(Guid.NewGuid(), first, default);
+            await relay.CheckoutChangedAsync(account, first, default);
+            Assert.Equal(first, await subscription.ReadCheckoutHintAsync());
+            using var reconnected = new ReservationTestSubscription();
+            Assert.True(await reconnected.SubscribeAsync(http.BaseAddress!, account, first));
+            Assert.Equal(first, (await Snapshot(http, first)).RequestId);
+            await relay.CheckoutChangedAsync(account, first, default);
+            Assert.Equal(first, await reconnected.ReadCheckoutHintAsync());
             var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
             var receipt = await db.ReservationRequests.AsNoTracking().SingleAsync(x => x.Id == first);
             // No owner replies until all three independent requests have actually been delivered.

@@ -1,5 +1,7 @@
 # SPARK-273 Reservation owner handoff
 
+**25 November update.** The original handoff below records the earlier integration. For current Checkpoint C ownership, financial linkage and checkout recovery use the [v0.7 contract](2026-11-19-SPARK-273-payment-authority.md#checkpoint-c-v07-owner-contract-25-november) and [manual acceptance guide](../../../04-testing/postman/SPARK-273-manual-test-guide.md#7-manual-checkpoint-c-acceptance).
+
 Use this document for Operations, UserService and Facility ownership and release gates. The reviewed backend and linked order path are implemented. Current architecture decisions govern the contract. The [frontend handoff](2026-11-09-reservation-frontend-handoff.md) covers the browser cutover and the [Payment handoff](2026-11-19-SPARK-273-payment-authority.md) covers financial evidence and settlement. [18 November contract amendment](../decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) · [Authorization freshness ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md)
 
 ## Review, admission and guarded hold

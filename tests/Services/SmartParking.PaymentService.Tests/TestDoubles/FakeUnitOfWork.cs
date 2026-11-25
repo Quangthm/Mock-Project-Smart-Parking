@@ -8,9 +8,10 @@ namespace SmartParking.PaymentService.Tests.TestDoubles;
 
 public class FakeUnitOfWork : IUnitOfWork
 {
+    public DateTimeOffset? DecisionTime { get; init; }
     public int SaveCount { get; private set; }
     public Task<T> WithLocksAsync<T>(Guid[] identities, Func<Task<T>> action, CancellationToken ct) => action();
-    public Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct) => Task.FromResult(DateTimeOffset.UtcNow);
+    public Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct) => Task.FromResult(DecisionTime ?? DateTimeOffset.UtcNow);
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

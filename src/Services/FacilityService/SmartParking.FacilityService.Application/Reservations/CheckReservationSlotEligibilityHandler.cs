@@ -2,7 +2,7 @@ using MediatR;
 
 namespace SmartParking.FacilityService.Application.Reservations;
 
-public sealed class CheckReservationSlotEligibilityHandler(IReservationDependencyRepository repository)
+public sealed class CheckReservationSlotEligibilityHandler(IReservationSlotReader repository)
     : IRequestHandler<CheckReservationSlotEligibilityQuery, ReservationSlotEligibility>
 {
     public async Task<ReservationSlotEligibility> Handle(CheckReservationSlotEligibilityQuery query, CancellationToken ct) =>

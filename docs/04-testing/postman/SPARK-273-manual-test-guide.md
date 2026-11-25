@@ -1,6 +1,6 @@
 # SPARK-273 Driver reservation to Payment order
 
-Use this guide on an isolated local SmartPark stack. The paid scenario passes at **05.1** when an active `PENDING_PAYMENT` reservation has a genuine linked Payment order, a future `holdExpiresAt`, and `confirmedAt = null`. The collection stops before checkout, QR, provider callbacks, or payment confirmation. Use the separate [payOS acceptance plan](../payment-integration/payos-test-plan.md) for provider testing.
+Use this guide on an isolated local SmartPark stack. The paid scenario passes at **05.1** when an active `PENDING_PAYMENT` reservation has a genuine payable order in Payment, a future `holdExpiresAt`, and `confirmedAt = null`. The collection stops before checkout, QR, provider callbacks, or payment confirmation. Use the separate [payOS acceptance plan](../payment-integration/payos-test-plan.md) for provider testing.
 
 - [Import the collection](./SPARK-273-Reservation-Flow.postman_collection.json)
 - [Import the blank local environment](./SPARK-273-Local.postman_environment.example.json)
@@ -105,7 +105,7 @@ foreach ($port in 5035, 5045, 5055, 5065) {
 Expect HTTP 200 from each `/health`, with the four service databases and RabbitMQ running. For a failure, check `docker compose ps` for the actual port and service state. A 200 establishes process reachability. Use the following checks for workflow readiness.
 
 - **JWT/JWKS.** From the OperationService container, check the configured JWKS route with `docker compose --project-name smartpark-app --env-file .env -f compose.app.yml exec -T operation-service curl --fail --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}\n' http://user-service:8080/.well-known/jwks.json` for the base Compose defaults. Expect 200. Adjust the address for configured trust overlays. Verify the Driver profile in Postman to exercise JWT validation.
-- **RabbitMQ.** In the local management UI (default `http://localhost:15672`), select the configured vhost and inspect the reservation queues for consumers, backlog, and error or skipped queues. Check owner request, decision, and hold-trigger bindings against the [deployment checks](../reports/SPARK-273-deployment-checklist.md#3-messaging-and-audit-provisioning). A running broker or enabled outbox flag alone does not prove messages are delivered.
+- **RabbitMQ.** In the local management UI (default `http://localhost:15672`), select the configured vhost and inspect the reservation queues for consumers, backlog, and error or skipped queues. Check owner request, decision, shared settlement and directed financial queues against the [deployment checks](../reports/SPARK-273-deployment-checklist.md#3-messaging-and-audit-provisioning). A running broker or enabled outbox flag alone does not prove messages are delivered.
 - **Owner facts and data.** Verify the site, slot, policy, and tariff in the next section. A successful `02.1` exercises signed Facility lookup, Operations policy resolution, and Payment quote issuance. It persists a quote, so run it as a test step.
 
 Use only status and presence checks for credentials. Avoid displaying the full rendered Compose configuration or full container environment.
@@ -238,7 +238,7 @@ In Postman Desktop select **Import** and choose both JSON files from `docs/04-te
 | File | Purpose |
 |---|---|
 | `SPARK-273-Reservation-Flow.postman_collection.json` | Requests, auth, pre-request checks, and assertions. |
-| `SPARK-273-Local.postman_environment.example.json` | Blank environment named **SPARK-273 Reservation Flow - local**, with two base URLs and `PAYOS` prefilled. |
+| `SPARK-273-Local.postman_environment.example.json` | Blank environment named **SPARK-273 Reservation Flow - local**, with three base URLs and `PAYOS` prefilled. |
 
 Select that environment before sending any request. Enter credentials in local values. Keep them private and avoid exporting a populated environment. Send requests individually with **Send**. The collection calls `setNextRequest(null)` and expects manual review and consent between requests.
 
@@ -250,6 +250,7 @@ For the default local stack, enter `driverEmail` and `driverPassword` before log
 |---|---|---|
 | `userBaseUrl` | Before **00.2**. Keep the prefilled value if it matches your stack. | `http://localhost:5035` by default. Confirm UserService host port and `/health`. |
 | `operationBaseUrl` | Before **02.1**. Keep the prefilled value if it matches your stack. | `http://localhost:5055` by default. Confirm OperationService host port and `/health`. |
+| `paymentBaseUrl` | Before **04.4**. | Payment host, default `http://localhost:5065`. Verify its health and Driver JWT trust. |
 | `driverEmail` | Before **00.2**. | The Driver you seeded or registered. Default demo `driver@gmail.com`. Match the email used with `-DriverEmail` if supplied. |
 | `driverPassword` | Before **00.2**. | The Driver's actual local sign-in password. Obtain it from your test credential source or the approved local fixture instructions. |
 | `driverTurnstileToken` | Conditional before **00.2**. Leave blank when the environment accepts login without Turnstile. | Supply a current genuine token only when the configured UserService login requires one. |
@@ -266,12 +267,12 @@ For the default local stack, enter `driverEmail` and `driverPassword` before log
 |---|---|
 | **00.2**, after complete login | `driverToken`, `driverAccountId`, `driverUserId` |
 | **01.1**, after eligible selection | `licensePlate`, `selectedCarPlate` |
-| **02.1**, after successful review | `quoteId`, `quoteVersion`, `reviewedQuoteExpiresAt`, `reviewedAccountId`, `resolvedSiteId`, `reviewedBookedAmount`, `reviewedDepositAmount`, `reviewedCurrency`, `reviewedSelection` |
+| **02.1**, after successful review | `quoteId`, `reviewedQuoteExpiresAt`, `reviewedAccountId`, `resolvedSiteId`, `reviewedBookedAmount`, `reviewedDepositAmount`, `reviewedCurrency`, `reviewedSelection` |
 | **03.1**, before sending | `reservationIdempotencyKey` (generated if blank), `submittedIntent` |
 | **03.1**, after HTTP 202 | `requestId` |
 | **04.1**, after `HOLD_CREATED` | `progressReservationId` |
-| **04.2**, after matching the hold | `reservationId` |
-| **04.3**, after matching the reservation | `reservationState`, `orderProvisioningState`, `holdExpiresAt`, `paymentOrderId` (only when the order is ready) |
+| **04.2**, after matching the committed reservation | `reservationId` |
+| **04.3**, after matching the reservation | `reservationState` and `holdExpiresAt`. **04.4** saves `checkoutState` and a payable `paymentOrderId` |
 
 Leave these fields blank for a first run. `requestJson` is a transient request variable created by the scripts. Tenant, site, vehicle, and tariff IDs are resolved from the selected slot, plate, and owner records. Preserve the saved review and submission values for any unresolved attempt.
 
@@ -287,10 +288,11 @@ If **00.2** returns `mfaRequired=true`, finish the supported UserService login u
 | **02.1 Review Payment quote** | Confirm the quote preflight below and send. Payment persists a reviewed quote. | HTTP 200 with exact plate, slot, site, interval, method, tariff version, disclosure, and future `validUntil`. The payable sample expects `isCovered=false`, `coveredAmount=0`, and a positive whole-VND `depositAmount` equal to `bookedAmount`. Examine the terms before copying `quoteId` to `acceptedQuoteId`. On an error use the troubleshooting table before resending. |
 | **03.1 Accept quote and submit** | Accept the exact reviewed quote while valid. Send with the same Account and unchanged selection. The script saves body and key before the network call. The request starts durable admission. | HTTP 202 with v3 receipt and stable `requestId`. If no receipt arrives and the outcome is unknown, resend **03.1** with its saved intent and key. |
 | **03.2 Replay exact submission** | Send once after **03.1** has captured `requestId`. It sends the same body and key. | HTTP 202 with the same v3 request identity. A 409 `IDEMPOTENCY_KEY_REUSED` means the original key is bound to another intent. Preserve the original attempt and inspect the saved inputs. |
-| **04.1 Read Saga progress** | Send with the saved `requestId`. | HTTP 200. `CHECKING` or `EVALUATING` is interim. Success is `HOLD_CREATED` with account, vehicle, facility, and booking all `SUCCEEDED`. The script then saves `progressReservationId`. Repeat this read manually after processing if needed. For a terminal result inspect its checks and outcome code. |
+| **04.1 Read Saga progress** | Send with the saved `requestId`. | HTTP 200. `CHECKING` or `EVALUATING` is interim. Positive admission returns `HOLD_CREATED` and zero admission returns `CONFIRMED` with account, vehicle, facility, and booking all `SUCCEEDED`. The script then saves `progressReservationId`. Repeat this read manually after processing if needed. For a terminal result inspect its checks and outcome code. |
 | **04.2 Read durable receipt** | Send after **04.1** records the hold. | HTTP 200, v3 receipt with the same request and reservation as progress. Saves `reservationId`. For a mismatch re-read progress once and inspect both responses. |
-| **04.3 Read own reservation and order readiness** | Send with the captured reservation and submission. | HTTP 200 with the accepted selection and amounts, `PENDING_PAYMENT`, `confirmedAt = null`, future `holdExpiresAt`, and `orderProvisioningState = CREATED` with the real `orderId`. If the order is pending or unknown, inspect `orderProvisioningCode` and retry this read after processing. |
-| **05.1 Verify own Payment order association** | Send after **04.3** saves `paymentOrderId`, while the hold is active, as the same Driver Account. | HTTP 200 and reverse lookup returns the original `requestId`. Finish the scenario here. If the hold has elapsed, resolve the previous attempt before starting a new run. |
+| **04.3 Read own reservation** | Verify the accepted interval, slot and deposit. | A positive booking starts in PENDING_PAYMENT with a future H. An accepted zero deposit confirms immediately with no H and can have null order and receipt IDs. |
+| **04.4 Read own Payment checkout state** | Use the same Driver session and reservation ID. | MISSING means the financial order has yet to appear. Only PAYABLE and a live Operations hold enable checkout. PAID, CLOSED and FAILED suppress checkout. A transport failure leaves the outcome unknown. |
+| **05.1 Verify own Payment order association** | Send after **04.4** saves `paymentOrderId`, while the hold is active, as the same Driver Account. | HTTP 200 with PAYABLE and the original `reservationId` and `orderId`. Continue with the manual acceptance steps below. If the hold has elapsed, resolve the previous attempt before starting a new run. |
 
 ### Before sending 02.1
 
@@ -314,9 +316,9 @@ If **00.2** returns `mfaRequired=true`, finish the supported UserService login u
 | **`PAYMENT_QUOTE_PROOF_UNAVAILABLE`** or **`RESERVATION_ADMISSION_DISABLED`** | Operations. Verify the admission flag, reviewed settlement/Saga composition, signed Payment proof path, broker credentials, and the delivery service configuration. Restore the dependency before retrying. For an unresolved submission keep the original body and key. |
 | **HTTP 401 or 403** | Verify the current session, expiry, issuer/audience/JWKS, Driver Account and role for user calls. For owner dependency calls inspect signed service trust separately. Re-signing in can change session state. A different Account cannot recover the original submission. |
 | **HTTP 409** | Read the returned code. `IDEMPOTENCY_KEY_REUSED` requires the original intent under that key. `SLOT_INELIGIBLE` calls for a verified CAR slot. `QUOTE_STALE` calls for a fresh review once the earlier submission outcome is known. Inspect other booking conflicts in the receipt or progress before choosing another interval. |
-| **`HOLD_CREATED`, order pending or `ORDER_NOT_READY`** | Operations and Payment. `ORDER_NOT_READY` is a collection assertion. Use **04.3** to read `orderProvisioningState` and `orderProvisioningCode`, then inspect the hold-trigger delivery and signed order path. Repeat the read after processing while the hold remains active. |
+| **`HOLD_CREATED`, order pending or `ORDER_NOT_READY`** | Operations and Payment. `ORDER_NOT_READY` is a collection assertion. Read **04.4** and inspect the Operations transactional outbox, the Payment order queue and its consumer. Repeat the read after processing while the hold remains active. |
 | **RabbitMQ timeout / missing progress** | Check the selected vhost, owner consumers, permissions, error queues, and User/Operations outbox delivery. Inspect the first incomplete check in **04.1** and correlate service logs. A broker or container restart alone does not demonstrate delivery. Avoid resetting queues, purging messages, or resubmitting new intent to force progress. |
-| **Hold expiry or `PAYMENT_HOLD_EXPIRED`** | Use **04.3** to verify `holdExpiresAt` and the current state. An expired hold cannot pass **05.1**. Resolve the old attempt, then seek a fresh quote and submit a new scenario if appropriate. Quote expiry before guarded acceptance is separate from order provisioning after acceptance, which still has the hold deadline. |
+| **Hold expiry or `PAYMENT_HOLD_EXPIRED`** | Use **04.3** to verify `holdExpiresAt` and the current state. An expired hold cannot pass **05.1**. Resolve the old attempt, then seek a fresh quote and submit a new scenario if appropriate. Positive first-order creation is fenced at H. An accepted zero booking has no H. |
 
 For local service logs, use the existing app project and record only the response time, trace/request ID, downstream status, and redacted error. Compare Operations' outgoing Facility or Payment timing with the owning service at the same time.
 
@@ -328,11 +330,54 @@ docker compose --project-name smartpark-app --env-file .env -f compose.app.yml l
 
 ## 6. Optional cases and verification
 
-- **06 — Zero Amount / Subscription Coverage (Blocked).** The collection has no enabled coverage request. This case requires a genuine plate entitlement from the owning service.
+- **06 — Zero Amount.** Run **06.1** after an accepted zero deposit. An uncovered site can exercise this path through a genuine zero tariff. Subscription-specific coverage requires a genuine plate entitlement.
 - **07.1 Reject changed intent under the same key.** Use the original positive scenario's variables. Expect 409 `IDEMPOTENCY_KEY_REUSED`.
 - **07.2 Reject anonymous own-reservation read.** Use the original positive scenario's reservation ID. This request sends anonymous auth and expects 401 `UNAUTHENTICATED`. The collection guard still expects a populated `driverToken` in the environment, so retain the scenario values.
 - **08.1 Read existing legacy receipt** and **08.2 Read existing legacy booking**. Sign in with the owning Driver, set the historical IDs, and verify v2 receipt and matching booking on the two reads.
 
-**Local manual Postman result — project lead reported PASS.** All executed checks passed after the required local environment was configured. The run covered the paid scenario through **05.1**, with an active `PENDING_PAYMENT` hold and a linked Payment order. **06 — Zero Amount / Subscription Coverage** remains blocked and was excluded from the pass. Browser integration and provider settlement require separate verification.
+**Historical pre-Checkpoint-C manual Postman result — project lead reported PASS.** All executed checks passed after the required local environment was configured. The run covered the paid scenario through **05.1**, with an active `PENDING_PAYMENT` hold and a linked Payment order. **06 — Zero Amount / Subscription Coverage** remains blocked and was excluded from the pass. Browser integration and provider settlement require separate verification.
 
 For a reproducible run record, capture the branch and image build, fixture site and slot, policy and tariff revisions, response statuses, request/reservation/order IDs, and hold expiry. Use the **05.1** result and **04.3** state as pass evidence. The [integration report](../reports/SPARK-273-reviewed-admission-integration.md) records separate disposable-stack acceptance.
+
+## Checkpoint C delivery and recovery
+
+Payment receives the durable order command on `payment-reservation-order-v1`. Operations receives presentation hints on `operations-reservation-checkout-hint-v1` and genuine zero receipts on `operations-reservation-zero-receipt-v1`. Positive settlement continues through the shared `smartpark.payment.payment-succeeded.v1` exchange. Payment consumes financial obligations on `payment-reservation-disposition-v1`. Verify the receiving service has a consumer and the sending identity has access to the intended destination. Review deployment permissions with each queue owner.
+
+A confirmed zero booking can be used before either financial ID arrives. A missing order following a positive admission means preparation is outstanding. Refresh the two authoritative reads on reconnect. Use a fresh isolated schema for C verification. The owning initializers do not upgrade populated databases.
+
+## 7. Manual Checkpoint C acceptance
+
+Use the four service startup commands, health probes, JWKS check, seed checks and site-policy/tariff queries in sections 1–2. Point the frontend at those same User, Operations and Payment hosts (`VITE_API_BASE_URL`, `VITE_RESERVATION_API_BASE_URL`, `VITE_PAYMENT_API_BASE_URL`). With the project's frontend dependencies already installed, run `npm --prefix FE run dev` and sign in as the same Driver. Start a fresh scenario for each booking. The browser and Postman can each inspect their own newly submitted booking. Avoid submitting the same intended visit twice.
+
+| Scenario | Actions and expected evidence |
+|---|---|
+| Positive deposit | Choose an available CAR slot with a positive effective tariff and a future policy-valid interval. Run **00.2–03.1**. Inspect plate, slot, interval, amount, VND and expiry on the HTTP 200 quote before accepting. Submission returns 202. **04.1–04.3** show `HOLD_CREATED`, `PENDING_PAYMENT`, a future H and null Operations order. **04.4–05.1** return the genuine payable order and matching reservation and H. In the browser, review and accept an equivalent fresh booking. Checkout becomes available on the scoped hint or recovery read. Inspect the QR and order amount using an approved test checkout. |
+| Positive settlement and return | For that booking use a supported, noncharging test settlement if available. Preserve its order ID. On return, Payment resolves it even if the Operations binding is still null. Pending confirmation may be visible until delivery. For the Postman scenario run **05.2** after successful settlement. Expect HTTP 200, `CONFIRMED`, the original order ID and one original confirmation time. In Current Booking and History check the same plate, interval, identity and outcome. Use the paired test evidence below when controlled settlement or delayed delivery is unavailable. |
+| Zero deposit | Select a different available interval and a site with an effective CAR tariff whose applicable time blocks have `ratePerHourVnd = 0`, or a genuine fully covered plate where that capability exists. Verify the server's explicit booked, covered and deposit amounts and coverage flag in **02.1**. Run **03.1**, **04.1–04.3** and **06.1**. Both terminal admission and booking are `CONFIRMED`, H is null, and the slot is committed. The browser shows confirmation without checkout. A zero deposit describes what is due at admission. Departure charges use the applicable parking rules. |
+| Zero receipt and history | Record `confirmedAt` and the confirmation-effect ID using the read below. On the isolated stack, compare **06.1** and History before and after normal delivery. Both financial IDs start null and later appear together. Expect the same slot, confirmation time and effect. If delivery wins the observation race, use the atomic-admission test evidence below for the null-ID window. The linked invoice is settled at zero with no provider transaction. |
+| Missing order, checkout error and expiry | Read **04.4**. `MISSING` is pending preparation. A transport error permits reconnect. A failed checkout attempt can be retried under the existing Payment rules while H is live. A genuinely committed `FAILED` or `CLOSED` order suppresses checkout. On a fresh unpaid hold let H elapse. The browser stops offering payment and ordinary expiry releases the slot. The first positive creation at or after H is fenced. |
+| Reconnect and account isolation | Leave the booking page offline while readiness changes, then reconnect or reopen the saved attempt. The Driver joins the scoped subscription before fetching current progress and Payment state. It should recover the same order even if it missed the hint. Sign in as another Driver. Neither owner read reveals the first Driver's order and the original progress subscription is inaccessible. |
+| Late positive collection and invalidation | If controlled test delivery is available, delay settlement consumption until H has passed but the reservation start T is still future. An ordinary expired hold may reacquire its original slot under the current projection and accepted buffer. A conflicting commitment or independently permanent invalidation prevents confirmation. At or after T the recorded collection has no late entitlement. Check one reconciliation request for the real collection on denial. A requested refund is an outstanding financial obligation. |
+| Reserved departure and walk-in | Through the normal operator gate UI, scan the reserved plate and initiate departure checkout for its active visit. Repeat for an ordinary walk-in visit. Inspect each departure order's `reference_type = PARKING_SESSION` and the corresponding session ID. The deposit order remains associated with the reservation. Verify existing checkout/status and gate completion using the site's supported test-payment mode. |
+
+For read-only inspection run each query in its owning database, substituting the captured UUID for the placeholder. Use a new query after delivery. An empty result can be the expected intermediate state.
+
+```sql
+-- Operations
+SELECT id, status, target_slot_id, active_claim_slot_id, claim_end_time, hold_expires_at,
+       payment_order_id, collection_id, zero_receipt_id, confirmed_at,
+       confirmation_effect_id, confirmation_state, confirmation_code
+FROM reservations WHERE id = '<reservation-id>';
+
+-- Payment
+SELECT o.id, o.reference_type, o.status, o.final_amount, o.expires_at,
+       o.is_provisioning_fence, i.id AS receipt_id, i.final_amount AS invoice_amount
+FROM payment_orders o LEFT JOIN invoices i ON i.payment_order_id = o.id
+WHERE o.reference_id = '<reservation-or-parking-session-id>';
+SELECT id, collection_id, status, amount, reason FROM refund_requests
+WHERE payment_order_id = '<payment-order-id>';
+```
+
+For a previously prepared **reserved departure**, compare the session's bound checkout order with the Payment row. Older callers could store the reservation ID as the departure order's reference. A retry uses the original idempotency key. Payment rejects a conflicting existing reference. If this occurs, give the Payment and Operations owners the reservation, session and order IDs before retrying payment. Preserve the original records for reconciliation.
+
+When a timing window cannot be reached manually, use the recorded PostgreSQL and transport regressions. `SignedQuoteOrderAndVerifiedTransfersReachGuardedConfirmation` covers return lookup before Operations receives settlement. `LatePaidClaimReacquiresOriginalSlot`, `LatePaidConflictCommitsOneDisposition` and `FirstCollectionAfterStartBindsWithoutEntitlementAndStagesOneDisposition` cover delayed decisions. `ZeroAdmissionAndFinancialLinkHaveIndependentAtomicEffects`, `ZeroDispositionUsesTheSameObligationInEitherArrivalOrder`, `CompletedZeroVisitCanLinkWithoutReopeningAnInactiveSite` and `LateZeroOrderInvoiceAndReceiptShareTheCommitAndAreIdempotent` cover the financial-linkage windows. Leave unsupported provider cases marked unexecuted.

@@ -32,7 +32,7 @@ public sealed class ReservationSlotEndpointTests
             builder.Services.AddControllers().AddApplicationPart(typeof(FacilityHost).Assembly);
             builder.Host.ConfigureContainer<IServiceCollection>((_, services) =>
             {
-                services.AddSingleton<IReservationDependencyRepository>(new EmptyReservationDependencies { Slot = slot });
+                services.AddSingleton<IReservationSlotReader>(new EmptyReservationDependencies { Slot = slot });
                 var worker = services.FirstOrDefault(d => d.ImplementationType == typeof(StructureSynchronizationWorker));
                 if (worker is not null) services.Remove(worker);
             });

@@ -43,7 +43,7 @@ public static class FacilityHost
         builder.Services.AddScoped<IOwnerOnboardingStore, OwnerOnboardingStore>();
         builder.Services.AddScoped<IFacilityDirectoryStore, FacilityDirectoryStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-        builder.Services.AddScoped<IReservationDependencyRepository, ReservationDependencyRepository>();
+        builder.Services.AddScoped<IReservationSlotReader, ReservationSlotReader>();
         builder.Services.AddSingleton(_ => new ParkingGateConnectionPool(
             builder.Configuration.GetConnectionString("Parking")
                 ?? throw new InvalidOperationException("Configure ConnectionStrings:Parking."),

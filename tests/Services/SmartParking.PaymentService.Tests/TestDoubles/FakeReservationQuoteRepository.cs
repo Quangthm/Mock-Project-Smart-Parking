@@ -9,8 +9,8 @@ namespace SmartParking.PaymentService.Tests.TestDoubles;
 public class FakeReservationQuoteRepository : IReservationQuoteRepository
 {
     public readonly List<ReservationQuote> Quotes = new();
-    public Task<ReservationQuote?> FindReviewedAsync(Guid accountId, Guid id, string version, CancellationToken ct) =>
-        Task.FromResult(Quotes.SingleOrDefault(q => q.Id == id && q.AccountId == accountId && q.TermsVersion == version && q.ReviewedEvidence != null));
+    public Task<ReservationQuote?> FindReviewedAsync(Guid accountId, Guid id, CancellationToken ct) =>
+        Task.FromResult(Quotes.SingleOrDefault(q => q.Id == id && q.AccountId == accountId && q.ReviewedEvidence != null));
 
     public Task<ReservationQuote?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {

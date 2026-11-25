@@ -11,15 +11,6 @@ namespace SmartParking.FacilityService.API.Controllers;
 [Authorize(Policy = ReservationServiceAuthentication.Scheme)]
 public sealed class ReservationDependenciesController(IMediator mediator) : ControllerBase
 {
-    [HttpPost("acquire")]
-    public Task<DependencyResult> Acquire(DependencyIntent request, CancellationToken ct) =>
-        mediator.Send(new AcquireDependencyCommand(request), ct);
-    [HttpPost("complete")]
-    public Task<DependencyAcknowledgement> Complete(CompleteDependencyCommand request, CancellationToken ct) =>
-        mediator.Send(request, ct);
-    [HttpPost("abort")]
-    public Task<DependencyAcknowledgement> Abort(DependencyIntent request, CancellationToken ct) =>
-        mediator.Send(new AbortDependencyCommand(request), ct);
     [HttpGet("slots/{slotId}")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public Task<SelectedSlotMetadata> ResolveSlot(Guid slotId, CancellationToken ct) =>

@@ -83,8 +83,8 @@ public sealed class PrepareReservationCheckoutCommandHandler(
         var result = await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,
+            session.Id,
             request.ReservationId,
-            "RESERVATION",
             session.VehicleType,
             session.EntryTime,
             clock.GetUtcNow(),
@@ -117,7 +117,7 @@ public sealed class PrepareSessionCheckoutCommandHandler(
             scope.TenantId,
             request.SiteId,
             session.Id,
-            "PARKING_SESSION",
+            null,
             session.VehicleType,
             session.EntryTime,
             clock.GetUtcNow(),

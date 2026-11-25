@@ -3,7 +3,7 @@ using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Application.Reservations;
 
-public sealed class ResolveReservationSlotHandler(IReservationDependencyRepository repository)
+public sealed class ResolveReservationSlotHandler(IReservationSlotReader repository)
     : IRequestHandler<ResolveReservationSlotQuery, SelectedSlotMetadata>
 {
     public async Task<SelectedSlotMetadata> Handle(ResolveReservationSlotQuery query, CancellationToken ct)

@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -32,6 +33,21 @@ public class PaymentsController : ControllerBase
         _logger = logger;
         _environment = environment;
     }
+
+    [HttpGet("reservations/{reservationId:guid}/checkout-state")]
+    [Authorize(Roles = "DRIVER,driver")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> ReservationCheckout(Guid reservationId, CancellationToken ct) =>
+        Ok(new { success = true, data = await _mediator.Send(new ReadReservationCheckout(AuthenticatedAccountId(), reservationId, null), ct) });
+
+    [HttpGet("orders/{orderId:guid}/reservation")]
+    [Authorize(Roles = "DRIVER,driver")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> OrderReservation(Guid orderId, CancellationToken ct) =>
+        Ok(new { success = true, data = await _mediator.Send(new ReadReservationCheckout(AuthenticatedAccountId(), null, orderId), ct) });
+
+    private Guid AuthenticatedAccountId() =>
+        Guid.TryParse(User.FindFirst("account_id")?.Value, out var account) ? account : Guid.Empty;
 
     [HttpPost("orders")]
     [Authorize]

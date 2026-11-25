@@ -16,7 +16,7 @@ public sealed class RecordZeroDispositionHandler(IPaymentOrderRepository orders,
                 order.OrderType != OrderType.RESERVATION_FEE || order.ReferenceType != ReferenceType.RESERVATION ||
                 order.FinalAmount != 0 || order.ReferenceId != request.ReservationId ||
                 order.AccountId != request.AccountId || order.Id != request.OrderId ||
-                order.QuoteId != request.QuoteId || order.TermsVersion != request.QuoteVersion ||
+                order.QuoteId != request.QuoteId ||
                 order.Invoice is not { } receipt || request.ReceiptId == Guid.Empty || receipt.Id != request.ReceiptId ||
                 receipt.PaymentOrderId != order.Id || receipt.ReferenceType != ReferenceType.RESERVATION ||
                 receipt.TenantId != order.TenantId || receipt.SiteId != order.SiteId ||
@@ -25,6 +25,8 @@ public sealed class RecordZeroDispositionHandler(IPaymentOrderRepository orders,
                 receipt.PricingSnapshot.Currency != order.ReviewedCurrency ||
                 string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 100)
                 throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Disposition does not match a zero receipt.");
+            if (order.ZeroDispositionReason is { } prior && prior != request.Reason)
+                throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Conflicting zero disposition.");
             order.ZeroDispositionReason ??= request.Reason;
             await work.SaveChangesAsync(ct);
             return receipt.Id;

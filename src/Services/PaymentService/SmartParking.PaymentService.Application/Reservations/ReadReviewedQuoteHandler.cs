@@ -7,7 +7,7 @@ public sealed class ReadReviewedQuoteHandler(IReservationQuoteRepository quotes)
 {
     public async Task<ReviewedQuoteProof> Handle(ReadReviewedQuote query, CancellationToken ct)
     {
-        var quote = await quotes.FindReviewedAsync(query.AccountId, query.QuoteId, query.Version, ct)
+        var quote = await quotes.FindReviewedAsync(query.AccountId, query.QuoteId, ct)
             ?? throw new PaymentDomainException("QUOTE_NOT_FOUND", "Reviewed quote was not found.");
         return ReviewedQuoteProof.From(quote);
     }

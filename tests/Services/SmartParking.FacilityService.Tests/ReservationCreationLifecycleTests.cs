@@ -22,7 +22,7 @@ public sealed class ReservationCreationLifecycleTests
         request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
         var booking = CreateBooking(request.Id, now.AddSeconds(2), 20000, 20000);
 
-        request.AttachQuoteHold(booking.Id);
+        request.CompleteAdmission(booking.Id, false);
 
         Assert.Equal("HOLD_CREATED", request.State);
         Assert.Equal(booking.Id, request.ReservationId);
@@ -33,109 +33,28 @@ public sealed class ReservationCreationLifecycleTests
     }
 
     [Fact]
-    public void OrderProvisioningReplaysUnknownWithStableReservationOrderIdentity()
+    public void ConfirmedZeroBookingCompletesBeforeReceipt()
     {
         var now = DateTimeOffset.UtcNow;
-        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 20000);
-
-        Assert.Equal("PENDING", booking.OrderProvisioningState);
-        Assert.True(booking.BeginOrderProvisioning(now, TimeSpan.FromSeconds(30)));
-        Assert.Equal(1, booking.OrderProvisioningAttempts);
-        booking.DeferOrderProvisioning(now.AddSeconds(31), "UNKNOWN", "PAYMENT_ORDER_OUTCOME_UNKNOWN");
-
-        Assert.False(booking.BeginOrderProvisioning(now.AddSeconds(30), TimeSpan.FromSeconds(30)));
-        Assert.True(booking.BeginOrderProvisioning(now.AddSeconds(31), TimeSpan.FromSeconds(30)));
-        var orderId = Guid.NewGuid();
-        booking.RecordOrderCreated(orderId);
-
-        Assert.Equal("CREATED", booking.OrderProvisioningState);
-        Assert.Equal(orderId, booking.PaymentOrderId);
-        Assert.Null(booking.OrderProvisioningNextActionAt);
-        Assert.Throws<InvalidOperationException>(() => booking.RecordOrderCreated(Guid.NewGuid()));
-    }
-
-    [Fact]
-    public void ZeroPriceHoldDoesNotCreateAnOrder()
-    {
-        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 0, 0);
-
-        Assert.Equal("NOT_REQUIRED", booking.OrderProvisioningState);
-        Assert.Null(booking.OrderProvisioningNextActionAt);
+        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 0);
+        booking.ConfirmZeroAdmission(now);
+        var effect = booking.ConfirmationEffectId;
         Assert.Null(booking.PaymentOrderId);
-    }
-
-    [Fact]
-    public void ExpiredHoldClosesKnownNoEffectProvisioningWithoutInventingAnOrder()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 20000);
-        Assert.True(booking.BeginOrderProvisioning(now, TimeSpan.FromSeconds(30)));
-        booking.DeferOrderProvisioning(now.AddSeconds(31), "PENDING", "PAYMENT_ORDER_PROVISIONING_UNAVAILABLE");
-
-        var expiredAt = booking.HoldExpiresAt!.Value;
-        booking.ReleaseExpiredHold(expiredAt);
-        booking.CloseOrderProvisioning("PAYMENT_HOLD_EXPIRED");
-
-        Assert.Equal("EXPIRED", booking.Status);
+        Assert.Null(booking.ZeroReceiptId);
+        booking.EnterParking();
+        booking.CompleteParking();
+        var order = Guid.NewGuid();
+        var receipt = Guid.NewGuid();
+        Assert.True(booking.LinkZeroReceipt(order, receipt));
+        Assert.False(booking.LinkZeroReceipt(order, receipt));
+        Assert.Equal("COMPLETED", booking.Status);
         Assert.Null(booking.ActiveClaimSlotId);
-        Assert.Equal("CLOSED_NO_ORDER", booking.OrderProvisioningState);
-        Assert.Null(booking.PaymentOrderId);
-        Assert.Throws<InvalidOperationException>(() => booking.RecordOrderCreated(Guid.NewGuid()));
-    }
-
-    [Fact]
-    public async Task HoldCreatedEventTriggersPositivePriceOrderProvisioning()
-    {
-        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 20000m, 20000m);
-        var repo = new FakeBookingRepository(booking);
-        var positive = new RecordingHandler<ProvisionReservationOrderCommand>();
-        var zero = new RecordingHandler<AcceptZeroPriceTermsCommand>();
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddApplicationServices();
-        services.AddSingleton<IReservationBookingRepository>(repo);
-        services.AddSingleton<IRequestHandler<ProvisionReservationOrderCommand>>(positive);
-        services.AddSingleton<IRequestHandler<AcceptZeroPriceTermsCommand>>(zero);
-        using var provider = services.BuildServiceProvider();
-        var mediator = provider.GetRequiredService<IMediator>();
-
-        await mediator.Send(new ProcessReservationHold(
-            new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, booking.RequestId!.Value, booking.Id,
-                Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1),
-                DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1)), CancellationToken.None);
-
-        Assert.Single(positive.Calls);
-        Assert.Empty(zero.Calls);
-    }
-
-    [Fact]
-    public async Task HoldCreatedEventTriggersZeroPriceAcceptance()
-    {
-        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 0m, 0m);
-        var repo = new FakeBookingRepository(booking);
-        var positive = new RecordingHandler<ProvisionReservationOrderCommand>();
-        var zero = new RecordingHandler<AcceptZeroPriceTermsCommand>();
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddApplicationServices();
-        services.AddSingleton<IReservationBookingRepository>(repo);
-        services.AddSingleton<IRequestHandler<ProvisionReservationOrderCommand>>(positive);
-        services.AddSingleton<IRequestHandler<AcceptZeroPriceTermsCommand>>(zero);
-        using var provider = services.BuildServiceProvider();
-        var mediator = provider.GetRequiredService<IMediator>();
-
-        await mediator.Send(new ProcessReservationHold(
-            new ReservationHoldChangedV1(Guid.NewGuid(), DateTimeOffset.UtcNow, booking.RequestId!.Value, booking.Id,
-                Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1),
-                DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddMinutes(5), "PENDING_PAYMENT", 1)), CancellationToken.None);
-
-        Assert.Empty(positive.Calls);
-        Assert.Single(zero.Calls);
+        Assert.Equal(effect, booking.ConfirmationEffectId);
     }
 
     private static ReservationRow CreateBooking(Guid requestId, DateTimeOffset now, decimal booked, decimal deposit) =>
         ReservationRow.PrepareQuote(requestId, Guid.NewGuid(), "51A12345", Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), "PAYOS", now.AddHours(1), now.AddHours(2), now.AddHours(2), now, now.AddMinutes(5),
-            booked, booked - deposit, deposit, "VND", "{}", Guid.NewGuid(), "rq1-test", now.AddMinutes(1),
+            Guid.NewGuid(), "PAYOS", now.AddHours(1), now.AddHours(2), now.AddHours(2), now, deposit > 0 ? now.AddMinutes(5) : null,
+            booked, booked - deposit, deposit, "VND", "{}", Guid.NewGuid(), now.AddMinutes(1),
             "tariff", "coverage", booked > 0 && deposit == 0);
 }
