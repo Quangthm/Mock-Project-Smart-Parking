@@ -10,6 +10,7 @@ using SmartParking.OperationService.Infrastructure.Authentication;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
 
 namespace SmartParking.OperationService.API;
 
@@ -56,6 +57,16 @@ public static class OperationHost
         builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
         ApiErrors.Configure(builder.Services);
         builder.Services.AddControllers().AddApplicationPart(typeof(ReservationsController).Assembly);
+        builder.Services.PostConfigure<ApiBehaviorOptions>(options =>
+        {
+            var existingFactory = options.InvalidModelStateResponseFactory;
+            options.InvalidModelStateResponseFactory = context =>
+                context.ActionDescriptor is ControllerActionDescriptor action &&
+                action.ControllerTypeInfo.AsType() == typeof(ReservationRequestsController) &&
+                action.ActionName == nameof(ReservationRequestsController.Create)
+                    ? new ApiErrors.BindingErrorResult()
+                    : existingFactory(context);
+        });
         // SPARK-244 P2: realtime operator monitoring hub. Redis backplane is
         // enabled only when a connection string is configured (multi-instance).
         var signalR = builder.Services.AddSignalR();
@@ -90,7 +101,6 @@ public static class OperationHost
             context.Response.Headers.CacheControl = "no-store";
             if (!admissionEnabled && (context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
-                context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations")))
             {

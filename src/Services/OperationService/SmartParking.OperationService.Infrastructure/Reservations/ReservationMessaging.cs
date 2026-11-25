@@ -65,6 +65,7 @@ public static class ReservationMessaging
         {
             if (sagaEnabled)
             {
+                registration.AddConsumer<AccountAccessDecisionConsumer>();
                 registration.AddConsumer<QuoteEvaluationConsumer>();
                 registration.AddConsumer<PlateDecisionConsumer>();
                 registration.AddConsumer<SlotDecisionConsumer>();
@@ -79,7 +80,6 @@ public static class ReservationMessaging
             if (admissionEnabled)
             {
                 registration.AddConsumer<ReservationProgressConsumer>();
-                registration.AddConsumer<AccountAccessDecisionConsumer>();
                 registration.AddConsumer<ReservationHoldChangedConsumer>();
                 registration.AddConsumer<ReservationPaymentSucceededConsumer>();
             }
@@ -187,7 +187,7 @@ public static class ReservationMessaging
                         endpoint.ConfigureSaga<Persistence.Entities.ReservationAdmissionState>(context);
                     });
                 }
-                if (admissionEnabled) bus.ReceiveEndpoint(AccountAccessEndpoints.Decisions, endpoint =>
+                if (sagaEnabled) bus.ReceiveEndpoint(AccountAccessEndpoints.Decisions, endpoint =>
                 {
                     endpoint.UseMessageRetry(retry =>
                     {
@@ -200,10 +200,10 @@ public static class ReservationMessaging
             });
         });
         services.Configure<MassTransitHostOptions>(options => options.WaitUntilStarted = false);
+        if (sagaEnabled) services.AddHostedService<ReservationAuthorizationWorker>();
         if (admissionEnabled)
         {
             services.AddScoped<IReservationProgressPublisher, ReservationProgressPublisher>();
-            services.AddHostedService<ReservationAuthorizationWorker>();
             services.AddHostedService<ReservationFacilityDependencyWorker>();
             services.AddHostedService<ReservationOrderProvisioningWorker>();
         }

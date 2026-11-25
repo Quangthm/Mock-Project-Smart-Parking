@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using MassTransit;
+using MediatR;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -12,6 +13,8 @@ using Microsoft.Extensions.Hosting;
 using SmartParking.Contracts.AccountAccess;
 using SmartParking.Contracts.ReservationAdmission;
 using SmartParking.OperationService.API;
+using SmartParking.OperationService.API.Middleware;
+using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
 using SmartParking.OperationService.Persistence;
@@ -25,6 +28,116 @@ public sealed class ReservationSagaTransportTests
     private readonly Guid key = Guid.NewGuid();
     private readonly AdmissionTestClock clock = new(DateTimeOffset.UtcNow);
     private readonly Guid slot = Guid.NewGuid();
+
+    [Fact]
+    public async Task TypedAdmissionRejectsInvalidAndRetiredInputsBeforeDispatch()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.AddControllers().AddApplicationPart(typeof(OperationHost).Assembly);
+        builder.Services.AddApplicationServices();
+        builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
+        ApiErrors.Configure(builder.Services);
+        builder.Services.AddAuthentication("test")
+            .AddScheme<AuthenticationSchemeOptions, AdmissionTestAuthentication>("test", _ => { });
+        var dispatch = new AdmissionHttpDispatch();
+        builder.Services.AddSingleton<IRequestHandler<AdmitQuoteReservation, ReservationReceipt>>(dispatch);
+        builder.Services.AddSingleton<IRequestHandler<PreviewReservationPriceQuery, PricePreview>>(dispatch);
+        await using var host = builder.Build();
+        ApiErrors.Use(host);
+        host.UseAuthentication();
+        host.UseAuthorization();
+        host.MapControllers();
+        await host.StartAsync();
+        using var http = new HttpClient { BaseAddress = new Uri(host.Urls.Single()) };
+        var intent = new QuoteReservationIntent("51A12345", slot, clock.Now.AddDays(1),
+            clock.Now.AddDays(1).AddHours(1), "PAYOS", Guid.NewGuid(), "rq1-test");
+        using var unauthenticated = await http.PostAsJsonAsync("/api/reservation-requests", intent);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
+        http.DefaultRequestHeaders.Add("Test-Account", account.ToString());
+
+        await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", intent));
+        http.DefaultRequestHeaders.Add("Idempotency-Key", "not-a-guid");
+        await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", intent));
+        http.DefaultRequestHeaders.Remove("Idempotency-Key");
+        http.DefaultRequestHeaders.Add("Idempotency-Key", key.ToString());
+        await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", intent with { QuoteId = Guid.Empty }));
+        await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", intent with { QuoteVersion = "" }));
+        foreach (var body in new[] { "{", "null", "[]", """{"quoteId":"not-a-guid"}""" })
+        {
+            using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            await AssertInvalid(await http.PostAsync("/api/reservation-requests", content));
+        }
+
+        var oldIntent = new
+        {
+            vehicleId = Guid.NewGuid(), siteId = Guid.NewGuid(), requestedSlotId = slot, intent.Start, intent.End,
+            intent.PaymentMethod, termsId = Guid.NewGuid(), termsVersion = "old"
+        };
+        await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", oldIntent));
+        using var retired = await http.PostAsJsonAsync("/api/reservation-terms", oldIntent);
+        Assert.Equal(HttpStatusCode.NotFound, retired.StatusCode);
+        Assert.Equal(0, dispatch.CreationCalls);
+
+        Assert.Equal(dispatch.RequestId, await Submit(http, intent));
+        Assert.Equal(1, dispatch.CreationCalls);
+        Assert.Equal(intent, dispatch.LastCommand!.Intent);
+        Assert.Equal(key, dispatch.LastCommand.IdempotencyKey);
+        using var preview = await http.PostAsJsonAsync("/api/reservation-price-previews",
+            new ReservationPricePreview(oldIntent.siteId, slot, intent.Start, intent.End, null, null));
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+    }
+
+    [Fact]
+    public async Task DisabledAdmissionFailsClosedAndDoesNotRecognizeRetiredTermsRoute()
+    {
+        await using var host = OperationHost.Build([], builder =>
+        {
+            builder.Configuration.Sources.Clear();
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Reservation"] = "Host=127.0.0.1;Port=1;Database=unused",
+                ["Services:Key"] = "test-only-placeholder-key-for-isolated-host"
+            });
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+        });
+        await host.StartAsync();
+        using var http = new HttpClient { BaseAddress = new Uri(host.Urls.Single()) };
+        using var disabled = await http.PostAsJsonAsync("/api/reservation-requests", new { });
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, disabled.StatusCode);
+        var failure = await disabled.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("RESERVATION_ADMISSION_DISABLED", failure.GetProperty("code").GetString());
+        using var retired = await http.PostAsJsonAsync("/api/reservation-terms", new { });
+        Assert.Equal(HttpStatusCode.NotFound, retired.StatusCode);
+    }
+
+    private sealed class AdmissionHttpDispatch : IRequestHandler<AdmitQuoteReservation, ReservationReceipt>,
+        IRequestHandler<PreviewReservationPriceQuery, PricePreview>
+    {
+        public Guid RequestId { get; } = Guid.NewGuid();
+        public int CreationCalls { get; private set; }
+        public AdmitQuoteReservation? LastCommand { get; private set; }
+
+        public Task<ReservationReceipt> Handle(AdmitQuoteReservation command, CancellationToken ct)
+        {
+            CreationCalls++;
+            LastCommand = command;
+            return Task.FromResult(new ReservationReceipt(RequestId, "CHECKING", null, null, 3));
+        }
+
+        public Task<PricePreview> Handle(PreviewReservationPriceQuery query, CancellationToken ct) =>
+            Task.FromResult(new PricePreview(10_000, 10_000, "VND", "test-pricing", false));
+    }
+
+    private static async Task AssertInvalid(HttpResponseMessage response)
+    {
+        using (response)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("INVALID_REQUEST", body.GetProperty("code").GetString());
+        }
+    }
 
     [ReservationTransportFact]
     public async Task DurableCaptureOwnerRepliesTerminalFencingAndRestart()
@@ -61,7 +174,19 @@ public sealed class ReservationSagaTransportTests
                     return Task.CompletedTask;
                 }));
             await Task.WhenAll(ownerAccounts.Ready, ownerPlates.Ready, ownerSlots.Ready);
+            await AssertInvalid(await http.PostAsJsonAsync("/api/reservation-requests", new
+            {
+                vehicleId = Guid.NewGuid(), siteId = Guid.NewGuid(), requestedSlotId = slot, intent.Start, intent.End,
+                intent.PaymentMethod, termsId = Guid.NewGuid(), termsVersion = "old"
+            }));
+            using (var rejectedScope = host.Services.CreateScope())
+            {
+                var rejectedDb = rejectedScope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+                Assert.False(await rejectedDb.ReservationRequests.AnyAsync(request => request.AccountId == account));
+            }
             var first = await Submit(http, intent);
+            using var owningReceipt = await http.GetAsync($"/api/reservation-requests/{first:D}");
+            Assert.Equal(HttpStatusCode.OK, owningReceipt.StatusCode);
             Assert.Equal(first, await Submit(http, intent with { LicensePlate = "51A12345" }));
             using var conflict = await http.PostAsJsonAsync("/api/reservation-requests", intent with { QuoteId = Guid.NewGuid() });
             Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
@@ -146,7 +271,9 @@ public sealed class ReservationSagaTransportTests
         using var response = await http.PostAsJsonAsync("/api/reservation-requests", intent);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
-        return json.GetProperty("data").GetProperty("requestId").GetGuid();
+        var requestId = json.GetProperty("data").GetProperty("requestId").GetGuid();
+        Assert.EndsWith($"/api/reservation-requests/{requestId:D}", response.Headers.Location?.OriginalString);
+        return requestId;
     }
 
     private static async Task<ReservationProgress> Snapshot(HttpClient http, Guid id)

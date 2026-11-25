@@ -1,5 +1,4 @@
 using MediatR;
-using SmartParking.OperationService.Domain.Reservations;
 using SmartParking.OperationService.Domain.Entities;
 
 namespace SmartParking.OperationService.Application.Reservations;
@@ -13,26 +12,11 @@ public sealed record PricePreview(decimal BookedAmount, decimal? DepositAmount, 
 public sealed record CommercialTerms(Guid QuoteId, string Version, DateTimeOffset ValidUntil,
     BookingSelection Selection, Guid AccountId, decimal BookedAmount, decimal DepositAmount,
     string Currency, string PrepaymentMode, string CoverageVersion, string Disclosure);
-public sealed record BookingTermsSnapshot(CommercialTerms Commercial, FacilityBookingFacts Facility,
-    string PolicyJson, Guid PlatformPolicyId, int PlatformPolicyVersion, Guid SitePolicyId, int SitePolicyVersion);
-public sealed record ReviewedTerms(Guid TermsId, string TermsVersion, DateTimeOffset ValidUntil,
-    CommercialTerms Commercial, ReviewedOperationalPolicy OperationalPolicy);
-public sealed record VehicleBindingResult(bool Eligible, long? Revision, string? CanonicalPlate);
 public sealed record ZeroPriceAcceptanceResult(string State, ZeroPriceAcceptanceRequest AcceptedRequest,
     string? OutcomeCode = null);
-public sealed record VerifiedReservationCollection(Guid EventId, Guid CollectionId, Guid PaymentOrderId,
-    Guid PaymentTransactionId, Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId, Guid SiteId,
-    Guid QuoteId, string QuoteVersion, Guid TermsId, string TermsVersion, decimal Amount, string Currency,
-    string Provider, string ProviderReference, DateTimeOffset ProviderVerifiedAt, DateTimeOffset OccurredAt);
 public sealed record ReservationConfirmedV1(Guid EventId, Guid ReservationId, Guid AccountId,
     Guid TenantId, Guid SiteId, DateTimeOffset ConfirmedAt);
 
-// These are owner boundaries, not services forwarding Application workflow logic.
-// Owners implement authenticated/versioned transports; unavailable never means free/no coverage.
-public interface IReservationVehicleOwner
-{
-    Task<VehicleBindingResult> ResolveAsync(Guid accountId, Guid vehicleId, CancellationToken ct);
-}
 public interface IReservationFactsPublisher
 {
     Task ConfirmedAsync(ReservationConfirmedV1 fact, CancellationToken ct);
@@ -40,12 +24,4 @@ public interface IReservationFactsPublisher
     Task AvailabilityChangedAsync(ReservationAvailabilityChangedV1 fact, CancellationToken ct);
     Task FacilityAppliedAsync(FacilityStructureAppliedV1 fact, CancellationToken ct);
 }
-public interface IReservationTermsRepository
-{
-    void Add(ReservationTerms terms);
-    Task<ReservationTerms?> LockAsync(Guid id, CancellationToken ct);
-}
-
 public sealed record PreviewReservationPriceQuery(ReservationPricePreview Intent) : IRequest<PricePreview>;
-public sealed record ReviewReservationTermsCommand(BookingSelection Intent) : IRequest<ReviewedTerms>;
-public sealed record ProgressReservationCommand(Guid RequestId) : IRequest;

@@ -33,7 +33,7 @@ public sealed class ReservationAdmissionBranchTests
     [Fact]
     public void HeldTokenRequiresTheSameSnapshotOnReplay()
     {
-        var token = ReservationFacilityDependency.Prepare(Guid.NewGuid(), Guid.NewGuid(), "ADMISSION",
+        var token = ReservationFacilityDependency.Prepare(Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION",
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "intent", Now.AddMinutes(1), Now);
         var original = """{"complete":true}""";
         var changed = """{"complete":false}""";
@@ -58,6 +58,6 @@ public sealed class ReservationAdmissionBranchTests
         request.RecordPlate(true, "51A12345", 3, Now.AddSeconds(17));
         Assert.Equal("EVALUATING", request.State);
         Assert.Null(request.ReservationId);
-        Assert.Throws<InvalidOperationException>(() => request.AttachBooking(Guid.NewGuid()));
+        Assert.Throws<InvalidOperationException>(() => request.AttachQuoteHold(Guid.NewGuid()));
     }
 }

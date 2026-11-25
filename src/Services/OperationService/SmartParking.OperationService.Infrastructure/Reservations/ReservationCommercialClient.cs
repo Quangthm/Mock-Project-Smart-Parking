@@ -59,38 +59,6 @@ public sealed class ReservationCommercialClient(
             data.PricingVersion, data.RequiresCompleteSelection);
     }
 
-    public async Task<CommercialTerms> QuoteAsync(Guid accountId, Guid tenantId, BookingSelection intent, CancellationToken ct)
-    {
-        var data = await SendAsync<QuoteResponse>(
-            HttpMethod.Post,
-            "/api/v1/pricing/reservations/quote",
-            new
-            {
-                siteId = intent.SiteId,
-                requestedSlotId = intent.RequestedSlotId,
-                start = intent.Start,
-                end = intent.End,
-                vehicleId = intent.VehicleId,
-                paymentMethod = intent.PaymentMethod,
-                accountId,
-                tenantId = tenantId == Guid.Empty ? (Guid?)null : tenantId,
-                vehicleType = "CAR",
-                prepaymentMode = "FULL",
-                coverageVersion = "STANDARD_v1"
-            },
-            ct,
-            accountId,
-            tenantId,
-            intent.SiteId);
-        if (data.Selection is null) throw InvalidOwner();
-        var selection = new BookingSelection(data.Selection.VehicleId, data.Selection.SiteId,
-            data.Selection.RequestedSlotId, data.Selection.Start, data.Selection.End,
-            data.Selection.PaymentMethod);
-        return new(data.QuoteId, data.Version, data.ValidUntil, selection, data.AccountId,
-            data.BookedAmount, data.DepositAmount, data.Currency, data.PrepaymentMode,
-            data.CoverageVersion, data.Disclosure);
-    }
-
     public async Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct)
     {
         try

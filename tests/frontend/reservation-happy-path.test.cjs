@@ -18,44 +18,42 @@ function load(file, mocks, globals = {}) {
   vm.runInNewContext(js, context);
   return context.exports;
 }
-const selection = { vehicleId: 'vehicle', siteId: 'site', requestedSlotId: 'slot', start: '2026-12-01T03:00:00.000Z', end: '2026-12-01T05:00:00.000Z', paymentMethod: 'PAYOS' };
-const terms = { termsId: 'terms', termsVersion: 'v2', validUntil: '2099-01-01T00:00:00Z', commercial: { bookedAmount: 40000, depositAmount: 20000, disclosure: 'Reviewed price', prepaymentMode: 'PARTIAL' }, operationalPolicy: { values: {} } };
+const selection = { vehicleId: 'vehicle', siteId: 'site', requestedSlotId: '917820fe-d339-4007-aa5f-2d5180e53fd4', start: '2026-12-01T03:00:00.000Z', end: '2026-12-01T05:00:00.000Z', paymentMethod: 'PAYOS' };
 const quoteSelection = { licensePlate: '51A12345', requestedSlotId: selection.requestedSlotId, start: selection.start, end: selection.end, paymentMethod: 'PAYOS' };
-const quoteIntent = { ...quoteSelection, quoteId: 'quote', quoteVersion: 'v3' };
+const quoteIntent = { ...quoteSelection, quoteId: '90411434-635c-4526-b579-434d826ed2f8', quoteVersion: 'v3' };
 const quote = { ...quoteIntent, canonicalPlate: quoteSelection.licensePlate, siteId: selection.siteId,
-  validUntil: terms.validUntil, bookedAmount: 40000, depositAmount: 20000, currency: 'VND',
+  validUntil: '2099-01-01T00:00:00Z', bookedAmount: 40000, depositAmount: 20000, currency: 'VND',
   disclosure: 'Reviewed quote', operationalPolicy: { values: {} } };
 
 test('reservation adapter sends the reviewed intent and stable idempotency key to Operations', async () => {
   const calls = [];
   const { reservationsApi: api } = load('lib/reservationsApi.ts', { './authApi': { request: async (...args) => { calls.push(args); return { success: true, data: {} }; } } });
   await api.preview(selection);
-  await api.review(selection);
-  await api.submit(selection, terms, 'same-key');
-  await api.submit(selection, terms, 'same-key');
-  assert.equal(calls[0][0], '/reservation-price-previews');
-  assert.equal(calls[1][0], '/reservation-terms');
-  assert.equal(calls[2][3], '/api');
-  assert.equal(calls[2][4], '/operations');
-  assert.deepEqual(JSON.parse(JSON.stringify(calls[2][2])), { ...selection, mode: 'SPECIFIC_SLOT', termsId: 'terms', termsVersion: 'v2' });
-  assert.equal(calls[2][5]['Idempotency-Key'], calls[3][5]['Idempotency-Key']);
-  await api.receipt('receipt'); await api.booking('booking'); await api.list(); await api.requestForOrder('order');
-  assert.deepEqual(calls.slice(4).map(call => call[0]), ['/reservation-requests/receipt', '/me/reservations/booking', '/me/reservations?pageSize=100', '/me/reservations/by-order/order/request']);
   await api.reviewQuote(quoteSelection);
   await api.submitQuote(quoteIntent, 'quote-key');
-  assert.deepEqual(calls[8].slice(0, 3), ['/reservation-quotes', 'POST', quoteSelection]);
-  assert.deepEqual(calls[9].slice(0, 3), ['/reservation-requests', 'POST', quoteIntent]);
-  assert.equal(calls[9][5]['Idempotency-Key'], 'quote-key');
+  await api.submitQuote(quoteIntent, 'quote-key');
+  assert.equal(calls[0][0], '/reservation-price-previews');
+  assert.deepEqual(calls[1].slice(0, 3), ['/reservation-quotes', 'POST', quoteSelection]);
+  assert.deepEqual(calls[2].slice(0, 5), ['/reservation-requests', 'POST', quoteIntent, '/api', '/operations']);
+  assert.equal(calls[2][5]['Idempotency-Key'], 'quote-key');
+  assert.deepEqual(calls[3], calls[2]);
+  assert.equal(api.review, undefined);
+  assert.equal(api.submit, undefined);
+  await api.receipt('receipt'); await api.booking('booking'); await api.list(); await api.requestForOrder('order');
+  assert.deepEqual(calls.slice(4).map(call => call[0]), ['/reservation-requests/receipt', '/me/reservations/booking', '/me/reservations?pageSize=100', '/me/reservations/by-order/order/request']);
 });
 
 test('reservation adapter propagates failed requests without fabricating a booking', async () => {
   const { reservationsApi: api } = load('lib/reservationsApi.ts', { './authApi': { request: async () => ({ success: false }) } });
-  await assert.rejects(api.submit(selection, terms, 'key'), /no result/);
+  await assert.rejects(api.submitQuote(quoteIntent, 'key'), /no result/);
 });
 
 // A small hook harness exercises client transitions with mocked services; it is not browser/E2E evidence.
+const requestKey = '0854e9bf-b070-47b9-ab2f-b8b294186acf';
+const receiptId = '22680f58-0737-46fa-9a53-6d5201bf7bdd';
+
 function checkout(api = {}, storage = new Map()) {
-  const hooks = []; let index = 0; let snapshot = null; let generation = 1;
+  const hooks = []; let index = 0; let snapshot = null; let generation = 1; let subscribed;
   const jsx = (type, props) => ({ type, props });
   const component = load('roles/driver/booking/ReservationCheckout.tsx', {
     react: {
@@ -69,14 +67,13 @@ function checkout(api = {}, storage = new Map()) {
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '../../../lib/authApi': { getSessionGeneration: () => generation },
     '../../../lib/reservationsApi': { reservationsApi: { reviewQuote: async () => quote, submitQuote: api.submit } },
-    '../../../lib/driverReservationApi': { driverReservationApi: { create: api.legacySubmit } },
-    '../../../lib/reservationProgress': { useReservationProgress: () => ({ snapshot, connected: true }) },
+    '../../../lib/reservationProgress': { useReservationProgress: id => { subscribed = id; return { snapshot, connected: true }; } },
     '../../../lib/formatStatus': { formatStatus: value => value },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'UntitledIcon' },
     '../payments/PaymentCheckout': { PaymentCheckout: 'PaymentCheckout' },
   }, {
     sessionStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
-    crypto: { randomUUID: () => 'stable-key' },
+    crypto: { randomUUID: () => requestKey },
     window: { dispatchEvent() {}, setInterval() {} }, Event: class {},
   }).ReservationCheckout;
   let tree;
@@ -91,7 +88,7 @@ function checkout(api = {}, storage = new Map()) {
   async function click(label) { button(label).props.onClick(); await new Promise(resolve => setImmediate(resolve)); render(); }
   async function accept() { await click('Review price and terms'); nodes().find(node => node.type === 'input').props.onChange({ target: { checked: true } }); render(); await click('Accept terms and reserve'); }
   render();
-  return { render, nodes, button, click, accept, storage, progress: value => { snapshot = value; render(); }, switchAccount: () => { generation++; } };
+  return { render, nodes, button, click, accept, storage, requestId: () => subscribed, progress: value => { snapshot = value; render(); }, switchAccount: () => { generation++; } };
 }
 
 test('happy path waits for a real order and never treats HOLD_CREATED as CONFIRMED', async () => {
@@ -113,11 +110,28 @@ test('ambiguous submission survives remount and retries exactly the same intent/
   let sent;
   const f = checkout({ submit: async (...args) => { sent = JSON.parse(JSON.stringify(args)); throw new Error('Network unavailable'); } });
   await f.accept();
-  assert.deepEqual(sent, [quoteIntent, 'stable-key']);
-  const resumed = checkout({ submit: async (...args) => { assert.deepEqual(JSON.parse(JSON.stringify(args)), sent); return { requestId: 'request', state: 'PREPARING' }; } }, f.storage);
+  assert.deepEqual(sent, [quoteIntent, requestKey]);
+  const resumed = checkout({ submit: async (...args) => { assert.deepEqual(JSON.parse(JSON.stringify(args)), sent); return { requestId: receiptId, state: 'CHECKING' }; } }, f.storage);
   assert.ok(resumed.button('Retry same request'));
   await resumed.click('Retry same request');
   assert.equal(resumed.button('Retry same request'), undefined);
+});
+
+test('saved terms and malformed intents cannot resubmit, but a known request can recover', () => {
+  const legacy = { key: requestKey, intent: { ...selection, termsId: 'terms', termsVersion: 'v1' } };
+  const submit = () => assert.fail('opening storage must not create a reservation');
+  for (const attempt of [legacy, { ...legacy, intent: { ...quoteIntent, quoteVersion: null } },
+    { ...legacy, intent: quoteIntent, key: 'bad-key' }, { ...legacy, intent: quoteIntent, requestId: 'bad-id' }]) {
+    const f = checkout({ submit }, new Map([['driver-account', JSON.stringify(attempt)]]));
+    assert.equal(f.requestId(), undefined);
+    assert.equal(f.button('Retry same request'), undefined);
+    assert.ok(f.button('Review price and terms'));
+  }
+  const f = checkout({ submit }, new Map([['driver-account', JSON.stringify({ ...legacy, requestId: receiptId })]]));
+  assert.equal(f.requestId(), receiptId);
+  assert.equal(f.button('Retry same request'), undefined);
+  assert.equal(f.nodes().some(node => node.type === 'PaymentCheckout'), false);
+  assert.equal(f.button('Done'), undefined);
 });
 
 test('late admission responses after account switch do not persist foreign receipts', async () => {

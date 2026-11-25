@@ -33,7 +33,7 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 | Resource scope | Caller’s quote; authoritative slot resolution via Facility |
 | Content type / headers | JSON; bearer auth |
 
-**Request sample** for plate review. Additional fields, including actor, location, eligibility and amounts, fail binding. The separate legacy price preview remains estimate-only.
+**Request sample** for plate review. Additional fields, including actor, location, eligibility and amounts, fail binding. The separate price preview remains estimate-only.
 
 ```json
 {"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS"}
@@ -58,7 +58,7 @@ The response also includes `operationalPolicy` with `platformRevisionId`, `platf
 
 Malformed input returns 400. An owner-confirmed missing slot returns 404. A stale quote returns 409. Definitive interval ineligibility is a later admission outcome. Missing owner routes, credentials, incomplete pricing evidence and mismatched owner responses fail closed with 503. Review creates no reservation, dependency token or order.
 
-**Reviewed hold.** The Driver submits the reviewed quote ID/version with the same selection. Operations retrieves Payment’s immutable proof before taking its transaction guards, then checks the exact proof, joined Account/Vehicle/Facility results and current local facts. One Operations transaction commits the named reservation, accepted buffer, exact H, terminal `HOLD_CREATED`, progress and outbox effects. The reviewed path uses one Facility eligibility decision. The legacy terms and confirmation paths still use their shared token contracts. Payment order readiness follows the committed hold independently.
+**Reviewed hold.** The Driver submits the reviewed quote ID/version with the same selection. Operations retrieves Payment’s immutable proof before taking its transaction guards, then checks the exact proof, joined Account/Vehicle/Facility results and current local facts. One Operations transaction commits the named reservation, accepted buffer, exact H, terminal `HOLD_CREATED`, progress and outbox effects. Reviewed admission uses one interval-aware Facility eligibility decision and creates zero Facility tokens. Confirmation retains its separate `CONFIRMATION` token. Payment order readiness follows the committed hold independently.
 
 ### Submit durable admission
 
@@ -70,7 +70,7 @@ Malformed input returns 400. An owner-confirmed missing slot returns 404. A stal
 | Permission / resource scope | Initiating Account only; server-controlled actor, site and tenant |
 | Content type / headers | JSON; bearer auth; required `Idempotency-Key` (UUID per existing header) |
 
-**Request sample** uses the review fields above plus the accepted quote reference. Specific Slot/CAR is the scoped flow; confirm compatibility for the legacy mode field.
+**Request sample** uses the review fields above plus the accepted quote reference. Specific Slot/CAR is the supported flow. Terms-only bodies return `400 INVALID_REQUEST` without creating a request. `POST /api/reservation-terms` returns 404.
 
 ```http
 POST /api/reservation-requests
@@ -82,7 +82,7 @@ Content-Type: application/json
 {"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1"}
 ```
 
-`quoteId` is a required UUID and `quoteVersion` a required opaque version. Submission of the exact reviewed binding records consent. Client VehicleId and SiteId are not required or authoritative. Client amounts, coverage and actor fields confer no authority.
+`quoteId` is a required UUID and `quoteVersion` a required opaque version. Submission of the exact reviewed binding records consent. Client VehicleId and SiteId are not required or authoritative. Client amounts, coverage and actor fields confer no authority. `quoteVersion` remains temporarily because Payment proof, order and financial replay use it.
 
 **Response sample** (202 Accepted after durable capture). Preserve the existing `Location: /api/reservation-requests/{requestId}` receipt link or version a change.
 
@@ -166,7 +166,7 @@ See the [HTTP, MassTransit and SignalR sequence and state table](../../02-archit
 
 | Item | Gap | Affected operation | Owner / approval |
 | --- | --- | --- | --- |
-| Wire compatibility | Route reuse, field/state names, expiry/error mappings and compatibility with legacy terms/receipts | Review, create, reads, hub | Operations, Payment, frontend / SPARK-273 |
+| Wire compatibility | Route reuse, field/state names, expiry/error mappings and recovery of existing committed receipts | Review, create, reads, hub | Operations, Payment, frontend / SPARK-273 |
 | Owner contracts | Slot lookup route, plate and slot message versions, trust and bounded deadlines | Review and admission | Facility, UserService, Operations / SPARK-273 |
 | Paid event | Prove immutable quote and distinct collection identity under the 11 November contract, or agree a versioned event | Paid confirmation | Payment and Operations / SPARK-273 |
 | Covered integration | Exact HTTP route/fields and receipt implementation; entitlement logic deferred | Covered acceptance | Payment, Operations / SPARK-273 |

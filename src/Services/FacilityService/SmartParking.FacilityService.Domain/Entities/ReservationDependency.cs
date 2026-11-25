@@ -19,10 +19,14 @@ public sealed class ReservationDependency
     private ReservationDependency() { }
 
     public static ReservationDependency Create(Guid id, Guid workflow, Guid tenant, Guid site,
-        Guid slot, string purpose, string fingerprint, DateTimeOffset deadline, DateTimeOffset now) =>
-        new() { Id = id, WorkflowId = workflow, TenantId = tenant, SiteId = site, SlotId = slot,
+        Guid slot, string purpose, string fingerprint, DateTimeOffset deadline, DateTimeOffset now)
+    {
+        if (purpose != "CONFIRMATION")
+            throw new StructureException("INVALID_RESERVATION_DEPENDENCY", "Only confirmation dependencies can be created.");
+        return new() { Id = id, WorkflowId = workflow, TenantId = tenant, SiteId = site, SlotId = slot,
             Purpose = purpose, IntentFingerprint = fingerprint, Deadline = deadline,
             State = "PREPARING", CreatedAt = now, UpdatedAt = now };
+    }
 
     public void Hold(string snapshot, DateTimeOffset now)
     {

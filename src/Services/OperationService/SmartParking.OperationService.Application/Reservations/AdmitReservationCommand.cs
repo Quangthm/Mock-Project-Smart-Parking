@@ -1,7 +1,0 @@
-using MediatR;
-using SmartParking.Contracts.AccountAccess;
-using SmartParking.OperationService.Domain.Reservations;
-
-namespace SmartParking.OperationService.Application.Reservations;
-
-public sealed record AdmitReservationCommand(CreateReservationRequest Intent, Guid IdempotencyKey) : IRequest<ReservationReceipt>;

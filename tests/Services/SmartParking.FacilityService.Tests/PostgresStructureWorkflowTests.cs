@@ -1,5 +1,7 @@
 using System.Threading.Channels;
+using FluentValidation;
 using MassTransit;
+using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
@@ -37,7 +39,7 @@ public sealed class PostgresStructureWorkflowTests
     public sealed record SlotDecision(SlotCheck Request, string Outcome, Guid? SiteId, Guid? TenantId);
 
     [StructurePostgresFact, Trait("Category", "Postgres")]
-    public async Task SlotOnlyReviewResolvesLiveFacilityFactsWithoutCreatingDependency()
+    public async Task SlotMetadataIsReadOnlyAndConfirmationSnapshotsReflectLiveFacilityFacts()
     {
         await using var fixture = await DatabaseFixture.CreateAsync();
         var slot = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "A01", VehicleType.CAR);
@@ -47,15 +49,41 @@ public sealed class PostgresStructureWorkflowTests
         var metadata = await repository.FindSlotMetadataAsync(slot, default);
         Assert.Equal((slot, fixture.SiteId, fixture.Owner.TenantId), (metadata!.SlotId, metadata.SiteId, metadata.TenantId));
         Assert.Null(await repository.FindSlotMetadataAsync(Guid.NewGuid(), default));
-        var read = new Application.Reservations.ReadBookingFactsHandler(repository, new UnitOfWork(db));
-        var query = new Application.Reservations.ReadBookingFactsQuery(fixture.SiteId, slot);
-        var facts = await read.Handle(query, default);
+        var acquire = new Application.Reservations.AcquireDependencyHandler(repository, new UnitOfWork(db));
+        var intent = new Application.Reservations.DependencyIntent(Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION",
+            fixture.Owner.TenantId, fixture.SiteId, slot, "confirmation", DateTimeOffset.UtcNow.AddMinutes(1));
+        Assert.Equal(0L, await fixture.ScalarAsync(fixture.Parking, "SELECT count(*) FROM reservation_dependencies"));
+        var facts = (await acquire.Handle(new(intent), default)).Snapshot!.Booking;
         Assert.Equal((fixture.Owner.TenantId, fixture.SiteId, slot), (facts.TenantId, facts.SiteId, facts.SlotId));
         Assert.True(facts.EligibleCarSlot);
+        var complete = new Application.Reservations.CompleteDependencyHandler(repository, new UnitOfWork(db));
+        await complete.Handle(new(intent, "{}"), default);
         await fixture.ExecuteAsync(fixture.Parking, $"UPDATE spatial_units SET deleted_at=now() WHERE id='{fixture.UnitId}'");
-        var changed = await read.Handle(query, default);
+        var next = intent with { Token = Guid.NewGuid(), WorkflowId = Guid.NewGuid() };
+        var changed = (await acquire.Handle(new(next), default)).Snapshot!.Booking;
         Assert.False(changed.EligibleCarSlot);
         Assert.NotEqual(facts.Version, changed.Version);
+    }
+
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task RetiredAdmissionAcquireAndUnknownAbortCannotCreateDependencies()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var slot = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "A01", VehicleType.CAR);
+        var registrations = new ServiceCollection();
+        registrations.AddLogging().AddApplicationServices();
+        registrations.AddDbContext<ParkingDbContext>(options => options.UseNpgsql(fixture.Parking));
+        registrations.AddScoped<IUnitOfWork, UnitOfWork>();
+        registrations.AddScoped<Application.Reservations.IReservationDependencyRepository, ReservationDependencyRepository>();
+        await using var services = registrations.BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var intent = new Application.Reservations.DependencyIntent(Guid.NewGuid(), Guid.NewGuid(), "ADMISSION",
+            fixture.Owner.TenantId, fixture.SiteId, slot, "obsolete", DateTimeOffset.UtcNow.AddMinutes(1));
+
+        await Assert.ThrowsAsync<ValidationException>(() => mediator.Send(new Application.Reservations.AcquireDependencyCommand(intent)));
+        await Assert.ThrowsAsync<ValidationException>(() => mediator.Send(new Application.Reservations.AbortDependencyCommand(
+            intent with { Token = Guid.NewGuid() })));
         Assert.Equal(0L, await fixture.ScalarAsync(fixture.Parking, "SELECT count(*) FROM reservation_dependencies"));
     }
 

@@ -5,9 +5,24 @@ namespace SmartParking.FacilityService.Tests;
 public sealed class ReservationEvaluationCheckpointTests
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 11, 10, 0, 0, TimeSpan.Zero);
-    private static ReservationRow Booking(decimal amount = 20000) => ReservationRow.Prepare(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "v1", "PAYOS", Start,
-        Start.AddHours(1), Start.AddHours(1), Start.AddMinutes(-5), Start, amount, amount, "VND", "{}", "{}");
+    private static ReservationRow Booking(decimal amount = 20000)
+    {
+        var booking = ReservationRow.PrepareQuote(Guid.NewGuid(), Guid.NewGuid(), "51A12345", Guid.NewGuid(),
+            Guid.NewGuid(), Guid.NewGuid(), "PAYOS", Start, Start.AddHours(1), Start.AddHours(1), Start.AddMinutes(-5),
+            Start, amount, 0, amount, "VND", "{}", Guid.NewGuid(), "rq1-test", Start, "tariff", "coverage", false);
+        if (amount > 0)
+        {
+            Assert.True(booking.BeginOrderProvisioning(booking.CreatedAt, TimeSpan.FromSeconds(1)));
+            booking.RecordOrderCreated(Guid.NewGuid());
+            Assert.True(booking.BeginPaidConfirmation(Guid.NewGuid(), booking.CreatedAt));
+        }
+        else
+        {
+            Assert.True(booking.BeginZeroPriceAcceptance(booking.CreatedAt, TimeSpan.FromSeconds(1)));
+            booking.RecordZeroOrder(Guid.NewGuid(), Guid.NewGuid(), booking.CreatedAt);
+        }
+        return booking;
+    }
 
     [Theory]
     [InlineData(-1, true)]
@@ -19,12 +34,12 @@ public sealed class ReservationEvaluationCheckpointTests
         var evaluated = Start.AddSeconds(offset);
         if (!eligible)
         {
-            Assert.Throws<InvalidOperationException>(() => booking.ConfirmAtEvaluation(Guid.NewGuid(), evaluated));
+            Assert.Throws<InvalidOperationException>(() => booking.ConfirmAtEvaluation(booking.CollectionId, evaluated));
             Assert.Null(booking.ConfirmedAt);
             Assert.Null(booking.ConfirmationEffectId);
             return;
         }
-        booking.ConfirmAtEvaluation(Guid.NewGuid(), evaluated);
+        booking.ConfirmAtEvaluation(booking.CollectionId, evaluated);
         Assert.Equal("CONFIRMED", booking.Status);
         Assert.Equal(evaluated, booking.ConfirmationEvaluatedAt);
         Assert.Equal(evaluated, booking.ConfirmedAt);
@@ -38,10 +53,10 @@ public sealed class ReservationEvaluationCheckpointTests
     public void FreshEvaluationAtStartRejectsAfterAnAbandonedAttempt()
     {
         var abandoned = Booking();
-        abandoned.ConfirmAtEvaluation(Guid.NewGuid(), Start.AddSeconds(-1));
+        abandoned.ConfirmAtEvaluation(abandoned.CollectionId, Start.AddSeconds(-1));
         // Represents a fresh aggregate loaded after rollback; deployment tests prove actual SQL rollback.
         var fresh = Booking();
-        Assert.Throws<InvalidOperationException>(() => fresh.ConfirmAtEvaluation(Guid.NewGuid(), Start));
+        Assert.Throws<InvalidOperationException>(() => fresh.ConfirmAtEvaluation(fresh.CollectionId, Start));
         Assert.Null(fresh.ConfirmationEvaluatedAt);
     }
 

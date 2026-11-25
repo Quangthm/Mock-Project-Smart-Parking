@@ -30,7 +30,7 @@ public sealed class ReservationFacilityDependencyRepository(ReservationDbContext
 
     public async Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, int take, CancellationToken ct) =>
         await db.Set<ReservationFacilityDependency>().AsNoTracking()
-            .Where(x => x.NextActionAt <= now && (x.State == "PREPARING" || x.State == "READY" ||
+            .Where(x => x.Purpose == "CONFIRMATION" && x.NextActionAt <= now && (x.State == "PREPARING" || x.State == "READY" ||
                 x.State == "ABORTING" || x.State == "HELD" && x.Deadline <= now))
             .OrderBy(x => x.NextActionAt).ThenBy(x => x.Id).Select(x => x.Id).Take(take).ToListAsync(ct);
 

@@ -9,30 +9,9 @@ using SmartParking.FacilityService.Domain.Entities;
 
 namespace SmartParking.FacilityService.Application.Reservations;
 
-public sealed class DependencyIntentValidator : AbstractValidator<DependencyIntent>
-{
-    public DependencyIntentValidator()
-    {
-        RuleFor(x => x.Token).NotEmpty(); RuleFor(x => x.WorkflowId).NotEmpty();
-        RuleFor(x => x.TenantId).NotEmpty(); RuleFor(x => x.SiteId).NotEmpty(); RuleFor(x => x.SlotId).NotEmpty();
-        RuleFor(x => x.Purpose).Must(x => x is "ADMISSION" or "CONFIRMATION");
-        RuleFor(x => x.IntentFingerprint).NotEmpty().MaximumLength(128);
-        RuleFor(x => x.Deadline).NotEmpty();
-    }
-}
-
 public sealed class AcquireDependencyValidator : AbstractValidator<AcquireDependencyCommand>
 {
     public AcquireDependencyValidator() { RuleFor(x => x.Intent).NotNull().SetValidator(new DependencyIntentValidator()); }
-}
-
-public sealed class ReadBookingFactsValidator : AbstractValidator<ReadBookingFactsQuery>
-{
-    public ReadBookingFactsValidator()
-    {
-        RuleFor(x => x.SiteId).NotEmpty();
-        RuleFor(x => x.SlotId).NotEmpty();
-    }
 }
 
 public sealed class AbortDependencyValidator : AbstractValidator<AbortDependencyCommand>

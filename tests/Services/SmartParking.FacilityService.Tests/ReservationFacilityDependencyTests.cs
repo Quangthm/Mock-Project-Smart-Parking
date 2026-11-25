@@ -6,7 +6,7 @@ public sealed class ReservationFacilityDependencyTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 10, 8, 0, 0, TimeSpan.Zero);
     private static ReservationFacilityDependency NewDependency() => ReservationFacilityDependency.Prepare(
-        Guid.NewGuid(), Guid.NewGuid(), "ADMISSION", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+        Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
         "intent", Now.AddMinutes(1), Now);
 
     [Fact]

@@ -14,14 +14,15 @@ public sealed class ReservationCreationLifecycleTests
     public void HoldCommitTerminatesRequestAndLeavesReservationPendingPayment()
     {
         var now = DateTimeOffset.UtcNow;
-        var request = ReservationRequest.Admit(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+        var request = ReservationRequest.AdmitQuote(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             "{}", "fingerprint", now);
         Assert.True(request.AcceptDecision(request.AttemptId, request.AttemptNumber, Guid.NewGuid(),
             now.AddSeconds(1), true, now.AddSeconds(1)));
-        request.RecordVehicleBinding(true, 1, "ABC123", now.AddSeconds(2));
-        var booking = CreateBooking(request.Id, now.AddSeconds(2), 20000, 5000);
+        request.RecordPlate(true, "51A12345", 1, now.AddSeconds(2));
+        request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
+        var booking = CreateBooking(request.Id, now.AddSeconds(2), 20000, 20000);
 
-        request.AttachBooking(booking.Id);
+        request.AttachQuoteHold(booking.Id);
 
         Assert.Equal("HOLD_CREATED", request.State);
         Assert.Equal(booking.Id, request.ReservationId);
@@ -35,7 +36,7 @@ public sealed class ReservationCreationLifecycleTests
     public void OrderProvisioningReplaysUnknownWithStableReservationOrderIdentity()
     {
         var now = DateTimeOffset.UtcNow;
-        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 5000);
+        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 20000);
 
         Assert.Equal("PENDING", booking.OrderProvisioningState);
         Assert.True(booking.BeginOrderProvisioning(now, TimeSpan.FromSeconds(30)));
@@ -67,7 +68,7 @@ public sealed class ReservationCreationLifecycleTests
     public void ExpiredHoldClosesKnownNoEffectProvisioningWithoutInventingAnOrder()
     {
         var now = DateTimeOffset.UtcNow;
-        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 5000);
+        var booking = CreateBooking(Guid.NewGuid(), now, 20000, 20000);
         Assert.True(booking.BeginOrderProvisioning(now, TimeSpan.FromSeconds(30)));
         booking.DeferOrderProvisioning(now.AddSeconds(31), "PENDING", "PAYMENT_ORDER_PROVISIONING_UNAVAILABLE");
 
@@ -85,7 +86,7 @@ public sealed class ReservationCreationLifecycleTests
     [Fact]
     public async Task HoldCreatedEventTriggersPositivePriceOrderProvisioning()
     {
-        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 20000m, 5000m);
+        var booking = CreateBooking(Guid.NewGuid(), DateTimeOffset.UtcNow, 20000m, 20000m);
         var repo = new FakeBookingRepository(booking);
         var positive = new RecordingHandler<ProvisionReservationOrderCommand>();
         var zero = new RecordingHandler<AcceptZeroPriceTermsCommand>();
@@ -133,7 +134,8 @@ public sealed class ReservationCreationLifecycleTests
     }
 
     private static ReservationRow CreateBooking(Guid requestId, DateTimeOffset now, decimal booked, decimal deposit) =>
-        ReservationRow.Prepare(Guid.NewGuid(), requestId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "terms-v1", "PAYOS", now.AddHours(1),
-            now.AddHours(2), now.AddHours(2), now, now.AddMinutes(5), booked, deposit, "VND", "{}", "{}");
+        ReservationRow.PrepareQuote(requestId, Guid.NewGuid(), "51A12345", Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), "PAYOS", now.AddHours(1), now.AddHours(2), now.AddHours(2), now, now.AddMinutes(5),
+            booked, booked - deposit, deposit, "VND", "{}", Guid.NewGuid(), "rq1-test", now.AddMinutes(1),
+            "tariff", "coverage", booked > 0 && deposit == 0);
 }

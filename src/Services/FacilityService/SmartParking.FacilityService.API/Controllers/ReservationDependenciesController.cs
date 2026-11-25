@@ -24,8 +24,4 @@ public sealed class ReservationDependenciesController(IMediator mediator) : Cont
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public Task<SelectedSlotMetadata> ResolveSlot(Guid slotId, CancellationToken ct) =>
         mediator.Send(new ResolveReservationSlotQuery(slotId), ct);
-
-    [HttpGet("sites/{siteId:guid}/slots/{slotId:guid}")]
-    public Task<BookingFacts> Read(Guid siteId, Guid slotId, CancellationToken ct) =>
-        mediator.Send(new ReadBookingFactsQuery(siteId, slotId), ct);
 }

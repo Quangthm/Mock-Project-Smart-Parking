@@ -67,7 +67,6 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         else if (exception is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn }
             && (context.Request.Path.StartsWithSegments("/api/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
-                context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||

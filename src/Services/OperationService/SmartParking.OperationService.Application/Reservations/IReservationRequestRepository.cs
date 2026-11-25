@@ -11,7 +11,7 @@ public interface IReservationRequestRepository
     Task<ReservationRequest?> FindOwnAsync(Guid accountId, Guid id, CancellationToken ct);
     Task<ReservationRequest?> FindForWorkerAsync(Guid id, CancellationToken ct);
     Task<ReservationRequest?> LockAsync(Guid id, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, bool includeSaga, CancellationToken ct);
+    Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, CancellationToken ct);
     Task<Guid?> FindOwnByOrderAsync(Guid accountId, Guid orderId, CancellationToken ct);
     void Add(ReservationRequest request);
 }

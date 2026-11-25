@@ -189,7 +189,7 @@ public sealed class ReservationAvailabilityTests
     public void ProducerTombstoneRejectsDelayedAcquireAndCompletedOutcomeRejectsAbort()
     {
         ReservationDependency New() => ReservationDependency.Create(Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "ADMISSION", "fingerprint", Now.AddMinutes(1), Now);
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION", "fingerprint", Now.AddMinutes(1), Now);
         var aborted = New(); aborted.Abort(Now);
         Assert.Throws<StructureException>(() => aborted.Hold("{}", Now));
         var committed = New(); committed.Hold("{}", Now);

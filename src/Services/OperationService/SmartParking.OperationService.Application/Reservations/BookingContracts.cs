@@ -8,12 +8,11 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 internal static class BookingContracts
 {
-    public static BookingSelection Normalize(BookingSelection selection) => selection with
-    { Start = selection.Start.ToUniversalTime(), End = selection.End.ToUniversalTime() };
-    public static BookingSelection Selection(CreateReservationRequest input) => Normalize(new(input.VehicleId,
-        input.SiteId, input.RequestedSlotId, input.Start, input.End, input.PaymentMethod));
-    public static string Fingerprint(BookingSelection input) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Normalize(input)))));
+    // Existing vehicle-based bookings still use this binding for confirmation replay.
+    public static string Fingerprint(BookingSelection selection) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(selection with
+        { Start = selection.Start.ToUniversalTime(), End = selection.End.ToUniversalTime() }))));
+
     public static ReservationGateException InvalidOwner() => new(503, "OWNER_CONTRACT_INVALID", "The owner response does not match the reservation contract.");
     public static BookingSelection Selection(ReservationRow row) => new(row.VehicleId!.Value, row.SiteId,
         row.TargetSlotId!.Value, row.ExpectedStartTime, row.ExpectedEndTime, row.SelectedPaymentMethod!);
@@ -28,24 +27,6 @@ internal static class BookingContracts
             string.IsNullOrWhiteSpace(quote.Disclosure))
             throw InvalidOwner();
         return quote;
-    }
-    public static void ValidateFacility(FacilityBookingFacts facts, BookingSelection intent)
-    {
-        if (facts.TenantId == Guid.Empty || facts.SiteId != intent.SiteId || facts.SlotId != intent.RequestedSlotId ||
-            string.IsNullOrWhiteSpace(facts.Version) || !facts.ParticipatesInStructureGuard) throw InvalidOwner();
-        if (!facts.EligibleCarSlot) throw new ReservationGateException(409, "SLOT_INELIGIBLE", "The slot is not eligible for this booking.");
-    }
-    public static void ValidateQuote(CommercialTerms quote, Guid account, BookingSelection intent, DateTimeOffset now)
-    {
-        if (quote.AccountId != account || quote.Selection != intent || quote.QuoteId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(quote.Version) || quote.ValidUntil <= now || quote.Currency != "VND" ||
-            quote.BookedAmount < 0 || quote.DepositAmount < 0 || decimal.Truncate(quote.BookedAmount) != quote.BookedAmount ||
-            decimal.Truncate(quote.DepositAmount) != quote.DepositAmount || quote.BookedAmount > 0 && quote.DepositAmount <= 0 ||
-            quote.BookedAmount == 0 && quote.DepositAmount != 0 ||
-            quote.PrepaymentMode is not ("FULL" or "PERCENTAGE" or "FIXED") ||
-            quote.PrepaymentMode == "FULL" && quote.DepositAmount != quote.BookedAmount ||
-            quote.PrepaymentMode == "PERCENTAGE" && quote.DepositAmount > quote.BookedAmount ||
-            string.IsNullOrWhiteSpace(quote.CoverageVersion) || string.IsNullOrWhiteSpace(quote.Disclosure)) throw InvalidOwner();
     }
     public static void ValidateReservationCollectionBinding(ReservationRow row, ReservationDepositEvidence payment)
     {

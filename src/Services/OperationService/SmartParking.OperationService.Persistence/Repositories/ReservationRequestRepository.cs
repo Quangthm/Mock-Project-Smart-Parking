@@ -32,9 +32,10 @@ public sealed class ReservationRequestRepository(ReservationDbContext db) : IRes
         return row;
     }
 
-    public async Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, bool includeSaga, CancellationToken ct) =>
-        await db.ReservationRequests.AsNoTracking().Where(x => (x.State == "PENDING_AUTHORIZATION" ||
-            x.State == "PREPARING" || includeSaga && (x.State == "CHECKING" || x.State == "EVALUATING")) && (x.NextActionAt <= now || x.State == "EVALUATING" && x.OverallDeadline <= now))
+    public async Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, CancellationToken ct) =>
+        await db.ReservationRequests.AsNoTracking()
+            .Where(x => (x.State == "CHECKING" || x.State == "EVALUATING") &&
+                (x.NextActionAt <= now || x.State == "EVALUATING" && x.OverallDeadline <= now))
             .OrderBy(x => x.NextActionAt).ThenBy(x => x.Id).Select(x => x.Id).Take(100).ToListAsync(ct);
 
     public Task<Guid?> FindOwnByOrderAsync(Guid accountId, Guid orderId, CancellationToken ct) =>

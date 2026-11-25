@@ -87,7 +87,7 @@ public sealed class ReservationHistoryTests
         Assert.Equal(booking.PaymentOrderId, item.OrderId);
         Assert.Equal("CREATED", item.OrderProvisioningState);
         Assert.Equal(20_000m, item.BookedAmount);
-        Assert.Equal(5_000m, item.DepositAmount);
+        Assert.Equal(20_000m, item.DepositAmount);
         Assert.Equal("VND", item.Currency);
         Assert.Null(item.PaymentStatus);
         Assert.Null(item.SiteName);
@@ -293,10 +293,10 @@ public sealed class ReservationHistoryTests
     }
 
     private static ReservationRow CreateBooking(Guid accountId, bool zeroPrice = false) =>
-        ReservationRow.Prepare(Guid.NewGuid(), Guid.NewGuid(), accountId, Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "terms-v1", "PAYOS", CreatedAt.AddHours(1),
-            CreatedAt.AddHours(2), CreatedAt.AddHours(2), CreatedAt, CreatedAt.AddMinutes(5),
-            zeroPrice ? 0m : 20_000m, zeroPrice ? 0m : 5_000m, "VND", "{}", "{}");
+        ReservationRow.PrepareQuote(Guid.NewGuid(), accountId, "51A12345", Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), "PAYOS", CreatedAt.AddHours(1), CreatedAt.AddHours(2), CreatedAt.AddHours(2),
+            CreatedAt, CreatedAt.AddMinutes(5), zeroPrice ? 0m : 20_000m, 0m, zeroPrice ? 0m : 20_000m,
+            "VND", "{}", Guid.NewGuid(), "rq1-test", CreatedAt.AddMinutes(1), "tariff", "coverage", false);
 
     private static SlotAllocationRow CreateAllocation(ReservationRow booking, string status, DateTimeOffset createdAt) =>
         new()

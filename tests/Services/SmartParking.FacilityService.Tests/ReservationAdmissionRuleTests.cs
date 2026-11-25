@@ -8,7 +8,7 @@ namespace SmartParking.FacilityService.Tests;
 public sealed class ReservationAdmissionRuleTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 9, 0, 0, 0, TimeSpan.Zero);
-    private static ReservationRequest Request() => ReservationRequest.Admit(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "{}", "fingerprint", Now);
+    private static ReservationRequest Request() => ReservationRequest.AdmitQuote(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "{}", "fingerprint", Now);
 
     [Fact]
     public void TimeoutFencesOldAllowAndNewAttemptsPreserveOriginalDeadline()
@@ -26,8 +26,8 @@ public sealed class ReservationAdmissionRuleTests
     }
 
     [Theory]
-    [InlineData(true, "PREPARING")]
-    [InlineData(false, "DENIED")]
+    [InlineData(true, "CHECKING")]
+    [InlineData(false, "REJECTED")]
     public void OriginalWorkflowDecisionCanArriveInTheCurrentRetryEnvelope(bool allowed, string expected)
     {
         var request = Request(); var oldAttempt = request.AttemptId;
@@ -44,7 +44,7 @@ public sealed class ReservationAdmissionRuleTests
     {
         var denied = Request();
         Assert.True(denied.AcceptDecision(denied.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), false, Now.AddSeconds(2)));
-        Assert.Equal("DENIED", denied.State);
+        Assert.Equal("REJECTED", denied.State);
         Assert.False(denied.Advance(Now.AddSeconds(100)));
         var absent = Request();
         absent.Advance(Now.AddSeconds(5)); absent.Advance(Now.AddSeconds(15));
@@ -52,7 +52,7 @@ public sealed class ReservationAdmissionRuleTests
         absent.Advance(Now.AddSeconds(55));
         Assert.Equal(3, absent.AttemptNumber);
         Assert.Equal("FAILED_DEPENDENCY", absent.State);
-        Assert.Equal("AUTHORIZATION_UNAVAILABLE", absent.Code);
+        Assert.Equal("ACCOUNT_TIMED_OUT", absent.Code);
     }
 
     [Fact]
@@ -65,16 +65,19 @@ public sealed class ReservationAdmissionRuleTests
     }
 
     [Fact]
-    public void AllowedRequiresPersistedBindingAndCannotReevaluateIt()
+    public void AllowedRequiresBothOwnerChecksBeforeAttachingTheHold()
     {
         var request = Request();
         Assert.True(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), true, Now.AddSeconds(2)));
-        Assert.Throws<InvalidOperationException>(() => request.AttachBooking(Guid.NewGuid()));
-        request.RecordVehicleBinding(true, 7, "51A12345", Now.AddSeconds(3));
-        Assert.Throws<InvalidOperationException>(() => request.RecordVehicleBinding(false, null, null, Now.AddSeconds(4)));
+        Assert.Throws<InvalidOperationException>(() => request.AttachQuoteHold(request.Id));
+        request.RecordPlate(true, "51A12345", 7, Now.AddSeconds(3));
+        request.RecordPlate(false, "51A12345", null, Now.AddSeconds(4));
         Assert.Equal("51A12345", request.VehiclePlate);
         Assert.Equal(7L, request.VehicleBindingRevision);
-        Assert.Null(request.ReservationId);
+        Assert.Throws<InvalidOperationException>(() => request.AttachQuoteHold(request.Id));
+        request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
+        request.AttachQuoteHold(request.Id);
+        Assert.Equal(request.Id, request.ReservationId);
         Assert.False(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), Now.AddSeconds(1), true, Now.AddSeconds(3)));
     }
 
@@ -85,9 +88,8 @@ public sealed class ReservationAdmissionRuleTests
         configuration.AssertConfigurationIsValid();
         var receipt = configuration.CreateMapper().Map<ReservationReceipt>(Request());
         Assert.Null(receipt.ReservationId);
-        Assert.Equal("PENDING_AUTHORIZATION", receipt.State);
-        var invalid = new AdmitReservationCommand(new(Guid.Empty, Guid.Empty, Guid.Empty,
-            "CAPACITY", Now, Now, Guid.Empty, ""), Guid.Empty);
-        Assert.False(new AdmitReservationValidator().Validate(invalid).IsValid);
+        Assert.Equal("CHECKING", receipt.State);
+        var invalid = new AdmitQuoteReservation(new("", Guid.Empty, Now, Now, "CASH", Guid.Empty, ""), Guid.Empty);
+        Assert.False(new AdmitQuoteReservationValidator().Validate(invalid).IsValid);
     }
 }

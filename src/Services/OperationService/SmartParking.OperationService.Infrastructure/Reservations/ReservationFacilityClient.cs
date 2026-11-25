@@ -22,8 +22,6 @@ public sealed class ReservationFacilityClient(HttpClient client, IConfiguration 
     public Task<SelectedSlotMetadata> ResolveSlotAsync(Guid slotId, CancellationToken ct) =>
         SendAsync<SelectedSlotMetadata>(HttpMethod.Get, $"{Route}slots/{slotId:D}", null, ct, resolveSlot: true);
 
-    public Task<FacilityBookingFacts> ReadAsync(Guid siteId, Guid slotId, CancellationToken ct) =>
-        SendAsync<FacilityBookingFacts>(HttpMethod.Get, $"{Route}sites/{siteId}/slots/{slotId}", null, ct);
     public Task<FacilityDependencyResult> AcquireAsync(FacilityDependencyIntent intent, CancellationToken ct) =>
         SendAsync<FacilityDependencyResult>(HttpMethod.Post, Route + "acquire", intent, ct);
     public Task<FacilityDependencyAcknowledgement> CompleteAsync(FacilityDependencyIntent intent, string outcomeJson, CancellationToken ct) =>

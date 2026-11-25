@@ -139,7 +139,7 @@ public sealed class OccupancyProjectionRepositoryTests
         var change = Change(fixture, "MAINTENANCE", 1);
         await fixture.ExecuteAsync($"UPDATE parking_slots SET supported_vehicle_type='CAR' WHERE id='{fixture.SlotId}'");
         var options = new DbContextOptionsBuilder<ParkingDbContext>().UseNpgsql(fixture.DataSource).Options;
-        var intent = new DependencyIntent(Guid.NewGuid(), Guid.NewGuid(), "ADMISSION", fixture.TenantId, fixture.SiteId,
+        var intent = new DependencyIntent(Guid.NewGuid(), Guid.NewGuid(), "CONFIRMATION", fixture.TenantId, fixture.SiteId,
             fixture.SlotId, "selection", DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(1).ToUnixTimeSeconds()));
         await using var owner = new ParkingDbContext(options);
         var repository = new ReservationDependencyRepository(owner);
@@ -159,7 +159,7 @@ public sealed class OccupancyProjectionRepositoryTests
         Assert.True(await fixture.ProjectAsync(change, default));
         Assert.False(await fixture.ProjectAsync(change, default));
         Assert.Equal("MAINTENANCE", await fixture.SlotStateAsync());
-        var confirmation = intent with { Token = Guid.NewGuid(), Purpose = "CONFIRMATION" };
+        var confirmation = intent with { Token = Guid.NewGuid(), WorkflowId = Guid.NewGuid() };
         var after = await acquire.Handle(new(confirmation), default);
         Assert.False(after.Snapshot!.Booking.EligibleCarSlot);
         Assert.NotEqual(held.Snapshot.Booking.Version, after.Snapshot.Booking.Version);

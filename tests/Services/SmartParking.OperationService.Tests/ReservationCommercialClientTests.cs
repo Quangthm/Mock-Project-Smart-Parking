@@ -41,46 +41,6 @@ public sealed class ReservationCommercialClientTests
     }
 
     [Fact]
-    public async Task QuoteAsync_ReadsPaymentEnvelopeData()
-    {
-        var selection = NewSelection();
-        var handler = new StubHttpMessageHandler(_ => Json(Serialize(new
-        {
-            success = true,
-            data = new
-            {
-                quoteId = Guid.NewGuid(),
-                version = "v1",
-                validUntil = DateTimeOffset.UtcNow.AddMinutes(10),
-                selection = new
-                {
-                    vehicleId = selection.VehicleId,
-                    siteId = selection.SiteId,
-                    requestedSlotId = selection.RequestedSlotId,
-                    start = selection.Start,
-                    end = selection.End,
-                    paymentMethod = selection.PaymentMethod
-                },
-                accountId = Guid.NewGuid(),
-                bookedAmount = 50000m,
-                depositAmount = 10000m,
-                currency = "VND",
-                prepaymentMode = "FULL",
-                coverageVersion = "STANDARD_v1",
-                disclosure = "Terms"
-            }
-        })));
-        var client = CreateClient(handler);
-
-        var quote = await client.QuoteAsync(Guid.NewGuid(), Guid.NewGuid(), selection, CancellationToken.None);
-
-        Assert.NotEqual(Guid.Empty, quote.QuoteId);
-        Assert.Equal(selection, quote.Selection);
-        Assert.Equal(50000m, quote.BookedAmount);
-        Assert.Equal(10000m, quote.DepositAmount);
-    }
-
-    [Fact]
     public async Task EnsureOrderAsync_UsesSignedOperationsTokenWithoutDriverContext()
     {
         using var rsa = RSA.Create(2048);

@@ -13,7 +13,7 @@ public sealed class AdvanceFacilityDependencyHandler(IReservationFacilityDepende
         // occur after reading committed intent and before starting the local response transaction.
         dependencies.RequireNoTransaction();
         var observed = await dependencies.FindAsync(command.Token, ct);
-        if (observed is null || observed.State == "COMPLETED") return;
+        if (observed?.Purpose != "CONFIRMATION" || observed.State == "COMPLETED") return;
         var now = await bookings.DatabaseNowAsync(ct);
         if (observed.State is ("PREPARING" or "HELD") && now >= observed.Deadline)
         {

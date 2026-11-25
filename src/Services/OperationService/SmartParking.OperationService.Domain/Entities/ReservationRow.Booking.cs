@@ -37,21 +37,6 @@ public sealed partial class ReservationRow
     public DateTimeOffset? ConfirmationEvaluatedAt { get; private set; }
     public DateTimeOffset? ClaimEndTime { get; private set; }
 
-    public static ReservationRow Prepare(Guid id, Guid requestId, Guid accountId, Guid vehicleId,
-        Guid tenantId, Guid siteId, Guid slotId, Guid termsId, string termsVersion, string method,
-        DateTimeOffset start, DateTimeOffset end, DateTimeOffset claimEnd, DateTimeOffset now,
-        DateTimeOffset holdExpiresAt, decimal booked, decimal deposit, string currency,
-        string policies, string pricing)
-    {
-        var row = PrepareHold(id, requestId, accountId, tenantId, siteId, slotId, method, start, end,
-            claimEnd, now, holdExpiresAt, booked, deposit, currency, policies, 0);
-        row.VehicleId = vehicleId;
-        row.TermsId = termsId;
-        row.TermsVersion = termsVersion;
-        row.AcceptedPricingSnapshot = pricing;
-        return row;
-    }
-
     public static ReservationRow PrepareQuote(Guid requestId, Guid accountId, string plate, Guid tenantId,
         Guid siteId, Guid slotId, string method, DateTimeOffset start, DateTimeOffset end, DateTimeOffset claimEnd,
         DateTimeOffset now, DateTimeOffset holdExpiresAt, decimal booked, decimal covered, decimal deposit, string currency,

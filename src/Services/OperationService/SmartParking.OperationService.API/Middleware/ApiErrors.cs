@@ -94,7 +94,7 @@ public static class ApiErrors
         });
     }
 
-    private sealed class BindingErrorResult : IActionResult
+    internal sealed class BindingErrorResult : IActionResult
     {
         public async Task ExecuteResultAsync(ActionContext context)
         {

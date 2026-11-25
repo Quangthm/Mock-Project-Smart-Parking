@@ -26,9 +26,8 @@ public sealed class ReservationAuthorizationWorker(IServiceScopeFactory scopes, 
             try
             {
                 using var scope = scopes.CreateScope();
-                var includeSaga = scope.ServiceProvider.GetService<IAdmissionMessages>() is not null;
                 var due = await scope.ServiceProvider.GetRequiredService<IReservationRequestRepository>()
-                    .DueAsync(clock.GetUtcNow(), includeSaga, stoppingToken);
+                    .DueAsync(clock.GetUtcNow(), stoppingToken);
                 foreach (var id in due)
                 {
                     using var requestScope = scopes.CreateScope();
@@ -39,11 +38,8 @@ public sealed class ReservationAuthorizationWorker(IServiceScopeFactory scopes, 
                             .FindForWorkerAsync(id, stoppingToken);
                         if (request?.State == "EVALUATING")
                             await mediator.Send(new CommitQuoteHoldCommand(id), stoppingToken);
-                        else
-                        {
+                        else if (request?.State == "CHECKING")
                             await mediator.Send(new AdvanceReservationAuthorizationCommand(id), stoppingToken);
-                            await mediator.Send(new ProgressReservationCommand(id), stoppingToken);
-                        }
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
                     catch (Exception error)

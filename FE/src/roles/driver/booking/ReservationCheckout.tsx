@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { getSessionGeneration } from "../../../lib/authApi"
-import { driverReservationApi, type ReservationIntent } from "../../../lib/driverReservationApi"
 import { formatStatus } from "../../../lib/formatStatus"
 import {
   reservationsApi,
@@ -14,12 +13,17 @@ import {
 import { useReservationProgress } from "../../../lib/reservationProgress"
 import { PaymentCheckout } from "../payments/PaymentCheckout"
 
-type Attempt = {
+type ReviewedSubmission = {
   key: string
-  intent: ReservationIntent | ReviewedReservationIntent
-  requestId?: string
-  reservationId?: string
+  intent: ReviewedReservationIntent
 }
+
+type Attempt =
+  | (ReviewedSubmission & { requestId?: undefined; reservationId?: undefined })
+  | { requestId: string; reservationId?: string }
+
+const isId = (value: unknown): value is string =>
+  typeof value === "string" && /^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
 
 const terminal = new Set(["REJECTED", "DENIED", "EXPIRED", "FAILED_DEPENDENCY", "TIMED_OUT", "DEPENDENCY_UNAVAILABLE", "CANCELLED", "UNFULFILLABLE"])
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" })
@@ -115,9 +119,21 @@ function OperationalTerms({ policy }: { policy: ReviewedReservationQuote["operat
 
 export function readReservationAttempt(storageKey: string): Attempt | null {
   try {
-    const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null") as Attempt | null
-    if (!saved?.key || !saved.intent) return null
-    return ("quoteId" in saved.intent ? saved.intent.quoteId : saved.intent.termsId) ? saved : null
+    const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? "null") as {
+      requestId?: unknown; reservationId?: unknown; key?: unknown; intent?: Partial<ReviewedReservationIntent>
+    } | null
+    if (isId(saved?.requestId)) {
+      return { requestId: saved.requestId, reservationId: isId(saved.reservationId) ? saved.reservationId : undefined }
+    }
+    if (saved?.requestId != null || !isId(saved?.key)) return null
+
+    const intent = saved.intent
+    if (!intent || !isId(intent.quoteId) || !isId(intent.requestedSlotId) ||
+        typeof intent.quoteVersion !== "string" || !intent.quoteVersion.trim() || intent.quoteVersion.length > 256 ||
+        typeof intent.licensePlate !== "string" || !intent.licensePlate.trim() ||
+        intent.paymentMethod !== "PAYOS" || typeof intent.start !== "string" || typeof intent.end !== "string" ||
+        !Number.isFinite(Date.parse(intent.start)) || !(Date.parse(intent.end) > Date.parse(intent.start))) return null
+    return { key: saved.key, intent: intent as ReviewedReservationIntent }
   } catch {
     return null
   }
@@ -183,14 +199,12 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
     }
   }
 
-  async function submit(value: Attempt) {
+  async function submit(value: ReviewedSubmission) {
     // An ambiguous create response is retried only with its persisted intent and key.
-    const next = "quoteId" in value.intent
-      ? await reservationsApi.submitQuote(value.intent, value.key)
-      : await driverReservationApi.create(value.intent, value.key)
+    const next = await reservationsApi.submitQuote(value.intent, value.key)
     if (!current()) return
 
-    save({ ...value, requestId: next.requestId, reservationId: next.reservationId ?? undefined })
+    save({ requestId: next.requestId, reservationId: next.reservationId ?? undefined })
     setReceipt(next)
   }
 
@@ -226,7 +240,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
 
     void run(async () => {
       const { quote } = reviewed
-      const value: Attempt = {
+      const value: ReviewedSubmission = {
         key: crypto.randomUUID(),
         intent: {
           licensePlate: quote.canonicalPlate,
@@ -245,7 +259,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
   }
 
   useEffect(() => {
-    if (attempt && snapshot?.reservationId && attempt.reservationId !== snapshot.reservationId) {
+    if (attempt?.requestId && snapshot?.reservationId && attempt.reservationId !== snapshot.reservationId) {
       save({ ...attempt, reservationId: snapshot.reservationId })
     }
   }, [attempt, snapshot?.reservationId])
@@ -266,7 +280,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
   const holdExpired = Boolean(snapshot?.holdExpiresAt && Date.parse(snapshot.holdExpiresAt) <= now)
   const orderId = connected && !failed && snapshot?.reservationState === "PENDING_PAYMENT" &&
     snapshot.paymentReadiness === "AVAILABLE" && snapshot.holdExpiresAt &&
-    Date.parse(snapshot.holdExpiresAt) > now && attempt?.intent.paymentMethod === "PAYOS" ? snapshot.orderId : null
+    Date.parse(snapshot.holdExpiresAt) > now ? snapshot.orderId : null
   const needsReview = reviewed && (Date.parse(reviewed.quote.validUntil) <= now ||
     JSON.stringify(selection) !== JSON.stringify(reviewed.selection))
 
@@ -350,7 +364,6 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
         : snapshot?.reservationState === "PENDING_PAYMENT"
           ? holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
             : orderId ? "Your payment order is ready."
-            : attempt.intent.paymentMethod === "CASH" ? "Cash reservation acceptance is not available in this flow."
             : "Waiting for the reservation payment order."
           : attempt.requestId ? "We’re checking your reservation."
           : busy ? "Sending your reservation…" : "The request has no receipt yet. Retry with the same request key."}</p>
@@ -387,7 +400,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
       reservationRequestId={attempt?.requestId} holdExpiresAt={snapshot?.holdExpiresAt} />}
 
     {(failed || confirmed || !attempt.requestId || !connected) && <div className="reservation-checkout-actions">
-      {attempt && !failed && !confirmed && (!attempt.requestId || !connected) && <button type="button" className="btn-outline" disabled={busy} onClick={() => attempt.requestId ? reconnect() : void run(() => submit(attempt))}>
+      {attempt && !failed && !confirmed && (!attempt.requestId || !connected) && <button type="button" className="btn-outline" disabled={busy} onClick={() => "intent" in attempt ? void run(() => submit(attempt)) : reconnect()}>
         {busy ? "Checking…" : attempt.requestId ? "Reconnect" : "Retry same request"}
       </button>}
       {(failed || confirmed) && <button type="button" className="btn-primary" onClick={closeAttempt}>Done</button>}

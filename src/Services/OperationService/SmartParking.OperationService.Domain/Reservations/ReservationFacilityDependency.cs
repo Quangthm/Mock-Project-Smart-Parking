@@ -32,7 +32,7 @@ public sealed class ReservationFacilityDependency
         Guid tenantId, Guid siteId, Guid slotId, string fingerprint, DateTimeOffset deadline, DateTimeOffset now)
     {
         if (id == Guid.Empty || workflowId == Guid.Empty || tenantId == Guid.Empty || siteId == Guid.Empty ||
-            slotId == Guid.Empty || purpose is not ("ADMISSION" or "CONFIRMATION") ||
+            slotId == Guid.Empty || purpose != "CONFIRMATION" ||
             string.IsNullOrWhiteSpace(fingerprint) || deadline <= now)
             throw new ArgumentException("A dependency requires its immutable workflow intent and future deadline.");
         return new()

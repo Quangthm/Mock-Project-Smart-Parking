@@ -39,12 +39,6 @@ public static class InfrastructureDependencyInjection
 
         var serviceKey = configuration["Services:Key"]
             ?? throw new InvalidOperationException("Configure Services:Key.");
-        services.AddHttpClient<IReservationVehicleOwner, ReservationVehicleClient>(client =>
-        {
-            client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");
-            client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
-        });
         services.AddHttpClient<ReservationCommercialClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");

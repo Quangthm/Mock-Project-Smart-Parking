@@ -4,7 +4,6 @@ public interface IReservationCommercialOwner
 {
     Task<PaymentReservationQuote> IssuePlateQuoteAsync(ReservationQuoteBinding binding, CancellationToken ct);
     Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct);
-    Task<CommercialTerms> QuoteAsync(Guid accountId, Guid tenantId, BookingSelection intent, CancellationToken ct);
     // A real Payment order is created only after the reservation hold is durably committed.
     // Quote review remains local to the accepted booking snapshot; subsequent order creation is
     // idempotent and uses the reservation/order operation identity rather than a separate accept step.

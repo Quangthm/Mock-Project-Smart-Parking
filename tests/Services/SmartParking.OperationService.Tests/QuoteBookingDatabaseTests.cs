@@ -147,7 +147,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
     public Task<PaymentReservationQuote> IssuePlateQuoteAsync(ReservationQuoteBinding binding, CancellationToken ct) => throw new NotSupportedException();
     public Task<PricePreview> PreviewAsync(Guid account, ReservationPricePreview intent, CancellationToken ct) => throw new NotSupportedException();
-    public Task<CommercialTerms> QuoteAsync(Guid account, Guid tenantId, BookingSelection intent, CancellationToken ct) => throw new NotSupportedException();
     public Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct) => throw new NotSupportedException();
     public Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct) => throw new NotSupportedException();
 
@@ -550,42 +549,56 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var now = DateTimeOffset.UtcNow;
+        var requestId = Guid.NewGuid();
         var termsId = Guid.NewGuid();
         var vehicle = Guid.NewGuid();
-        var intent = new CreateReservationRequest(vehicle, site, slot, "SLOT", start, Intent.End, termsId, "terms-1", "PAYOS");
-        var request = ReservationRequest.Admit(UserId!.Value, AccountId!.Value, Guid.NewGuid(), JsonSerializer.Serialize(intent),
-            "legacy-intent", now);
-        request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), now, true, now);
-        request.RecordVehicleBinding(true, 1, plate, now);
+        var accountId = AccountId!.Value;
+        const string termsVersion = "terms-1";
         var selection = new BookingSelection(vehicle, site, slot, start, Intent.End, "PAYOS");
-        var commercial = new CommercialTerms(quoteId, "legacy-payment-v1", start, selection, request.AccountId, 100, 100,
+        var commercial = new CommercialTerms(quoteId, "legacy-payment-v1", start, selection, accountId, 100, 100,
             "VND", "FULL", "standard-v1", "Full prepayment");
         var policy = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ResolveReservationPoliciesQuery(tenant, site, now));
         var policyJson = JsonSerializer.Serialize(policy);
-        var review = ReservationTerms.Issue(termsId, request.AccountId, "legacy-selection", intent.TermsVersion, start,
-            JsonSerializer.Serialize(new BookingTermsSnapshot(commercial, new(tenant, site, slot, SnapshotVersion, true, true),
-                policyJson, platform, 1, sitePolicy, 1)));
-        review.Accept(request.Id);
-        var booking = ReservationRow.Prepare(request.Id, request.Id, request.AccountId, vehicle, tenant, site, slot,
-            termsId, intent.TermsVersion, "PAYOS", start, Intent.End, Intent.End.AddMinutes(1), now, now.AddMinutes(5),
-            100, 100, "VND", policyJson, JsonSerializer.Serialize(commercial));
-        booking.NormalizedPlate = booking.OriginalPlate = plate;
-        request.AttachBooking(booking.Id);
-        db.Add(request);
-        db.Add(review);
-        db.Add(booking);
+
+        // Model a booking committed by a previous deployment without calling a retired writer.
+        await db.Database.ExecuteSqlInterpolatedAsync($$"""
+            INSERT INTO reservation_requests
+                (id, user_id, account_id, idempotency_key, operation, intent_json, fingerprint, state, admitted_at,
+                 overall_deadline, attempt_id, attempt_number, attempt_started_at, attempt_deadline, next_action_at,
+                 decision_id, decided_at, awaiting_reply, reservation_id, vehicle_binding_state, vehicle_plate)
+            VALUES
+                ({{requestId}}, {{UserId!.Value}}, {{accountId}}, {{Guid.NewGuid()}}, 'CREATE_RESERVATION', '{}', 'legacy-intent',
+                 'HOLD_CREATED', {{now}}, {{now.AddSeconds(90)}}, {{Guid.NewGuid()}}, 1, {{now}}, {{now.AddSeconds(5)}},
+                 {{now.AddSeconds(5)}}, {{Guid.NewGuid()}}, {{now}}, false, {{requestId}}, 'ACTIVE', {{plate}});
+
+            INSERT INTO reservation_terms
+                (id, account_id, intent_fingerprint, version, valid_until, snapshot_json, accepted_request_id)
+            VALUES ({{termsId}}, {{accountId}}, 'legacy-selection', {{termsVersion}}, {{start}}, '{}', {{requestId}});
+
+            INSERT INTO reservations
+                (id, request_id, account_id, tenant_id, site_id, vehicle_id, target_slot_id, active_claim_slot_id,
+                 terms_id, terms_version, selected_payment_method, expected_start_time, expected_end_time, claim_end_time,
+                 created_at, hold_expires_at, original_plate, normalized_plate, booked_amount, deposit_amount, currency,
+                 accepted_operational_policy_snapshot, accepted_pricing_snapshot, order_provisioning_state,
+                 order_provisioning_next_action_at)
+            VALUES
+                ({{requestId}}, {{requestId}}, {{accountId}}, {{tenant}}, {{site}}, {{vehicle}}, {{slot}}, {{slot}}, {{termsId}},
+                 {{termsVersion}}, 'PAYOS', {{start}}, {{Intent.End}}, {{Intent.End.AddMinutes(1)}}, {{now}}, {{now.AddMinutes(5)}},
+                 {{plate}}, {{plate}}, 100, 100, 'VND', CAST({{policyJson}} AS jsonb),
+                 CAST({{JsonSerializer.Serialize(commercial)}} AS jsonb), 'PENDING', {{now}});
+            """);
         db.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, VehicleType = "CAR",
             TotalPhysicalCapacity = 1, MaxReservationQuota = 1, IsActive = true, CreatedAt = now, UpdatedAt = now });
         await db.SaveChangesAsync();
-        await Send(services, new ProvisionReservationOrderCommand(booking.Id));
+        await Send(services, new ProvisionReservationOrderCommand(requestId));
         var transaction = Guid.NewGuid();
-        var signal = new RecordReservationPaymentCommand(new(Guid.NewGuid(), order, transaction, booking.Id,
-            request.AccountId, tenant, site, 100, "VND", "PAYOS", "legacy-ref", now));
+        var signal = new RecordReservationPaymentCommand(new(Guid.NewGuid(), order, transaction, requestId,
+            accountId, tenant, site, 100, "VND", "PAYOS", "legacy-ref", now));
         await Send(services, signal);
-        await HoldToken(services, booking.Id, "CONFIRMATION");
-        await Send(services, new ConfirmPaidReservationCommand(booking.Id, transaction));
+        await HoldToken(services, requestId, "CONFIRMATION");
+        await Send(services, new ConfirmPaidReservationCommand(requestId, transaction));
         await Send(services, signal);
-        var persisted = await db.Reservations.AsNoTracking().SingleAsync(b => b.Id == booking.Id);
+        var persisted = await db.Reservations.AsNoTracking().SingleAsync(b => b.Id == requestId);
         Assert.Equal("CONFIRMED", persisted.Status);
         Assert.Equal(termsId, persisted.TermsId);
         Assert.Equal(vehicle, persisted.VehicleId);

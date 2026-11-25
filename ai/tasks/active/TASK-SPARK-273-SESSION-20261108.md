@@ -766,3 +766,106 @@ Paths are repository-relative. The milestone has no deleted files. The pre-exist
 - Modify `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-19-SPARK-273-payment-authority.md`
 - Modify `docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Facility-Handoff.md`
 - Modify `docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Payment-Handoff.md`
+
+## 25 November 2026 — Checkpoint B4 reviewed-only admission cutover
+
+The user approved the Operations, Facility and frontend cutover at `7fd9bf912843fef912eea0be0d42a85af8664082`. The branch and local origin tracking ref matched. Existing edits to the AI router and SPARK-243 session and the untracked user coding instructions belong to the user.
+
+- Operations accepts one typed specific-slot CAR reviewed quote contract on `POST /api/reservation-requests`. Removed terms issuance and both legacy Account and Vehicle progression chains, the legacy hold and token writer, its adapters and EF terms model. MVC and MediatR serve the existing machine-readable error contract. The production-host Saga run exposed ASP.NET MVC's default ProblemDetails overriding the configured binding error factory. A route-scoped factory selection in OperationHost reuses the existing ApiErrors result for typed reservation creation. Other MVC actions keep their current result factory. Receipt version, idempotency and owned reads remain on the reviewed path.
+- Facility retired the site-qualified booking-facts GET. Slot-only metadata and interval-aware Slot decisions remain in use. Token acquire, complete and abort use `CONFIRMATION`. Shared snapshots, structure-edit fencing, physical occupancy and confirmation retries remain active.
+- Frontend retries the exact saved reviewed intent and key until it knows the request ID. A known request ID opens server progress without asserting that a hold committed. A terms-only save without an ID returns to quote review.
+- The one-second authorization sweep, three 5-second Account attempts, 10/30-second retry delays, 90-second admission deadline, evaluation recovery and terminal fencing remain in use. The confirmation dependency worker and five-second order worker retain their current responsibilities.
+- Existing committed booking evidence stays readable and usable for order recovery, collection validation and confirmation. The Operations initializer retains `reservation_terms`, its FK, historical state fields and the existing booking shape. These are cleanup candidates after reviewing committed obligations and demo history. B4 changed no database initializer and left the user's databases untouched.
+- `QuoteVersion` is still used by Payment proof, reviewed-order routing, consumption and financial replay. Its removal remains a separately approved candidate for Checkpoint C or financial-contract simplification. C–E, D08, maintenance and candidate discovery remain separate.
+
+For existing development data, inspect `smartpark_operations.reservation_facility_dependencies` and `smartpark_facility.reservation_dependencies` by token and workflow ID. Check `reservation_requests.id` and `reservations.request_id` for committed hold, order, collection or confirmation evidence. A historical Facility `HELD` token can still fence structure edits. The database owner can resolve genuinely abandoned test tokens manually after the legacy writers are stopped, or initialize a separate fresh development database without prior history. See the [inspection queries and cutover options](../../../docs/04-testing/reports/SPARK-273-deployment-checklist.md#existing-development-databases).
+
+### B4 verification and handoff
+
+- Final solution build `dotnet build SmartParking.slnx --no-restore --nologo -m:1` succeeded with 0 errors and 32 warnings. These were 31 NU1900 warnings from unavailable NuGet vulnerability metadata and one NU1510 package-pruning warning.
+- The initial isolated full solution attempt `dotnet test SmartParking.slnx --no-restore --nologo -m:1 --logger 'console;verbosity=normal'` returned 1. Its completed assemblies reported 1,819 passed, 38 failed and 7 skipped. Four Facility fixture failures were corrected. UserService's broader database/identity suite reported 34 failures, including fixture requests returning 400 and an existing schema/session mismatch. The concurrent Operations testhost locked its assembly during that attempt (MSB3027/MSB3021). Targeted outcomes below supersede the initial Facility/Operations evidence.
+- Facility suite `dotnet test tests/Services/SmartParking.FacilityService.Tests --no-restore --nologo -m:1 --logger 'console;verbosity=normal'` on PostgreSQL and its isolated broker vhost reported 261 passed, 1 failed and 0 skipped. The only failure was an Npgsql read timeout in `BatchRejectsUnsupportedActionsAndItemCountsOutsideOneToFifty`. It passed alone with `--no-build --no-restore --filter 'FullyQualifiedName~BatchRejectsUnsupportedActionsAndItemCountsOutsideOneToFifty'`. The MediatR acquire/abort rejection test asserted zero new dependencies. Facility's real slot-consumer route, confirmation snapshot checks and occupancy/structure replay tests passed.
+- Payment suite `dotnet test tests/Services/SmartParking.PaymentService.Tests --no-build --no-restore --nologo -m:1 --logger 'console;verbosity=normal'` reported 277 passed, 0 failed and 0 skipped, including all three previously skipped live RabbitMQ tests. The corrected Operations production-host filter `FullyQualifiedName~ReservationSagaTransportTests` reported 3 passed, 0 failed and 0 skipped. The paired signed quote, order, collection and guarded confirmation test passed on the isolated broker with a provider double. PostgreSQL contention, rollback and hold/outbox verification and historical terms financial replay passed.
+- UserService focus `dotnet test tests/Services/SmartParking.UserService.Tests --no-build --no-restore --nologo -m:1 --filter 'FullyQualifiedName~AccountCurrentWorkflowTests|FullyQualifiedName~AccountCurrentAuthorityTests|FullyQualifiedName~ServiceLocalAccountAccessContractTests|FullyQualifiedName~OwnReservationReadHttpTests'` reported 14 passed, 0 failed and 0 skipped.
+- Frontend focused `node --test tests/frontend/reservation-happy-path.test.cjs FE/tests/driver-reservation-api.test.cjs FE/tests/reservation-history.test.cjs` reported 18 passed. `npm --prefix FE run build` passed with Vite chunk-size and ineffective dynamic import notices. `node --test tests/frontend/*.test.cjs` reported 316 passed and 7 failed. An archive of the accepted HEAD reproduced the same seven operator/owner failures (315 passed). The separate `node FE/node_modules/typescript/bin/tsc --noEmit -p FE/tsconfig.json` check still reports unrelated Assistant target-library and missing frontend test dependency diagnostics, with none in the B4 files.
+- RabbitMQ started via the existing disposable `compose.tests.yml` recipe. The health check passed, the cookie had owner `rabbitmq:rabbitmq` and mode 400, and the reported prior Erlang read `eacces` did not recur. No cookie content or credentials were read into the report. The generated broker project and PostgreSQL fixture cluster were stopped and removed after verification.
+
+- Final Operations suite `dotnet test tests/Services/SmartParking.OperationService.Tests --no-build --no-restore --nologo -m:1 --logger 'console;verbosity=normal'` reported 105 passed, 0 failed and 0 skipped. The final run passed the durable Saga restart, paired Payment transport, real PostgreSQL contention/rollback and historical financial replay tests again.
+- `git diff --check` passed and the index remained empty. Recommended commit subject: `refactor(reservations): retire terms-based reservation admission [SPARK-273]`.
+
+**B4 DEVELOPMENT VERIFIED — DISTRIBUTED INTEGRATION PENDING.** Across the three B4 service suites 644 distinct tests passed, counting the successful isolated rerun of the one timed-out Facility test. The complete four-service Driver-to-order scenario and D08 remain [UNVERIFIED] activation requirements. Manual Postman belongs to the user. No live provider charge or existing database change occurred.
+
+### Exact B4 selective staging inventory
+
+Scope for review only. Staging has not been performed. Exclude the three unrelated paths listed above. The UserService test change updates only the Operations assembly anchor. The API error middleware change exposes the existing result for the reservation-only binding fix.
+
+- M `FE/src/lib/driverReservationApi.ts`
+- M `FE/src/lib/reservationsApi.ts`
+- M `FE/src/roles/driver/booking/ReservationCheckout.tsx`
+- M `FE/tests/driver-reservation-api.test.cjs`
+- M `ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md`
+- M `docs/03-design/api/reservation-facility-dependency-api-design.md`
+- M `docs/03-design/api/reservation-first-slice-api-design.md`
+- M `docs/04-testing/reports/SPARK-273-deployment-checklist.md`
+- M `src/Services/FacilityService/SmartParking.FacilityService.API/Controllers/ReservationDependenciesController.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReadBookingFactsHandler.cs`
+- D `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReadBookingFactsQuery.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReservationDependencyHandlers.cs`
+- M `src/Services/FacilityService/SmartParking.FacilityService.Domain/Entities/ReservationDependency.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.API/Controllers/ReservationBookingController.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.API/Controllers/ReservationRequestsController.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.API/Middleware/ApiErrors.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.API/Middleware/ReservationExceptionHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.API/OperationHost.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdmitReservationCommand.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdmitReservationHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdmitReservationValidator.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdvanceFacilityDependencyHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdvanceReservationAuthorizationHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingContracts.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingReviewHandlers.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/BookingWorkflowContracts.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/CreateReservationRequest.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationCommercialOwner.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationFacilityOwner.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationRequestRepository.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProgressReservationHandler.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordAccountAccessDecisionCommand.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordAccountAccessDecisionHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationWorkFailureHandler.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Domain/Entities/ReservationRow.Booking.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationFacilityDependency.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationRequest.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationTerms.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/InfrastructureDependencyInjection.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/AccountAccessDecisionConsumer.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/QuoteResponse.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/QuoteSelection.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationAuthorizationWorker.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationCommercialClient.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFacilityClient.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationMessaging.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationOwners.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/PersistenceDependencyInjection.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationFacilityDependencyRepository.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationRequestRepository.cs`
+- D `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationTermsRepository.cs`
+- M `src/Services/OperationService/SmartParking.OperationService.Persistence/ReservationDbContext.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/OccupancyProjectionRepositoryTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/PostgresStructureWorkflowTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationAdmissionRuleTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationAvailabilityTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationCreationLifecycleTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationEvaluationCheckpointTests.cs`
+- M `tests/Services/SmartParking.FacilityService.Tests/ReservationFacilityDependencyTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationAdmissionBranchTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationCommercialClientTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationHistoryTests.cs`
+- M `tests/Services/SmartParking.OperationService.Tests/ReservationSagaTransportTests.cs`
+- M `tests/Services/SmartParking.UserService.Tests/ServiceLocalAccountAccessContractTests.cs`
+- M `tests/frontend/reservation-happy-path.test.cjs`
+- A `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/DependencyIntentValidator.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PreviewReservationPriceHandler.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/PreviewReservationValidator.cs`
+- A `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFactsPublisher.cs`

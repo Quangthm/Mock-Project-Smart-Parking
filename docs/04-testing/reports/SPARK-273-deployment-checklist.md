@@ -36,13 +36,13 @@ Also include `ReservationFacilityDependencyTests`, `ReservationAvailabilityTests
 - [ ] Start User, Facility and Operation with `scripts/run-schema-service.ps1 -Service <name>` in separate terminals. Prepare an active tenant/site, live unit, two compatible operational slots and an active Driver with an eligible CAR.
 - [ ] From an authorized service test client, call Facility's v1 read and acquire routes. Verify active and unavailable slot facts, wrong credentials returning 401/403, exact-token replay, changed payload returning 409, edit blocked while HELD, complete/abort replay and delayed acquire after abort staying ABORTED. Use the [route, request and response examples](../../03-design/api/reservation-facility-dependency-api-design.md).
 - [ ] Make a compatible Facility structure change. Verify one Operations applied event reaches a bound queue. Replay the same completion and verify no second fact. Pause delivery, make another compatible edit, then resume and verify retained delivery.
-- [ ] With admission enabled, call `POST /api/reservation-price-previews` and `POST /api/reservation-terms` with the [valid Driver payload](../../03-design/api/reservation-first-slice-api-design.md). Configure Operations `Services:Payment` (default `http://localhost:5065/`) and a non-empty `Services:Key`; Payment Development accepts `X-Internal-Service-Key` only as a local shortcut. Expect live Payment-backed pricing when both services are configured; `503 OWNER_UNAVAILABLE` remains the correct fail-closed result when Payment is absent/unreachable, and `503 OWNER_CONTRACT_INVALID` indicates a response/envelope mismatch.
-- [ ] Create using reviewed terms and a stable `Idempotency-Key`. Expect the receipt to reach terminal `HOLD_CREATED`/contract version 2 at hold commit while the reservation remains `PENDING_PAYMENT`; verify hold-event order/zero-price dispatch and confirm the five-second worker is only the existing recovery path, not a durable scheduled command. With Payment configured, verify the Operations read exposes the Payment-returned `orderId`; never substitute the reservation ID.
+- [ ] With admission enabled, call `POST /api/reservation-price-previews` and `POST /api/reservation-quotes` with the [valid Driver payload](../../03-design/api/reservation-first-slice-api-design.md). Configure Operations `Services:Payment` (default `http://localhost:5065/`) and a non-empty `Services:Key`; Payment Development accepts `X-Internal-Service-Key` only as a local shortcut. Expect live Payment-backed pricing when both services are configured; `503 OWNER_UNAVAILABLE` remains the correct fail-closed result when Payment is absent/unreachable, and `503 OWNER_CONTRACT_INVALID` indicates a response/envelope mismatch.
+- [ ] Create using the exact reviewed quote selection and a stable `Idempotency-Key`. Expect the receipt to reach terminal `HOLD_CREATED`/contract version 3 at hold commit while the reservation remains `PENDING_PAYMENT`; verify hold-event order/zero-price dispatch and confirm the five-second worker is only the existing recovery path, not a durable scheduled command. With Payment configured, verify the Operations read exposes the Payment-returned `orderId`; never substitute the reservation ID.
 
 **With the current Payment implementation and cross-owner agreement**
 
 - [ ] Review the current local Payment implementation, including PR #98 / SPARK-391, and agree the event-contract deviation, exact versioned quote, `EnsureOrder`, zero-price, collection-event, production identity/topology/authentication, lookup, outcome and reconciliation contracts. The adapter is wired for preview/quote/order but must not be treated as production-approved before that review.
-- [ ] With the same Driver, preview the price, review terms, submit exact terms to `POST /api/reservation-requests` with a fresh `Idempotency-Key`, and poll the returned Location. Expect 202, then receipt `HOLD_CREATED` and own reservation `PENDING_PAYMENT`. Read `GET /api/me/reservations/{reservationId}` for real order-provisioning state and an order ID only after Payment returns one.
+- [ ] With the same Driver, preview the price, review the specific-slot quote, submit the exact reviewed intent to `POST /api/reservation-requests` with a fresh `Idempotency-Key`, and recover progress by the returned Location and SignalR. Expect 202, then receipt `HOLD_CREATED` and own reservation `PENDING_PAYMENT`. Read `GET /api/me/reservations/{reservationId}` for real order-provisioning state and an order ID only after Payment returns one.
 - [ ] Before paying, submit an overlapping request from another eligible Driver/plate for the same selected slot. Expect one committed hold and one `SLOT_TIME_CONFLICT` even with another free slot. Repeat separately for quota, cross-site plate conflict and a payment hold that has expired. Compare durable events with committed state.
 - [ ] Pay only a real returned order through the configured test provider. Payment status alone is not Operations confirmation. Verify the producer emits the locally expected V1 DTO/envelope and identity to the configured endpoint, then verify Operations reports `CONFIRMED` only after guarded pre-T evaluation commits. Exercise duplicate delivery, no browser return, expiry and late/additional collection using the cases below.
 
@@ -52,7 +52,7 @@ Use an isolated, aligned database and actual restricted application role. Preser
 
 1. No commit-timestamp tracking or special metadata privileges are required. Use the normal Operations database role and confirm durable transaction behavior (`synchronous_commit=on`). Check final schema contains confirmation_evaluated_at and stable effect ID, with no candidate lifecycle. Inventory/reconcile any previously installed candidate schema/rows; CREATE declarations do not migrate them.
 2. Verify accepted reservation policy rows/default seed and explicit site late-tolerance choice. Read-only form review must return actual policy values/versions; missing rows must return unavailable. Change effective policy/quote between review and acceptance and require renewed terms. No in-memory fallback or fabricated quote.
-3. Log in as a real Driver. Preview a valid CAR slot/time before selecting method; complete the form, review, submit exact terms with one key, and poll receipt/own booking. Use the real resulting Payment order. Verify paid confirmation and a genuine owner-issued zero-price case. Do not use demo-pay, fake QR values or fabricated terms as evidence.
+3. Log in as a real Driver. Preview a valid CAR slot/time before selecting method; complete the form, review the quote, submit the accepted selection with one key, and recover receipt and booking progress. Use the real resulting Payment order. Verify paid confirmation and a genuine owner-issued zero-price case. Do not use demo-pay, fake QR values or fabricated terms as evidence.
 4. For T=11:00, pause after successful guarded evaluation at 10:59:59 and commit at 11:00:02: confirmation must succeed and remain invisible until commit. Separately hold a competing lock until T so evaluation starts at/after T: reject. Verify exact equality and microsecond boundaries. No second deadline check or commit metadata lookup may be needed.
 5. Roll back a pre-T evaluation and retry after T: reject using a fresh timestamp. Lose the successful commit acknowledgement and restart after T: recover the same committed receipt/effect, with one outgoing fact and no extra charge. Verify booking, receipt, Facility READY and outbox rollback/commit atomically.
 6. Test paid and genuine zero-price paths with commit tracking off. Gate/read APIs must not expose uncommitted confirmation. After successful commit, expiry must preserve the confirmed booking. Test database outage and ambiguous commit recovery; never retry a new effect solely because the original response was lost.
@@ -122,7 +122,7 @@ This document gives user-run instructions; the agent has not executed these star
 
 ## 4. Admission and JWT checks
 
-Use a real Driver JWT and future booking instants. The API design contains the create body; vehicle/site/slot/terms IDs remain unverified intent at this gated checkpoint. POST `/api/reservation-requests` with a new UUID `Idempotency-Key`, then GET the returned Location with the same Account.
+Use a real Driver JWT and future booking instants. The API design contains the create body; the selected slot and exact quote identity/version bind the accepted intent. POST `/api/reservation-requests` with a new UUID `Idempotency-Key`, then GET the returned Location with the same Account.
 
 | Scenario | Required observation |
 |---|---|
@@ -135,7 +135,7 @@ Use a real Driver JWT and future booking instants. The API design contains the c
 | Valid intent | 202 only after receipt and authorization-request outbox commit |
 | Same Account/key/body, including concurrent replay | Same receipt; one initial attempt; changed body under same key is 409 |
 | Other Account reads receipt | Same 404 as an absent ID |
-| Timely current Allowed | PREPARING, then one persisted binding result; missing/invalid/expired terms or owner dependencies cannot produce booking/claim/order effects with current unavailable integrations |
+| Timely current Allowed | CHECKING until Vehicle and Facility also succeed, then EVALUATING. Missing or mismatched proof cannot create a hold. |
 | Timely current Denied | `DENIED / CURRENT_ACCESS_DENIED`; no business effects |
 | Timeout/late or old attempt/wrong correlation response | No late progression; at most 3 distinct attempts, 5-second reply windows, 10/30-second waits, original 90-second deadline |
 | Restart after receipt commit/before delivery | Receipt survives; outbox and due work resume without duplicate booking effects |
@@ -229,3 +229,30 @@ node --test tests/frontend/*.test.cjs
 ```
 
 Use the [scenario matrix](../requirements-traceability/reservation-first-slice-scenarios.md#admission-realtime-and-commercial-acceptance) with UserService, Facility, Operations, Payment, PostgreSQL, RabbitMQ and a browser on an isolated environment. Prepare two Accounts, one transfer fixture, two sites and competing compatible slots; use a verified test payOS merchant. Exercise real concurrency, duplicate delivery, lost responses, process restart at the committed hold boundary, and browser disconnect/reconnect while inspecting committed status, broker correlation, claim and order identity. Inspect the browser network trace through payment return for zero timer-driven status reads. Verify that paid event and recovery evidence meet the [Payment owner gate](../../05-project-management/handoffs/2026-11-19-SPARK-273-payment-authority.md#settlement-and-compatibility). Future covered cases require an owner-enabled fixture and accepted route. Verify the real zero-value order and durable receipt/obligation, and race matching acceptance against H to verify expiry triggers fresh review without reacquisition. Legacy Postman artifacts exercise the old shape and cannot verify the target wire contracts.
+
+
+## B4 development cutover
+
+- [ ] Verify `POST /api/reservation-terms` returns 404 and a terms-only create body returns `400 INVALID_REQUEST` with zero request, Saga, hold, token or owner-message effects.
+- [ ] Verify Facility's site-qualified facts route is retired. Slot-only metadata and interval eligibility should still resolve through their own current interfaces. Facility acquire and abort reject `ADMISSION`; confirmation and structure guards continue using `CONFIRMATION`.
+- [ ] Verify the Driver can retry a saved reviewed intent and recover a known request ID from server state. A terms-only save without an ID returns to review.
+
+Distributed acceptance and D08 reconciliation remain production activation requirements. `QuoteVersion` remains in use for proof, order and financial replay. Its removal is a candidate for a separately approved financial-contract change.
+
+### Existing development databases
+
+The following inspection queries are for the database owner. Match token `id` and `workflow_id` across services. On Operations, use `reservation_requests.id` and `reservations.request_id` to check for a committed booking, order, collection, or confirmation. Keep committed history, financial evidence and all `CONFIRMATION` tokens.
+
+```sql
+-- smartpark_operations
+SELECT id, workflow_id, site_id, state, deadline
+FROM reservation_facility_dependencies
+WHERE purpose = 'ADMISSION' AND state <> 'COMPLETED';
+
+-- smartpark_facility
+SELECT id, workflow_id, site_id, state, deadline
+FROM reservation_dependencies
+WHERE purpose = 'ADMISSION' AND state IN ('PREPARING', 'HELD');
+```
+
+Facility's structure guard considers `HELD` tokens even after their deadline. Once old writers are stopped, the owner can resolve only a matched, abandoned development token after confirming there is no related committed booking or pending financial/confirmation obligation. Releasing such a Facility row removes its structure fence. Preserve any token tied to a committed or unresolved effect until its owner reconciles that effect. A fresh, separately initialized development database has no historical token fence and starts without the original database's history. B4 applies no migration or data reset. The Operations terms table, FK and accepted booking evidence stay in the initializer for existing rows and fixtures.

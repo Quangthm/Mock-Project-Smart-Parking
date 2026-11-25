@@ -15,12 +15,10 @@ export interface ReservationPreview {
   currency: string
   pricingVersion: string
 }
-export interface ReservationTerms {
-  termsId: string
-  termsVersion: string
-  validUntil: string
-  commercial: ReservationPreview & { disclosure: string; prepaymentMode: string; coverageVersion: string }
-  operationalPolicy: { values: Record<string, number>; arrivalLateToleranceEnabled: boolean; cancellationTimezone: string }
+export interface ReviewedOperationalPolicy {
+  values: Record<string, number>
+  arrivalLateToleranceEnabled: boolean
+  cancellationTimezone: string
 }
 export interface ReviewedReservationSelection {
   licensePlate: string
@@ -42,7 +40,7 @@ export interface ReviewedReservationQuote extends Omit<ReviewedReservationIntent
   depositAmount: number
   currency: string
   disclosure: string
-  operationalPolicy: ReservationTerms["operationalPolicy"]
+  operationalPolicy: ReviewedOperationalPolicy
 }
 export interface ReservationReceipt {
   requestId: string
@@ -109,11 +107,6 @@ export const reservationsApi = {
     call<ReservationReceipt>("/reservation-requests", "POST", intent, { "Idempotency-Key": key }),
   preview: (selection: Omit<ReservationSelection, "vehicleId" | "paymentMethod"> & { vehicleId?: string; paymentMethod?: string }) =>
     call<ReservationPreview>("/reservation-price-previews", "POST", selection),
-  review: (selection: ReservationSelection) => call<ReservationTerms>("/reservation-terms", "POST", selection),
-  submit: (selection: ReservationSelection, terms: ReservationTerms, key: string) =>
-    call<ReservationReceipt>("/reservation-requests", "POST", {
-      ...selection, mode: "SPECIFIC_SLOT", termsId: terms.termsId, termsVersion: terms.termsVersion,
-    }, { "Idempotency-Key": key }),
   receipt: (id: string) => call<ReservationReceipt>(`/reservation-requests/${encodeURIComponent(id)}`),
   // A new connection must not reuse a GET started before its group subscription.
   progress: (id: string) => call<ReservationProgress>(`/reservation-requests/${encodeURIComponent(id)}/progress`,
