@@ -32,11 +32,36 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
 
 if (builder.Environment.IsDevelopment())
 {
+    const string devOrJwtScheme = "SmartParkingDevOrJwt";
+    var hasJwks = !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:JwksUri"]);
+
     builder.Services.AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = DevAuthenticationHandler.SchemeName;
-        options.DefaultChallengeScheme = DevAuthenticationHandler.SchemeName;
-    }).AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
+        options.DefaultAuthenticateScheme = devOrJwtScheme;
+        options.DefaultChallengeScheme = devOrJwtScheme;
+    })
+    .AddPolicyScheme(devOrJwtScheme, devOrJwtScheme, options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            if (hasJwks &&
+                context.Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                var header = authHeader.ToString();
+                if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var token = header["Bearer ".Length..].Trim();
+                    if (token.Count(c => c == '.') == 2)
+                    {
+                        return UserJwtAuthentication.Scheme;
+                    }
+                }
+            }
+
+            return DevAuthenticationHandler.SchemeName;
+        };
+    })
+    .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
 }
 else
 {
@@ -85,6 +110,7 @@ else
 }
 
 builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
+builder.Services.AddUserJwtAuthentication(builder.Configuration, builder.Environment);
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
