@@ -1,6 +1,5 @@
 using System.Net;
 using System.Security.Cryptography;
-using MediatR;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
@@ -14,20 +13,13 @@ using SmartParking.OperationService.Infrastructure.Reservations;
 
 namespace SmartParking.FacilityService.Tests;
 
-public sealed class ReservationSlotEndpointTests : IRequestHandler<ReadBookingFactsQuery, BookingFacts>
+public sealed class ReservationSlotEndpointTests
 {
-    private readonly BookingFacts slot = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "rev", true, true);
-
-    public Task<BookingFacts> Handle(ReadBookingFactsQuery query, CancellationToken ct)
-    {
-        Assert.Equal((slot.SiteId, slot.SlotId), (query.SiteId, query.SlotId));
-        return Task.FromResult(slot);
-    }
-
     [Fact]
     public async Task SignedSlotOnlyReadDerivesScopeAndDistinguishesMissingSlot()
     {
         using var rsa = RSA.Create(2048);
+        var slot = new SelectedSlotMetadata(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         await using var host = FacilityHost.Build([], builder =>
         {
             builder.Configuration.Sources.Clear();
@@ -41,7 +33,6 @@ public sealed class ReservationSlotEndpointTests : IRequestHandler<ReadBookingFa
             builder.Host.ConfigureContainer<IServiceCollection>((_, services) =>
             {
                 services.AddSingleton<IReservationDependencyRepository>(new EmptyReservationDependencies { Slot = slot });
-                services.AddSingleton<IRequestHandler<ReadBookingFactsQuery, BookingFacts>>(this);
                 var worker = services.FirstOrDefault(d => d.ImplementationType == typeof(StructureSynchronizationWorker));
                 if (worker is not null) services.Remove(worker);
             });

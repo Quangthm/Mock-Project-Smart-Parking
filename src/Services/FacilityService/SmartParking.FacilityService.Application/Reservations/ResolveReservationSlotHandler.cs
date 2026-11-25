@@ -3,13 +3,15 @@ using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Application.Reservations;
 
-public sealed class ResolveReservationSlotHandler(IReservationDependencyRepository repository, IMediator sender)
-    : IRequestHandler<ResolveReservationSlotQuery, BookingFacts>
+public sealed class ResolveReservationSlotHandler(IReservationDependencyRepository repository)
+    : IRequestHandler<ResolveReservationSlotQuery, SelectedSlotMetadata>
 {
-    public async Task<BookingFacts> Handle(ResolveReservationSlotQuery query, CancellationToken ct)
+    public async Task<SelectedSlotMetadata> Handle(ResolveReservationSlotQuery query, CancellationToken ct)
     {
-        var siteId = await repository.FindSlotSiteAsync(query.SlotId, ct)
+        var slot = await repository.FindSlotMetadataAsync(query.SlotId, ct)
             ?? throw new StructureException("SLOT_NOT_FOUND", "The selected slot was not found.");
-        return await sender.Send(new ReadBookingFactsQuery(siteId, query.SlotId), ct);
+        if (slot.SlotId != query.SlotId || slot.SiteId == Guid.Empty || slot.TenantId == Guid.Empty)
+            throw new StructureException("IDENTITY_UNAVAILABLE", "The selected slot scope could not be established.");
+        return slot;
     }
 }

@@ -112,6 +112,10 @@ public sealed partial class QuoteBookingDatabaseTests
             async Task<SmartParking.OperationService.Domain.Entities.ReservationRow> Read() =>
                 await opDb.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
             var held = await Read();
+            Assert.False(await opDb.Set<SmartParking.OperationService.Domain.Reservations.ReservationFacilityDependency>()
+                .AnyAsync(dependency => dependency.WorkflowId == id && dependency.Purpose == "ADMISSION"));
+            Assert.Equal("HOLD_CREATED", await opDb.ReservationRequests.Where(request => request.Id == id)
+                .Select(request => request.State).SingleAsync());
             var delay = proof.ValidUntil - DateTimeOffset.UtcNow;
             if (delay > TimeSpan.Zero) await Task.Delay(delay + TimeSpan.FromMilliseconds(5));
             revision.EffectiveTo = DateTimeOffset.UtcNow;

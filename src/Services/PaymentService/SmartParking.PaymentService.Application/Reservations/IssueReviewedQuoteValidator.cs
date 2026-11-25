@@ -17,7 +17,6 @@ public sealed class IssueReviewedQuoteValidator : AbstractValidator<IssueReviewe
         RuleFor(x => x.Binding.SitePolicyId).NotEmpty();
         RuleFor(x => x.Binding.PlatformPolicyVersion).GreaterThan(0);
         RuleFor(x => x.Binding.SitePolicyVersion).GreaterThan(0);
-        RuleFor(x => x.Binding.FacilityVersion).NotEmpty();
         RuleFor(x => x.Binding.Coverage).NotNull();
         When(x => x.Binding.Coverage != null, () => RuleFor(x => x.Binding.Coverage.Version).NotEmpty().MaximumLength(100));
     }

@@ -4,7 +4,7 @@ using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class AdvanceFacilityDependencyHandler(IReservationFacilityDependencyRepository dependencies,
-    IReservationFacilityDependencyOwner owner, IReservationBookingRepository bookings, IUnitOfWork work, IMediator mediator, IReservationRequestRepository requests, IAdmissionMessages? saga = null)
+    IReservationFacilityDependencyOwner owner, IReservationBookingRepository bookings, IUnitOfWork work, IMediator mediator)
     : IRequestHandler<AdvanceFacilityDependencyCommand>
 {
     public async Task Handle(AdvanceFacilityDependencyCommand command, CancellationToken ct)
@@ -85,9 +85,6 @@ public sealed class AdvanceFacilityDependencyHandler(IReservationFacilityDepende
             {
                 var snapshot = FacilityDependencyProtocol.SerializeSnapshot(acquired.Snapshot, intent);
                 current.RecordHeld(snapshot, FacilityDependencyProtocol.Fingerprint(snapshot), now);
-                if (saga is not null && current.Purpose == "ADMISSION" &&
-                    (await requests.FindForWorkerAsync(current.WorkflowId, ct))?.State == "EVALUATING")
-                    await saga.RequestEvaluationAsync(current.WorkflowId, ct);
             }
         }
         else current.Acknowledge(observed.State == "READY" ? "COMMITTED" : "ABORTED", now);

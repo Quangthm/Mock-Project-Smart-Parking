@@ -1,7 +1,22 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using SmartParking.PaymentService.API.Authentication;
+using SmartParking.PaymentService.API.Controllers;
+using SmartParking.PaymentService.API.Middleware;
+using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Application.DTOs.Reservations;
 using SmartParking.PaymentService.Application.Reservations;
 using SmartParking.PaymentService.Application.Usecase.CreatePaymentOrder;
@@ -20,6 +35,82 @@ namespace SmartParking.PaymentService.Tests.Persistence;
 
 public sealed class ReviewedOrderDatabaseTests
 {
+    [ReviewedOrderDatabaseFact]
+    public async Task SignedIssuanceAndScopedProofUseTheBindingWithoutFacilityVersion()
+    {
+        using var rsa = RSA.Create(2048);
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(ReviewedReservationQuotesController).Assembly.GetName().Name
+        });
+        builder.WebHost.UseTestServer();
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:Payment"] = Environment.GetEnvironmentVariable("SMARTPARK_PAYMENT_ORDER_TEST_DB"),
+            ["ReservationIntegration:Enabled"] = "true",
+            ["ReservationIntegration:ReviewedSettlementEnabled"] = "true",
+            ["ReservationIntegration:OperationsPublicKeyPem"] = rsa.ExportRSAPublicKeyPem()
+        });
+        builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
+        builder.Services.AddControllers().AddApplicationPart(typeof(ReviewedReservationQuotesController).Assembly);
+        builder.Services.AddApplicationServices();
+        builder.Services.AddPersistenceServices(builder.Configuration);
+        await using var host = builder.Build();
+        host.UseMiddleware<ExceptionHandlingMiddleware>();
+        host.UseAuthentication();
+        host.UseAuthorization();
+        host.MapControllers();
+        await host.StartAsync();
+
+        await using var db = Open();
+        var tariff = await db.Tariffs.AsNoTracking().SingleAsync(t => t.Id == Guid.Parse("c0000000-0000-4000-8000-000000000001"));
+        tariff.Id = Guid.NewGuid();
+        tariff.TenantId = Guid.NewGuid();
+        tariff.SiteId = Guid.NewGuid();
+        var account = Guid.NewGuid();
+        db.Add(tariff);
+        db.Add(new PolicyRevision { PolicyId = tariff.Id, PolicyValuesJson = tariff.TariffRulesJson, ScopeId = tariff.SiteId, CreatedBy = account });
+        await db.SaveChangesAsync();
+        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var binding = new ReviewedQuoteBinding(account, "51A12345", tariff.TenantId, tariff.SiteId, Guid.NewGuid(),
+            now.AddHours(2), now.AddHours(3), "PAYOS", new(false, "no-cover"), Guid.NewGuid(), 1, Guid.NewGuid(), 1);
+        using var http = host.GetTestClient();
+        http.BaseAddress = new Uri("https://localhost");
+        const string route = "/internal/reservation-quotes/v1";
+        using var unsigned = await http.PostAsJsonAsync(route, binding);
+        Assert.Equal(HttpStatusCode.Unauthorized, unsigned.StatusCode);
+        const string issuer = "SmartParking.OperationService";
+        var token = new JwtSecurityToken(issuer, "SmartParking.PaymentService",
+            [new Claim("sub", issuer), new Claim("sender", issuer), new Claim("permission", "reservation:quote"),
+                new Claim("role", "INTERNAL_SERVICE"), new Claim("scope", "s2s"), new Claim("jti", Guid.NewGuid().ToString("N"))],
+            now.UtcDateTime, now.AddMinutes(1).UtcDateTime, new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256));
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
+        using var issued = await http.PostAsJsonAsync(route, binding);
+        issued.EnsureSuccessStatusCode();
+        var data = (await issued.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        Assert.False(data.GetProperty("binding").TryGetProperty("facilityVersion", out _));
+        var proof = data.Deserialize<ReviewedQuoteProof>(JsonSerializerOptions.Web)!;
+        Assert.Equal(binding, proof.Binding);
+        var quote = await db.ReservationQuotes.SingleAsync(q => q.Id == proof.QuoteId);
+        using var stored = JsonDocument.Parse(quote.ReviewedEvidence!);
+        Assert.False(stored.RootElement.GetProperty("Binding").TryGetProperty("FacilityVersion", out _));
+        string Read(Guid quoteId, Guid accountId, string version) => $"{route}/{quoteId}?accountId={accountId}&version={version}";
+        Assert.Equal(data.GetRawText(), (await http.GetFromJsonAsync<JsonElement>(Read(proof.QuoteId, account, proof.QuoteVersion)))
+            .GetProperty("data").GetRawText());
+        foreach (var invalidProof in new[] { Read(proof.QuoteId, Guid.NewGuid(), proof.QuoteVersion),
+            Read(Guid.NewGuid(), account, proof.QuoteVersion), Read(proof.QuoteId, account, "rq1-wrong") })
+        {
+            using var missing = await http.GetAsync(invalidProof);
+            Assert.False(missing.IsSuccessStatusCode);
+            Assert.Equal("QUOTE_NOT_FOUND", (await missing.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        }
+        var legacyEvidence = System.Text.Json.Nodes.JsonNode.Parse(quote.ReviewedEvidence!)!;
+        legacyEvidence["Binding"]!["FacilityVersion"] = "old-layout";
+        var historical = new ReservationQuote { ReviewedEvidence = legacyEvidence.ToJsonString(), Status = quote.Status };
+        Assert.Equal(binding, ReviewedQuoteProof.From(historical).Binding);
+    }
+
     [ReviewedOrderDatabaseFact]
     public async Task ReviewedOrderKeepsTheQuoteBindingAndCheckoutEnforcesRuntimeCapability()
     {
@@ -184,7 +275,7 @@ public sealed class ReviewedOrderDatabaseTests
     {
         var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         var binding = new ReviewedQuoteBinding(Guid.NewGuid(), "51A12345", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            now.AddHours(2), now.AddHours(3), method, new QuoteCoverage(covered, "fixture-coverage"), "fixture-layout",
+            now.AddHours(2), now.AddHours(3), method, new QuoteCoverage(covered, "fixture-coverage"),
             Guid.NewGuid(), 1, Guid.NewGuid(), 1);
         var booked = 20_000L;
         var coveredAmount = covered ? booked : 0;

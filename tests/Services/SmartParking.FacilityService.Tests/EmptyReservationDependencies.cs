@@ -6,9 +6,11 @@ namespace SmartParking.FacilityService.Tests;
 // Existing structure workflow fixtures have no reverse reservation dependencies.
 internal sealed class EmptyReservationDependencies : IReservationDependencyRepository
 {
-    public BookingFacts? Slot { get; init; }
-    public Task<Guid?> FindSlotSiteAsync(Guid slotId, CancellationToken ct) =>
-        Task.FromResult(Slot?.SlotId == slotId ? Slot.SiteId : (Guid?)null);
+    public SelectedSlotMetadata? Slot { get; init; }
+    public Task<SelectedSlotMetadata?> FindSlotMetadataAsync(Guid slotId, CancellationToken ct) =>
+        Task.FromResult(Slot?.SlotId == slotId ? Slot : null);
+    public Task<ReservationSlotEligibility?> CheckSlotEligibilityAsync(Guid slotId, DateTimeOffset start, DateTimeOffset end, CancellationToken ct) =>
+        throw new NotSupportedException();
     public bool Held { get; set; }
     public Task<bool> HasHeldAsync(Guid siteId, CancellationToken ct) => Task.FromResult(Held);
     public Task LockAsync(Guid token, Guid siteId, CancellationToken ct) => throw new NotSupportedException();

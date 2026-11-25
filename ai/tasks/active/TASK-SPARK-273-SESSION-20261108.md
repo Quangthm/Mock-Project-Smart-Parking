@@ -691,3 +691,78 @@ dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.Facil
 - Temporary QuoteVersion retention is required by reviewed-order routing and financial handling of the rq1- prefix. Reassess QuoteId and authoritative Payment state once legacy creation, order routing and financial evidence have been accounted for. B3/B4 each require explicit approval. D08 affected-slot ordering, C settlement and subsequent worker retirement remain deferred.
 
 **B2 OPERATIONS VERIFIED — FACILITY AND PAYMENT INTEGRATION PENDING**. Suggested commit: `refactor(reservations): bind admission directly to the accepted quote [SPARK-273]`. No staging or commit.
+
+## 25 November 2026 — Reservation owner handoffs and B3 guarded admission
+
+Approved scope is Payment B2, Facility reservation metadata and interval-aware admission, read-only use of existing authoritative maintenance, and B3 guarded quoted admission. Entry HEAD was `a2ee0a6c6af5d85044bcc6f71deb01941e0f0f87` on `feature/SPARK-273-driver-book-parking-ahead-of-arrival`. The local upstream ref remained B1 (`a8bab041f88e0a56f1d8376a6773805189f9ee67`). The index was empty. Existing edits to the AI router and SPARK-243 session and the untracked coding instructions were preserved. The committed walk-in handoff was left intact.
+
+- Payment removed `FacilityVersion` from the reviewed binding and validator. New persistence follows the typed proof. The existing serializer reads older evidence, and `QuoteVersion` remains until reviewed-order routing and financial replay can be retired separately.
+- Facility's signed slot-only GET derives three identities without a site snapshot. The broker producer echoes the exact normalized interval and checks selected-slot scope, ancestry, CAR compatibility, ordinary backup exclusion and restrictions in one coherent database read. Overlapping acknowledged bounded site windows are ineligible. Applicable pending, failed or inconsistent evidence is unavailable. Cancellation and half-open adjacency are respected. A missing future maintenance capability does not block ordinary admission. SPARK-244 retains the maintenance lifecycle, enforcement, and affected-slot events. The teammate response was summarized in the approval prompt. The separate reply file was unavailable, and the committed teammate ref did not establish the reported event implementations.
+- Reviewed Operations admission reads signed Payment proof in the existing fresh evaluation scope, then fences the request and uses the Account, plate and site guards, fresh database time and B1 local availability. Joined owner evidence and exact proof drive one atomic named claim, (H = min(creation + effective hold duration, T)), `HOLD_CREATED`, progress and outbox. A local structure edit defers through the existing worker. Operations did not add a replacement Facility token or snapshot. Legacy terms and confirmation retain the extracted selected-resource checks and shared token processing. The authorization, Facility dependency and order provisioning workers retain their remaining responsibilities.
+- Production activation remains gated. `ReservationAdmission:Enabled` can close ingress, and `ReservationAdmission:SagaConsumersEnabled` and `ReservationIntegration:ReviewedSettlementEnabled` participate in composition. There is no switch between quoted token implementations. The existing Operations structure hold and site-state fences do not establish current affected-slot restrictions or reconcile money. D08 remains separately approval-gated for restriction-before-hold and hold-before-restriction, including financial disposition. B4–E remain deferred.
+
+
+### Verification and activation
+
+The three suites ran against fresh loopback PostgreSQL 18 with the owning initializers. Facility's PostgreSQL fixture creates its own disposable databases. The test command was `dotnet test tests/Services/SmartParking.<Service>.Tests/SmartParking.<Service>.Tests.csproj --no-restore --nologo -m:1 --logger 'console;verbosity=normal'` for PaymentService, FacilityService and OperationService. The scoped environment settings were `SMARTPARK_PAYMENT_ORDER_TEST_DB`, `SMARTPARK_STRUCTURE_TEST_CONNECTION` and `SMARTPARK_QUOTE_TEST_DB`. The temporary PostgreSQL process and database files were cleaned up.
+
+The Operations suite was rerun after prioritizing the in-flight structure hold over site state that can change during the edit. It passed again. `dotnet build SmartParking.slnx --no-restore --nologo -m:1 --verbosity quiet` passed with 0 errors and 32 warnings (31 NU1900 vulnerability-feed retrieval warnings and one existing IoT NU1510 reference warning). `git diff --check` passed.
+
+| Suite | Passed | Failed | Skipped | Coverage |
+|---|---:|---:|---:|---|
+| Payment | 274 | 0 | 3 | Signed POST and Account/quote/version-scoped GET through the actual Payment controller and PostgreSQL; persisted proof, historical JSON, paid and zero-value behavior, exact H, idempotency and settlement regressions. |
+| Facility | 261 | 0 | 0 | Signed endpoint and typed absence, PostgreSQL metadata, actual interval-aware consumer over MassTransit in-memory transport, and maintenance, structure, gate and occupancy regressions. The maintenance test uses the actual create/cancel writer for bounded site windows and seeds the effective acknowledgement for reader verification. |
+| Operations | 102 | 0 | 2 | Controlled owner decisions, exact proof binding, H capped at T, accepted buffer, zero quoted token rows, local structure deferral, real PostgreSQL contention and rollback, atomic request/hold/outbox, preserved confirmation and legacy terms. |
+
+The disposable RabbitMQ containers could not initialize Erlang because the cookie read returned `eacces`. The Operations Saga restart and signed paired settlement tests and the three Payment live RabbitMQ checks were skipped. The complete four-service Driver-to-order acceptance and the pre-B3 tokenized baseline were not established in this run. No provider charge or manual Postman execution occurred. The current evidence supports local B3 development and the owner contracts exercised above. Keep reviewed ingress closed for production pending joint integration, both restriction orderings and financial safety.
+
+### Exact selective staging inventory
+
+Paths are repository-relative. The milestone has no deleted files. The pre-existing router, SPARK-243 session and explicit coding instructions are outside this list.
+
+**Payment contract and signed proof regression**
+
+- Modify `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/IssueReviewedQuoteValidator.cs`
+- Modify `src/Services/PaymentService/SmartParking.PaymentService.Application/Reservations/ReviewedQuoteBinding.cs`
+- Modify `tests/Services/SmartParking.PaymentService.Tests/Persistence/ReviewedOrderDatabaseTests.cs`
+
+**Facility metadata, eligibility contract, owner read and transport regression**
+
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.API/Controllers/ReservationDependenciesController.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Application/Contracts/ReservationAdmission/SlotCheckV1.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Application/Contracts/ReservationAdmission/SlotDecisionV1.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/IReservationDependencyRepository.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ResolveReservationSlotHandler.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ResolveReservationSlotQuery.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Infrastructure/ReservationSlotConsumer.cs`
+- Modify `src/Services/FacilityService/SmartParking.FacilityService.Persistence/ReservationDependencyRepository.cs`
+- Modify `tests/Services/SmartParking.FacilityService.Tests/EmptyReservationDependencies.cs`
+- Modify `tests/Services/SmartParking.FacilityService.Tests/PostgresStructureWorkflowTests.cs`
+- Modify `tests/Services/SmartParking.FacilityService.Tests/ReservationSlotEndpointTests.cs`
+- Add `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/CheckReservationSlotEligibilityHandler.cs`
+- Add `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/CheckReservationSlotEligibilityQuery.cs`
+- Add `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/CheckReservationSlotEligibilityValidator.cs`
+- Add `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/ReservationSlotEligibility.cs`
+- Add `src/Services/FacilityService/SmartParking.FacilityService.Application/Reservations/SelectedSlotMetadata.cs`
+
+**Operations hold transaction, shared evidence checks and regressions**
+
+- Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdvanceFacilityDependencyHandler.cs`
+- Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/CommitQuoteHoldHandler.cs`
+- Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ConfirmReservationHandler.cs`
+- Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProgressReservationHandler.cs`
+- Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RequireReservationAvailabilityCommand.cs`
+- Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RequireReservationAvailabilityHandler.cs`
+- Modify `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.CapacityConcurrency.cs`
+- Modify `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.Paired.cs`
+- Modify `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.cs`
+- Add `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RequireSelectedSlotEvidence.cs`
+
+**Session, APIs and owner handoffs**
+
+- Modify `ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md`
+- Modify `docs/03-design/api/reservation-facility-dependency-api-design.md`
+- Modify `docs/03-design/api/reservation-first-slice-api-design.md`
+- Modify `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-19-SPARK-273-payment-authority.md`
+- Modify `docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Facility-Handoff.md`
+- Modify `docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Payment-Handoff.md`

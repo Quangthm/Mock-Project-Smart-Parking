@@ -12,7 +12,7 @@
 
 ## Overview
 
-Operations obtains immutable Facility resource facts with a durable configuration hold while deciding a booking. Read-only review creates no hold. This is a SERVICE interaction with a dedicated machine identity, not Driver authorization.
+Legacy terms admission and confirmation use Facility resource facts with a durable configuration hold. Reviewed quote metadata and the reviewed admission decision are read-only. Service calls use a dedicated machine identity.
 
 | Traceability | Reference |
 | --- | --- |
@@ -122,7 +122,7 @@ See [the deployment cases and durable event handoff](https://github.com/Quangthm
 
 ## 11 November 2026 — conditional confirmation dependency retirement (design note)
 
-[Architecture decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) approves a **target** aggregate-only fast path for an unexpired held claim. This **does not change or remove** the current `/internal/reservation-dependencies/v1` `CONFIRMATION` acquire/complete/abort contract today. In the current flow, `ADMISSION` dependency finishes when Operations commits `PENDING_PAYMENT`, and the Facility lock is released during Driver payment. Existing Facility changes may be coordinated with Operations without immediately mutating reservation status; therefore `PENDING_PAYMENT` alone is not evidence that all external facts remain valid.
+[Architecture decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) approves a **target** aggregate-only fast path for an unexpired held claim. The `/internal/reservation-dependencies/v1` `CONFIRMATION` acquire/complete/abort contract remains in use. For legacy terms admission, the `ADMISSION` dependency finishes when Operations commits `PENDING_PAYMENT` and the Facility lock is released during Driver payment. Existing Facility changes can be coordinated with Operations ahead of reservation status changes.
 
 For a future `CONFIRMATION`-free fast path, Facility and Operations must demonstrate that **every supported Facility structure/site/slot/unit mutation and physical Gate claim** either serializes against the live Operations claim or causes a durable, timely invalidation visible under the guarded Operations aggregate transition. Prove delayed/out-of-order Facility synchronization, callback loss/replay, crash/restart, same-slot concurrent edit/entry, maintenance and future writer behavior; document excluded direct-write bypasses. Only after the gate passes may Operations skip the redundant confirmation dependency for a **still-valid protected hold**. `CONFIRMATION` acquire and fresh capacity checks continue for expired/invalidated-hold reacquisition strictly before reservation start T.
 
@@ -135,7 +135,7 @@ The 10 November single guarded database evaluation timestamp and no-entitlement-
 | Item | Contract |
 | --- | --- |
 | Method / URL | GET `/internal/reservation-dependencies/v1/slots/{slotId}` |
-| Availability | Operations consumes the B2 metadata response. The current Facility producer still reads the site snapshot; its cutover is pending. |
+| Availability | Implemented for the coordinated development workflow. |
 | Authentication / origin | SERVICE; dedicated authenticated Operations identity, audience and permission checked by Facility |
 | Scope | Selected Facility slot; derive authoritative tenant/site in the owning repository |
 | Content type / headers | No body; JSON response; service bearer credential; no browser JWT |
@@ -150,8 +150,10 @@ Facility derives the identities from the live slot and owning site/tenant. Prese
 
 ### MassTransit slot validation for admission
 
-The Operations contract sends `SlotCheckV1(workflowId, attemptId, accountId, fingerprint, requestedSlotId, start, end)` and accepts `SlotDecisionV1(request, outcome, siteId?, tenantId?)` only for the exact pending request. Facility must check the selected slot over the normalized UTC interval and return derived identities on success. Deploying with the old interval-blind producer cannot establish eligibility. The separate site-qualified read and temporary token protocols retain their existing snapshots. See the [Facility implementation and acceptance handoff](<../../05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Facility-Handoff.md>).
+Operations sends `SlotCheckV1(workflowId, attemptId, accountId, fingerprint, requestedSlotId, start, end)` to `facility-reservation-slot-v1`. Facility validates the selected slot over the UTC half-open parking interval and sends `SlotDecisionV1(request, outcome, siteId?, tenantId?)` to `operations-reservation-slot-results-v1`. The reply echoes the full request. Only `ELIGIBLE` carries the derived site and tenant. `INELIGIBLE` and `DEPENDENCY_UNAVAILABLE` carry null scope. Operations accepts only the exact pending branch.
+
+An overlapping effective bounded site maintenance window is ineligible. A materially uncertain overlap returns dependency unavailable. Cancelled, ended and nonoverlapping evidence follows the existing Facility lifecycle. Scoped/open-ended producer support and durable affected-slot reconciliation belong to the coordinated SPARK-244 and D08 integration. See the [Facility handoff](<../../05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-B2-Facility-Handoff.md>).
 
 ### Protected claim verification
 
-Treat mismatched review/admission/protection context as changed terms or ineligibility. Keep acquire/complete/abort, exact-token replay and unknown resolution where needed for admission and confirmation. Perform external calls outside the protected Operations transaction. Verify competing structure changes, Gate claims, maintenance, lost acknowledgements and invalidation lag before considering any retirement. Use the [owner handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#facilityservice--quote-and-admission-slices) and [QA scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md); review and runtime checks remain pending.
+Reviewed admission uses its correlated Facility outcome, Payment proof and the guarded Operations transaction. Legacy terms admission and confirmation retain the site-qualified facts, token snapshots and acquire/complete/abort replay. Keep independent structure-edit coordination. The production rollout of the reviewed admission path requires verification of both D08 event orderings and financial reconciliation.

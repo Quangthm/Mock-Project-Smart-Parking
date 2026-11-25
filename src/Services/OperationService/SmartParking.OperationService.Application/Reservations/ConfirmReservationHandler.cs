@@ -112,7 +112,8 @@ public sealed class ConfirmReservationHandler(IReservationBookingRepository book
                 await ReleaseForUnavailableConfirmationAsync(booking, "CLAIM_REACQUISITION", evaluatedAt, ct);
             }
             await bookings.RequirePlateAvailableAsync(booking, evaluatedAt, ct);
-            await mediator.Send(new RequireReservationAvailabilityCommand(booking, resourceFacts, evaluatedAt, reacquisitionPolicy), ct);
+            RequireSelectedSlotEvidence.Validate(booking, resourceFacts);
+            await mediator.Send(new RequireReservationAvailabilityCommand(booking, evaluatedAt, reacquisitionPolicy), ct);
         }
         catch (ReservationGateException error) when (error.StatusCode == 409)
         {

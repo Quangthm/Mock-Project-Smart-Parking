@@ -15,24 +15,13 @@ namespace SmartParking.OperationService.Tests;
 public sealed partial class QuoteBookingDatabaseTests
 {
     [QuoteDatabaseFact]
-    public Task OrdinarySlotAdmitsWithDynamicBackupCountAndUnlocatedWalkIn() => CheckBackupAdmissionAsync(fixedBackup: false);
-
-    [QuoteDatabaseFact]
-    public Task DesignatedBackupSlotRemainsUnavailableForOrdinaryAdmission() => CheckBackupAdmissionAsync(fixedBackup: true);
-
-    private async Task CheckBackupAdmissionAsync(bool fixedBackup)
+    public async Task EligibleSlotAdmitsWithUnlocatedWalkInAndCancelledClaim()
     {
         await using var services = Services();
         var request = await Prepare(services, Guid.NewGuid());
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var now = DateTimeOffset.UtcNow;
-        var token = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.WorkflowId == request);
-        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, SnapshotVersion, true, true),
-            [new(slot, unit, "CAR", true, true, fixedBackup, [unit], ["CAR"])], [new(null, "CAR", 1)], true);
-        var json = FacilityDependencyProtocol.SerializeSnapshot(snapshot, FacilityDependencyProtocol.Intent(token));
-        db.Entry(token).Property(t => t.SnapshotJson).CurrentValue = json;
-        db.Entry(token).Property(t => t.SnapshotFingerprint).CurrentValue = FacilityDependencyProtocol.Fingerprint(json);
         db.Add(new ParkingSessionRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, VehicleType = "CAR",
             EntryTime = now, SessionStatus = "ACTIVE", CreatedAt = now });
         db.Add(new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
@@ -40,14 +29,8 @@ public sealed partial class QuoteBookingDatabaseTests
             Status = "CANCELLED", ExpectedStartTime = start, ExpectedEndTime = start.AddHours(1), CreatedAt = now });
         await db.SaveChangesAsync();
         await Send(services, new CommitQuoteHoldCommand(request));
-        if (fixedBackup)
-        {
-            Assert.Equal("SLOT_UNAVAILABLE",
-                await db.ReservationRequests.Where(r => r.Id == request).Select(r => r.Code).SingleAsync());
-            Assert.False(await db.Reservations.AnyAsync(r => r.RequestId == request));
-        }
-        else
-            Assert.Equal("PENDING_PAYMENT", await db.Reservations.Where(r => r.Id == request).Select(r => r.Status).SingleAsync());
+        Assert.Equal("PENDING_PAYMENT", await db.Reservations.Where(r => r.Id == request).Select(r => r.Status).SingleAsync());
+        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == request));
         Assert.False(await db.SlotAllocations.AnyAsync(a => a.SiteId == site));
     }
 
@@ -191,13 +174,10 @@ public sealed partial class QuoteBookingDatabaseTests
             var row = ReservationRow.PrepareQuote(request.Id, account, canonicalPlate, tenant, site, selected,
                 "PAYOS", from, until, until, at, at.AddMinutes(5), 100, 0, 100, "VND",
                 """{"Values":{"OCCUPANCY_VALIDITY_TIMESPAN":240}}""", Guid.NewGuid(), "q1", start, "tariff", "none", false);
-            // Supply the real admission handler with only the selected slot's owner evidence.
-            var snapshot = new FacilityResourceSnapshot(new(tenant, site, selected, SnapshotVersion, true, true),
-                [new(selected, unit, "CAR", true, true, false, [unit], ["CAR"])], [], true);
             try
             {
                 await bookings.RequirePlateAvailableAsync(row, at, ct);
-                await provider.GetRequiredService<IMediator>().Send(new RequireReservationAvailabilityCommand(row, snapshot, at), ct);
+                await provider.GetRequiredService<IMediator>().Send(new RequireReservationAvailabilityCommand(row, at), ct);
             }
             catch (ReservationGateException error)
             {

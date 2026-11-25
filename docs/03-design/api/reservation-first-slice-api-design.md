@@ -28,7 +28,7 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 | Item | Contract |
 | --- | --- |
 | Method / URL | POST `/api/reservation-quotes` |
-| Availability | Operations consumes the B2 identity-only metadata and reviewed quote binding. Coordinated Facility and Payment producer verification is pending. |
+| Availability | The development implementation uses Facility's identity-only metadata and Payment's reviewed binding. Production activation is gated by the coordinated maintenance and D08 verification. |
 | Authentication / freshness | Driver JWT / TOKEN and local policy; estimate and quote review have no booking effect |
 | Resource scope | Caller’s quote; authoritative slot resolution via Facility |
 | Content type / headers | JSON; bearer auth |
@@ -58,7 +58,7 @@ The response also includes `operationalPolicy` with `platformRevisionId`, `platf
 
 Malformed input returns 400. An owner-confirmed missing slot returns 404. A stale quote returns 409. Definitive interval ineligibility is a later admission outcome. Missing owner routes, credentials, incomplete pricing evidence and mismatched owner responses fail closed with 503. Review creates no reservation, dependency token or order.
 
-**B2 activation.** The Driver submits the reviewed quote ID/version with the same selection. Operations checks Payment’s immutable proof directly against normalized intent and the joined owner results. One-time quote binding, policy/coverage checks and the temporary ADMISSION token remain in the guarded hold workflow. Coordinate activation with both revised producers; the legacy terms path has its own binding.
+**Reviewed hold.** The Driver submits the reviewed quote ID/version with the same selection. Operations retrieves Payment’s immutable proof before taking its transaction guards, then checks the exact proof, joined Account/Vehicle/Facility results and current local facts. One Operations transaction commits the named reservation, accepted buffer, exact H, terminal `HOLD_CREATED`, progress and outbox effects. The reviewed path uses one Facility eligibility decision. The legacy terms and confirmation paths still use their shared token contracts. Payment order readiness follows the committed hold independently.
 
 ### Submit durable admission
 

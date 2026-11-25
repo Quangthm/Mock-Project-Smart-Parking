@@ -1,8 +1,9 @@
+using System.Data.Common;
+using FluentValidation;
 using MassTransit;
 using MediatR;
 using SmartParking.Contracts.ReservationAdmission;
 using SmartParking.FacilityService.Application.Reservations;
-using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Infrastructure;
 
@@ -17,20 +18,21 @@ public sealed class ReservationSlotConsumer(IMediator mediator) : IConsumer<Slot
         SlotDecisionV1 decision;
         try
         {
-            var facts = await mediator.Send(new ResolveReservationSlotQuery(input.RequestedSlotId), context.CancellationToken);
-            if (facts.SlotId != input.RequestedSlotId || facts.SiteId == Guid.Empty || facts.TenantId == Guid.Empty ||
-                string.IsNullOrWhiteSpace(facts.Version) || !facts.ParticipatesInStructureGuard)
-                decision = new(input, "DEPENDENCY_UNAVAILABLE", null, null, null);
-            else if (!facts.EligibleCarSlot) decision = new(input, "INELIGIBLE", null, null, null);
-            else decision = new(input, "ELIGIBLE", facts.SiteId, facts.TenantId, facts.Version);
+            var facts = await mediator.Send(new CheckReservationSlotEligibilityQuery(
+                input.RequestedSlotId, input.Start, input.End), context.CancellationToken);
+            decision = facts switch
+            {
+                { Outcome: "ELIGIBLE", SiteId: Guid siteId, TenantId: Guid tenantId }
+                    when facts.SlotId == input.RequestedSlotId && siteId != Guid.Empty && tenantId != Guid.Empty =>
+                    new(input, "ELIGIBLE", siteId, tenantId),
+                { Outcome: "INELIGIBLE", SiteId: null, TenantId: null } when facts.SlotId == input.RequestedSlotId =>
+                    new(input, "INELIGIBLE", null, null),
+                _ => new(input, "DEPENDENCY_UNAVAILABLE", null, null)
+            };
         }
-        catch (StructureException error) when (error.Code is "SLOT_NOT_FOUND" or "SITE_NOT_FOUND")
+        catch (Exception error) when (error is ValidationException or DbException or TimeoutException)
         {
-            decision = new(input, "INELIGIBLE", null, null, null);
-        }
-        catch (StructureException error) when (error.Code == "STRUCTURE_BUSY")
-        {
-            decision = new(input, "DEPENDENCY_UNAVAILABLE", null, null, null);
+            decision = new(input, "DEPENDENCY_UNAVAILABLE", null, null);
         }
         var replies = await context.GetSendEndpoint(new Uri("queue:operations-reservation-slot-results-v1"));
         await replies.Send(decision, send => send.CorrelationId = input.WorkflowId, context.CancellationToken);

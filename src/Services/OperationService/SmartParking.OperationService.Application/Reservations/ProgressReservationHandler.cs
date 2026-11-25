@@ -121,7 +121,8 @@ public sealed class ProgressReservationHandler(IReservationRequestRepository req
         booking.OriginalPlate = request.VehiclePlate;
         booking.NormalizedPlate = request.VehiclePlate;
         await bookings.RequirePlateAvailableAsync(booking, now, ct);
-        await mediator.Send(new RequireReservationAvailabilityCommand(booking, resourceFacts, now), ct);
+        RequireSelectedSlotEvidence.Validate(booking, resourceFacts);
+        await mediator.Send(new RequireReservationAvailabilityCommand(booking, now), ct);
         // Accepted terms are durably stored with the booking; a real Payment order is created
         // only after the hold is committed and the exact reservation identity is known.
         now = await bookings.DatabaseNowAsync(ct);

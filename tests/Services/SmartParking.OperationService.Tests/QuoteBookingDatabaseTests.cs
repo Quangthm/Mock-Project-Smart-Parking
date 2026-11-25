@@ -29,10 +29,9 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     private readonly QuoteCommitFault fault = new();
     private int proofReads;
     private int policyVersion = 1;
+    private int holdMinutes = 1;
     private const string SnapshotVersion = "inventory-at-acquire";
     private Func<ReservationQuoteBinding, ReservationQuoteBinding> proofBinding = binding => binding;
-    private bool wrongToken;
-    private Guid? unrelatedSlot;
     private bool expired, covered;
     private bool wrongReceipt, rejectZero;
     private int reconciledZero;
@@ -107,6 +106,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         values["MAX_ADVANCE_BOOKING"] = 1440;
         values["RESERVATION_MAX_DURATION"] = 180;
         values["ARRIVAL_LATE_TOLERANCE"] = 15;
+        values["PAYMENT_HOLD_DURATION"] = holdMinutes;
         return Task.FromResult<IReadOnlyList<ReservationPolicyRevision>>([
             new(platform, 1, null, null, values, new Dictionary<string, PolicyBound>(), null, "Asia/Ho_Chi_Minh"),
             new(sitePolicy, policyVersion, tenant, site, new Dictionary<string, int>(), new Dictionary<string, PolicyBound>(), false, null)
@@ -178,8 +178,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
                 VehicleType = "CAR", TotalPhysicalCapacity = 1, MaxReservationQuota = 1, IsActive = true,
                 CreatedAt = row.AdmittedAt, UpdatedAt = row.AdmittedAt });
         await db.SaveChangesAsync();
-        await Send(services, new CommitQuoteHoldCommand(id));
-        await HoldToken(services, id, "ADMISSION");
         return id;
     }
 
@@ -189,27 +187,28 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var token = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.WorkflowId == id && t.Purpose == purpose);
         await Send(services, new AdvanceFacilityDependencyCommand(token.Id));
-        if (purpose == "ADMISSION")
-            Assert.True(await db.Set<OutboxMessage>().AnyAsync(m => m.CorrelationId == id &&
-                m.MessageType.Contains("EvaluateQuoteBooking")));
     }
 
     public Task<FacilityDependencyResult> AcquireAsync(FacilityDependencyIntent intent, CancellationToken ct)
     {
+        Assert.NotEqual("ADMISSION", intent.Purpose);
         Assert.Equal((tenant, site, slot), (intent.TenantId, intent.SiteId, intent.SlotId));
-        var resources = new List<FacilityResourceFact> { new(slot, unit, "CAR", true, true, false, [unit], ["CAR"]) };
-        if (unrelatedSlot is Guid other)
-            resources.Add(new(other, unit, "CAR", true, true, true, [unit], ["CAR"]));
-        var version = unrelatedSlot.HasValue ? "inventory-with-another-backup-slot" : SnapshotVersion;
-        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, version, true, true), resources, [], true);
-        return Task.FromResult(new FacilityDependencyResult(wrongToken ? intent with { Token = Guid.NewGuid() } : intent, "HELD", snapshot));
+        var snapshot = new FacilityResourceSnapshot(new(tenant, site, slot, SnapshotVersion, true, true),
+            [new(slot, unit, "CAR", true, true, false, [unit], ["CAR"])], [], true);
+        return Task.FromResult(new FacilityDependencyResult(intent, "HELD", snapshot));
     }
 
-    public Task<FacilityDependencyAcknowledgement> CompleteAsync(FacilityDependencyIntent intent, string outcomeJson, CancellationToken ct) =>
-        Task.FromResult(new FacilityDependencyAcknowledgement(intent, "COMPLETED", FacilityDependencyProtocol.Fingerprint(outcomeJson)));
+    public Task<FacilityDependencyAcknowledgement> CompleteAsync(FacilityDependencyIntent intent, string outcomeJson, CancellationToken ct)
+    {
+        Assert.NotEqual("ADMISSION", intent.Purpose);
+        return Task.FromResult(new FacilityDependencyAcknowledgement(intent, "COMPLETED", FacilityDependencyProtocol.Fingerprint(outcomeJson)));
+    }
 
-    public Task<FacilityDependencyAcknowledgement> AbortAsync(FacilityDependencyIntent intent, CancellationToken ct) =>
-        Task.FromResult(new FacilityDependencyAcknowledgement(intent, "ABORTED", null));
+    public Task<FacilityDependencyAcknowledgement> AbortAsync(FacilityDependencyIntent intent, CancellationToken ct)
+    {
+        Assert.NotEqual("ADMISSION", intent.Purpose);
+        return Task.FromResult(new FacilityDependencyAcknowledgement(intent, "ABORTED", null));
+    }
 
     [QuoteDatabaseFact]
     public async Task RollbackAndConcurrentQuoteUseCommitOneHoldAndOneOutboxTrigger()
@@ -230,7 +229,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Null(beforeRetry.ReservationId);
         Assert.False(await holds.AnyAsync());
         Assert.False(await db.Reservations.AnyAsync(r => r.QuoteId == quoteId));
-        Assert.Equal("HELD", await db.Set<ReservationFacilityDependency>().Where(t => t.WorkflowId == first).Select(t => t.State).SingleAsync());
+        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(t => t.WorkflowId == first));
         await Task.WhenAll(Send(services, new CommitQuoteHoldCommand(first)), Send(services, new CommitQuoteHoldCommand(second)));
         var booked = await db.Reservations.AsNoTracking().SingleAsync(r => r.QuoteId == quoteId);
         var winningReceipt = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == booked.Id);
@@ -239,21 +238,15 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Equal("PENDING_PAYMENT", booked.Status);
         Assert.Equal(slot, booked.ActiveClaimSlotId);
         Assert.Equal(booked.CreatedAt.AddMinutes(1), booked.HoldExpiresAt);
+        Assert.Equal(booked.ExpectedEndTime.AddMinutes(1), booked.ClaimEndTime);
         Assert.Null(booked.TermsId);
         Assert.Null(booked.VehicleId);
         Assert.Null(booked.AcceptedPricingSnapshot);
         Assert.Equal("tariff-1", booked.TariffVersion);
         Assert.Single(await holds.ToListAsync());
-        Assert.Equal("READY", await db.Set<ReservationFacilityDependency>().Where(t => t.WorkflowId == booked.Id).Select(t => t.State).SingleAsync());
+        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(t => t.WorkflowId == first || t.WorkflowId == second));
         var loser = first == booked.Id ? second : first;
         Assert.Equal("QUOTE_ALREADY_BOUND", await db.ReservationRequests.Where(r => r.Id == loser).Select(r => r.Code).SingleAsync());
-        foreach (var token in await db.Set<ReservationFacilityDependency>().AsNoTracking()
-            .Where(t => t.WorkflowId == first || t.WorkflowId == second).ToListAsync())
-        {
-            await Send(services, new AdvanceFacilityDependencyCommand(token.Id));
-            var resolution = await db.Set<ReservationFacilityDependency>().Where(t => t.Id == token.Id).Select(t => t.Resolution).SingleAsync();
-            Assert.Equal(token.WorkflowId == booked.Id ? "COMMITTED" : "ABORTED", resolution);
-        }
         expired = true;
         var reads = proofReads;
         Assert.Equal(first, await Capture(services, key));
@@ -264,7 +257,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
 
     [QuoteDatabaseFact]
-    public async Task ExpiredProofOrChangedBindingOrPolicyAbortsHeldToken()
+    public async Task ExpiredProofOrChangedBindingOrPolicyPreventsHold()
     {
         await using var services = Services();
         foreach (var reason in new[] { "expiry", "site", "tenant", "slot", "start", "end", "account", "plate", "method", "coverage", "policy" })
@@ -293,7 +286,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
             var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
             var expected = reason is "expiry" or "policy" or "coverage" ? "QUOTE_STALE" : "OWNER_CONTRACT_INVALID";
             Assert.Equal(expected, await db.ReservationRequests.Where(x => x.Id == id).Select(x => x.Code).SingleAsync());
-            Assert.Equal("ABORTING", await db.Set<ReservationFacilityDependency>().Where(x => x.WorkflowId == id).Select(x => x.State).SingleAsync());
+            Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == id));
             Assert.False(await db.Reservations.AnyAsync(x => x.Id == id));
         }
     }
@@ -341,11 +334,10 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
 
     [QuoteDatabaseFact]
-    public async Task UnrelatedBackupAddedAfterReviewAllowsTheAcceptedSlotHold()
+    public async Task AcceptedSlotHoldDoesNotReadFacilityInventory()
     {
         await using var services = Services();
         var original = await ReadProofAsync(AccountId!.Value, quoteId, quoteVersion, default);
-        unrelatedSlot = Guid.NewGuid();
         var id = await Prepare(services, Guid.NewGuid());
         await Send(services, new CommitQuoteHoldCommand(id));
         using var scope = services.CreateScope();
@@ -354,21 +346,44 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Equal(original.Binding.RequestedSlotId, held.ActiveClaimSlotId);
         Assert.Equal(original.QuoteId, held.QuoteId);
         Assert.Equal(original.DepositAmount, held.DepositAmount);
+        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == id));
     }
 
     [QuoteDatabaseFact]
-    public async Task WrongAcquisitionTokenCannotSupplyHoldEvidence()
+    public async Task QuotedHoldDeadlineIsCappedAtReservationStart()
     {
+        start = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(3).ToUnixTimeSeconds());
+        holdMinutes = 5;
         await using var services = Services();
-        wrongToken = true;
-        var error = await Assert.ThrowsAsync<ReservationGateException>(() => Prepare(services, Guid.NewGuid()));
-        Assert.Equal("OWNER_CONTRACT_INVALID", error.Code);
+        var id = await Prepare(services, Guid.NewGuid());
+        await Send(services, new CommitQuoteHoldCommand(id));
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
-        var dependency = await db.Set<ReservationFacilityDependency>().SingleAsync(t => t.SiteId == site);
-        Assert.Equal("PREPARING", dependency.State);
-        Assert.Null(dependency.SnapshotFingerprint);
+        var held = await db.Reservations.SingleAsync(reservation => reservation.Id == id);
+        Assert.Equal(start, held.HoldExpiresAt);
+    }
+
+    [QuoteDatabaseFact]
+    public async Task LocalStructureEditDefersHoldUntilReleased()
+    {
+        await using var services = Services();
+        var id = await Prepare(services, Guid.NewGuid());
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var hold = new StructureEditHoldRow { SiteId = site, TenantId = tenant, Token = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow };
+        var state = new StructureSiteStateRow { SiteId = site, TenantId = tenant, Active = false };
+        db.AddRange(hold, state);
+        await db.SaveChangesAsync();
+        await Send(services, new CommitQuoteHoldCommand(id));
+        var deferred = await db.ReservationRequests.AsNoTracking().SingleAsync(x => x.Id == id);
+        Assert.Equal(("EVALUATING", "STRUCTURE_BUSY"), (deferred.State, deferred.Code));
         Assert.False(await db.Reservations.AnyAsync(r => r.QuoteId == quoteId));
+        db.Remove(hold);
+        state.Active = true;
+        await db.SaveChangesAsync();
+        await Send(services, new CommitQuoteHoldCommand(id));
+        Assert.Equal("HOLD_CREATED", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.State).SingleAsync());
+        Assert.False(await db.Set<ReservationFacilityDependency>().AnyAsync(x => x.WorkflowId == id));
     }
 
     private async Task<Guid> SeedTimedHold(ServiceProvider services, bool late, bool zero)

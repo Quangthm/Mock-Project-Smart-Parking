@@ -1,10 +1,10 @@
 # SPARK-273 B2 | Payment reviewed quote binding
 
-**Owner:** PaymentService. Operations now omits `facilityVersion` from reviewed quote issuance. The current Payment validator still requires it. Coordinate activation after the signed POST, proof GET and order tests pass with fresh quotes.
+**Owner:** PaymentService. The reviewed quote contract and validator now accept the Operations binding without `facilityVersion`. Production activation remains coordinated with Facility and Operations.
 
 ## Contract change
 
-- In `SmartParking.PaymentService.Application/Reservations/ReviewedQuoteBinding.cs`, remove `FacilityVersion`. In `IssueReviewedQuoteValidator.cs`, remove its required-field rule. Update the positional fixture in `tests/Services/SmartParking.PaymentService.Tests/Persistence/ReviewedOrderDatabaseTests.cs`.
+- `ReviewedQuoteBinding.cs` and `IssueReviewedQuoteValidator.cs` omit the field. `ReviewedOrderDatabaseTests.cs` covers signed issuance, scoped proof, new persisted evidence, and deserialization of historical evidence containing the obsolete member.
 - The authenticated POST `/internal/reservation-quotes/v1` accepts account ID, canonical plate, tenant/site/requested slot IDs, both UTC instants, payment method, coverage decision/version and both platform/site policy IDs and versions. Return the exact accepted binding. Keep existing tariff revision, pricing breakdown, booked/covered/deposit amounts, currency, prepayment mode, disclosure, status and expiry.
 - `IssueReviewedQuoteHandler.cs` prices using tenant/site, CAR, interval and the authoritative tariff. It serializes the typed proof into `reviewed_evidence`. `ReviewedQuoteProof.From` reads it back with current consumption status. The field removal needs no new serializer, digest, relational column, migration or rewrite of previous financial evidence.
 - Keep `QuoteId` and `QuoteVersion`. The current `rq1-` prefix dispatches reviewed orders in `EnsureReservationDepositOrderCommandHandler.cs`. Its future removal requires a separate decision covering legacy creation, order routing and financial replay.
