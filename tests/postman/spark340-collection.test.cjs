@@ -2,11 +2,51 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const crypto = require('node:crypto');
 const { test } = require('node:test');
 
 const collection = JSON.parse(fs.readFileSync(path.join(__dirname,
   '../../docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json'), 'utf8'));
 const requests = collection.item.flatMap(folder => folder.item);
+
+test('P1-R1 keeps all 48 non-Payment requests unchanged and adds exactly two Admin lock negatives', () => {
+  assert.equal(collection.item.length, 6);
+  assert.equal(requests.length, 50);
+  assert.equal(collection.item[0].item.length, 8);
+  const retained = requests.filter(item => !item.request.url.raw.endsWith('/admin/integrations/payment'));
+  assert.equal(retained.length, 48);
+  // Hash of the 48 original request objects at combined baseline f8df2c89.
+  assert.equal(crypto.createHash('sha256').update(JSON.stringify(retained)).digest('hex'),
+    '30e5467c9a984a7c813ba4ada9873942c8054d83e9553680445416ffffc25d18');
+  assert.equal(requests.filter(item => item.request.url.raw.endsWith('/admin/integrations/notifications')).length, 5);
+  assert.match(collection.info.description, /DEFERRED/);
+});
+
+test('Payment GET and PUT require Admin and empty 404; success, leaked bodies and JSON Content-Type fail', () => {
+  const locks = requests.filter(item => item.request.url.raw.endsWith('/admin/integrations/payment'));
+  assert.deepEqual(locks.map(item => item.request.method), ['GET', 'PUT']);
+  for (const item of locks) {
+    assert.equal(item.request.header.find(header => header.key === 'Authorization').value, 'Bearer {{admin_token}}');
+    const script = item.event.find(event => event.listen === 'test').script.exec.join('\n');
+    function run(status, body, contentType) {
+      const outcomes = [];
+      const pm = {
+        response: { to: { have: { status: expected => assert.equal(status, expected) } },
+          text: () => body, headers: { get: () => contentType } },
+        expect: value => ({ to: { eql: expected => assert.equal(value, expected) } }),
+        test: (_name, fn) => { try { fn(); outcomes.push(true); } catch { outcomes.push(false); } },
+      };
+      vm.runInNewContext(`(function () {\n${script}\n})();`, { pm }, { timeout: 1000 });
+      return outcomes;
+    }
+    assert.deepEqual(run(404, '', undefined), [true]);
+    assert.deepEqual(run(200, '', undefined), [false]);
+    assert.deepEqual(run(404, '{"success":true}', undefined), [false]);
+    assert.deepEqual(run(404, '', 'application/json'), [false]);
+  }
+  // Deliberately invalid update payload cannot mutate settings if the lock regresses.
+  assert.deepEqual(JSON.parse(locks[1].request.body.raw), {});
+});
 
 test('terms 503 remains a failed assertion without a second data dereference failure', () => {
   const request = requests.find(item => item.name === 'Accept reservation terms - capture accepted snapshot');

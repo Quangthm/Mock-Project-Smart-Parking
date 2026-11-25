@@ -20,7 +20,10 @@ public sealed record UpdatePaymentIntegrationRequest(
 /// <summary>
 /// Admin endpoints for managing the PayOS payment gateway integration.
 /// Credentials are stored isolated per mode and are never returned in clear text.
+/// GET/PUT management endpoints are deferred from the MVP under SPARK-340 P1-R1.
+/// Retain the actions and authorization metadata; Payment runtime dependencies remain active.
 /// </summary>
+[NonController]
 [ApiController]
 [Route("api/v1/admin/integrations/payment")]
 [Authorize(AuthenticationSchemes = "UserServiceJwt", Roles = "admin")]

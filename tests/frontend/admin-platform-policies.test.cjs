@@ -5,6 +5,17 @@ const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('../../FE/node_modules/typescript');
 
+// Client unit coverage below is retained for the deferred management code.
+// Release UI effects/navigation are exercised by spark340-integration-settings.test.tsx.
+test('retained Payment client surfaces an empty unavailable-route response without fake success or logout', async () => {
+  const f = fixture(() => response(404, null));
+  await assert.rejects(f.integrationApi.getPaymentIntegration(), error => error.status === 404);
+  await assert.rejects(f.integrationApi.updatePaymentIntegration({ mode: 'FIXTURE', baseUrl: 'http://localhost:5173' }), error => error.status === 404);
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(f.events, []);
+  assert.equal(f.storage.get('sp_access_token'), 'access-a');
+});
+
 /**
  * Same harness as auth-api.test.cjs / operator-provisioning.test.cjs: transpile the real TS
  * module to CommonJS and execute it in a fresh vm context with every import injected by name.

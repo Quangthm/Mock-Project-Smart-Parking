@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8c4d2f10-3a6b-4c7e-9d02-5f1a8b9c0d21",
     "name": "SPARK-340 Admin Platform Policies & Integrations (UAT)",
-    "description": "UAT for SPARK-340 / SPARK-370. Use the local stack, real Admin/Owner/Driver tokens, a published site policy, a driver-owned vehicle and a bookable slot. Use an isolated zero-deposit booking fixture or settle its sandbox order. Folder 04 derives the booking ID from the admission receipt for the reviewed terms. An explicit skip means no proof for that case. Store only sanitized evidence.",
+    "description": "UAT for SPARK-340 / SPARK-370. Use the local stack, real Admin/Owner/Driver tokens, a published site policy, a driver-owned vehicle and a bookable slot. Use an isolated zero-deposit booking fixture or settle its sandbox order. Folder 04 derives the booking ID from the admission receipt for the reviewed terms. An explicit skip means no proof for that case. Store only sanitized evidence. P1-R1 amendment: PayOS Admin management is DEFERRED. 58 historical requests minus 10 deferred Payment requests = 48 retained, plus 2 lock-negative requests = 50 active requests. Notification/policy/snapshot coverage is retained; DEFERRED is not PASS. Historical request names: Payment integration - Anonymous -> 401; Payment integration - Driver -> 403; Payment integration - Owner -> 403; Payment integration - Admin -> 200; Get payment integration - secrets masked; Switch to FIXTURE mode - success; Disallowed BaseUrl - 400 INVALID_PAYMENT_BASE_URL; Invalid mode - 400 VALIDATION_FAILED; Blank credential - 400 VALIDATION_FAILED; Configure SANDBOX credentials - masked (optional).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -144,154 +144,6 @@
                 "policies",
                 "operations",
                 "catalogue"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('admin is authorized with 200', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "  pm.expect(pm.response.json().success).to.eql(true);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Payment integration - Anonymous -> 401",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('anonymous is rejected with 401', function () {",
-                  "  pm.response.to.have.status(401);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Payment integration - Driver -> 403",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{driver_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('driver is forbidden with 403', function () {",
-                  "  pm.response.to.have.status(403);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Payment integration - Owner -> 403",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{owner_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('owner is forbidden with 403', function () {",
-                  "  pm.response.to.have.status(403);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Payment integration - Admin -> 200",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
               ]
             }
           },
@@ -1588,11 +1440,12 @@
       ]
     },
     {
-      "name": "02 - Payment Integration",
-      "description": "PayOS integration settings: secret masking, mode switching, base-url allowlist, credential validation, and optional SANDBOX credential proof. Never returns plaintext apiKey/checksumKey.",
+      "name": "02 - Payment Admin Deferred Lock",
+      "description": "P1-R1 PayOS-only: prior 10 Payment positive/RBAC cases are DEFERRED. These requests assert unavailable routing only; TestServer counters prove no settings/history/provider effects. PUT {} cannot save a valid configuration even if the lock regresses.",
       "item": [
         {
-          "name": "Get payment integration - secrets masked",
+          "name": "Payment Admin deferred - GET -> 404",
+          "description": "Admin token; normal pipeline without discovery-service header. No JSON success/configuration body is permitted.",
           "request": {
             "method": "GET",
             "header": [
@@ -1621,334 +1474,71 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status 200 and provider is PAYOS', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "  const paymentEnvelope = pm.response.json();",
-                  "  pm.expect(paymentEnvelope.data.provider).to.eql('PAYOS');",
-                  "});",
-                  "const paymentBody = pm.response.json();",
-                  "const paymentData = paymentBody.data;",
-                  "pm.test('credentials are reported as booleans, never raw values', function () {",
-                  "  pm.expect(typeof paymentData.apiKeyConfigured).to.eql('boolean');",
-                  "  pm.expect(typeof paymentData.checksumKeyConfigured).to.eql('boolean');",
-                  "  pm.expect(paymentData).to.not.have.property('apiKey');",
-                  "  pm.expect(paymentData).to.not.have.property('checksumKey');",
-                  "});",
-                  "pm.test('client id is masked', function () {",
-                  "  if (paymentData.clientIdMasked !== null) {",
-                  "    pm.expect(typeof paymentData.clientIdMasked).to.eql('string');",
-                  "    pm.expect(paymentData.clientIdMasked.indexOf('****')).to.eql(0);",
-                  "  }",
-                  "});",
-                  "pm.test('capabilities are declared', function () {",
-                  "  pm.expect(paymentData.capabilities.supportsWebhook).to.eql(true);",
-                  "  pm.expect(paymentData.capabilities.supportsVietQr).to.eql(true);",
-                  "});",
-                  "pm.test('response text carries no raw apiKey or checksumKey property', function () {",
-                  "  const paymentText = pm.response.text();",
-                  "  pm.expect(paymentText.indexOf('\"apiKey\"')).to.eql(-1);",
-                  "  pm.expect(paymentText.indexOf('\"checksumKey\"')).to.eql(-1);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Switch to FIXTURE mode - success",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"FIXTURE\",\n  \"baseUrl\": \"http://localhost:5173\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('fixture mode is accepted', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "  const fixtureBody = pm.response.json();",
-                  "  pm.expect(fixtureBody.success).to.eql(true);",
-                  "  pm.expect(fixtureBody.data.mode).to.eql('FIXTURE');",
-                  "  pm.expect(fixtureBody.data.isConfigured).to.eql(true);",
-                  "  pm.expect(fixtureBody.data.status).to.eql('HEALTHY');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Disallowed BaseUrl - 400 INVALID_PAYMENT_BASE_URL",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"SANDBOX\",\n  \"baseUrl\": \"https://evil.example.com\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('off-allowlist base url is rejected', function () {",
-                  "  pm.response.to.have.status(400);",
-                  "  const badUrlBody = pm.response.json();",
-                  "  pm.expect(badUrlBody.success).to.eql(false);",
-                  "  pm.expect(badUrlBody.code).to.eql('INVALID_PAYMENT_BASE_URL');",
-                  "  pm.expect(badUrlBody.errorCode).to.eql('INVALID_PAYMENT_BASE_URL');",
-                  "  pm.expect(badUrlBody.message).to.be.a('string');",
-                  "  pm.expect(badUrlBody.traceId).to.exist;",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Invalid mode - 400 VALIDATION_FAILED",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"BOGUS\",\n  \"baseUrl\": \"https://api-merchant.payos.vn\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('unknown mode is rejected', function () {",
-                  "  pm.response.to.have.status(400);",
-                  "  const invalidModeBody = pm.response.json();",
-                  "  pm.expect(invalidModeBody.code).to.eql('VALIDATION_FAILED');",
-                  "  pm.expect(invalidModeBody.errorCode).to.eql('VALIDATION_FAILED');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Blank credential - 400 VALIDATION_FAILED",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"SANDBOX\",\n  \"baseUrl\": \"https://api-merchant.payos.vn\",\n  \"apiKey\": \"   \"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('blank credential is rejected', function () {",
-                  "  pm.response.to.have.status(400);",
-                  "  const blankBody = pm.response.json();",
-                  "  pm.expect(blankBody.code).to.eql('VALIDATION_FAILED');",
-                  "  pm.expect(blankBody.errors).to.be.an('array');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Configure SANDBOX credentials - masked (optional)",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
-              "host": [
-                "{{payment_base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "integrations",
-                "payment"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"SANDBOX\",\n  \"baseUrl\": \"https://api-merchant.payos.vn\",\n  \"clientId\": \"{{payment_test_client_id}}\",\n  \"apiKey\": \"{{payment_test_api_key}}\",\n  \"checksumKey\": \"{{payment_test_checksum_key}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const sandboxClientId = pm.environment.get('payment_test_client_id');",
-                  "const sandboxApiKey = pm.environment.get('payment_test_api_key');",
-                  "const sandboxChecksumKey = pm.environment.get('payment_test_checksum_key');",
-                  "if (!sandboxClientId || !sandboxApiKey || !sandboxChecksumKey) {",
-                  "  pm.test.skip('SKIPPED: payment_test_client_id/payment_test_api_key/payment_test_checksum_key are blank; no SANDBOX credentials supplied', function () {});",
-                  "  return;",
-                  "}",
-                  "pm.test('sandbox credential save returns 200', function () {",
-                  "  pm.response.to.have.status(200);",
-                  "});",
-                  "const sandboxBody = pm.response.json();",
-                  "const sandboxData = sandboxBody && sandboxBody.data;",
-                  "pm.test('sandbox credentials are configured and masked', function () {",
-                  "  pm.expect(sandboxData).to.exist;",
-                  "  pm.expect(sandboxData.mode).to.eql('SANDBOX');",
-                  "  pm.expect(sandboxData.apiKeyConfigured).to.eql(true);",
-                  "  pm.expect(sandboxData.checksumKeyConfigured).to.eql(true);",
-                  "  pm.expect(sandboxData).to.not.have.property('apiKey');",
-                  "  pm.expect(sandboxData).to.not.have.property('checksumKey');",
-                  "});",
-                  "pm.test('no supplied plaintext credential is echoed', function () {",
-                  "  const sandboxText = pm.response.text();",
-                  "  pm.expect(sandboxText.indexOf(sandboxApiKey)).to.eql(-1);",
-                  "  pm.expect(sandboxText.indexOf(sandboxChecksumKey)).to.eql(-1);",
-                  "  pm.expect(sandboxText.indexOf(sandboxClientId)).to.eql(-1);",
+                  "pm.test(\"Payment Admin route is unavailable\", function () {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.text()).to.eql(\"\");",
+                  "  pm.expect(pm.response.headers.get(\"Content-Type\")).to.eql(undefined);",
                   "});"
                 ]
               }
             }
           ],
-          "description": "SKIPPED when any payment_test_* environment variable is blank. When credentials are supplied, a 200 response, apiKeyConfigured=true, and no plaintext echo are required; 400 is never accepted."
+          "response": []
+        },
+        {
+          "name": "Payment Admin deferred - PUT -> 404",
+          "description": "Admin token; normal pipeline without discovery-service header. No JSON success/configuration body is permitted.",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{payment_base_url}}/api/v1/admin/integrations/payment",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "integrations",
+                "payment"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Payment Admin route is unavailable\", function () {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.text()).to.eql(\"\");",
+                  "  pm.expect(pm.response.headers.get(\"Content-Type\")).to.eql(undefined);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
         }
       ]
     },

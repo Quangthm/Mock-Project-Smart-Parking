@@ -1,6 +1,15 @@
 # SPARK-340 / SPARK-370 — P4 Manual & Automated Verification Guide
 
-> F6–F8 update17/11: current collection has58 requests, adding4 negative create/update cases for explicit platform arrivalLateToleranceEnabled true/false. Historical Newman54-request results remain historical, not a run of this revision. Before upgrading an existing Payment stack, follow [approved DDL/repair guide](../reports/SPARK-340-report.md#rollout); the dedicated binding table must exist before the new service binary runs. DDL/import have not been applied to the user's running DB by the implementation agent.
+> **P1-R1 amendment — 25/11/2026:** PayOS-only Admin management is DEFERRED. `[NonController]` removes GET/PUT `/api/v1/admin/integrations/payment` from default MVC discovery. Normal requests return404 with an empty body/no Content-Type; permitted CORS preflight may204 and `X-Discovery-Service-Key` on this path causes existing middleware403. Auth/JWKS behavior is unchanged.
+>
+> FE displays **Payment configuration deferred** and **PayOS configuration is unavailable in this MVP.** No Payment form/load/save/status is active. Notification inspection/delivery/auth/audit, Policy APIs and all Payment runtime/settings/history/bindings/keys are retained. Original v1.6 approval remains historical.
+>
+> Inventory: **58 historical −10 deferred Payment positive/RBAC =48 retained +2 lock negatives =50 active requests**. DEFERRED is not PASS/SKIP. Historical results below are not verification of this revision. U19/SPARK-273, recipient correctness and legacy binding reconciliation remain open. The v1.6 enabled Payment-management scenarios below are historical and superseded for MVP by this amendment.
+>
+> This guide grants no runtime window. Docker/DDL/restart/operator steps below require a separately assigned target/window; do not run them during offline QA. Postman alone cannot observe no-history/no-provider effects: use isolated TestServer counters. Keep payment_test_* blank. Do not drop volumes, import bindings or use an app DB as a test fixture.
+
+
+> F6–F8 update17/11: historical collection had58 requests, adding4 negative create/update cases for explicit platform arrivalLateToleranceEnabled true/false. Historical Newman54-request results remain historical, not a run of this revision. Before upgrading an existing Payment stack, follow [approved DDL/repair guide](../reports/SPARK-340-report.md#rollout); the dedicated binding table must exist before the new service binary runs. DDL/import have not been applied to the user's running DB by the implementation agent.
 
 **Epic:** SPARK-340 — US-A02 "Admin: Configure platform policy bounds and authorized integration settings"
 **Phase 4 task:** SPARK-370 — QA / Test Automation & Latent Defect Verification
@@ -151,7 +160,7 @@ Set `SMARTPARK_DRIVER_PASSWORD` in your shell to the locally seeded driver passw
 2. Fill in `admin_token`, `owner_token`, `driver_token` from §3.
 3. Confirm `tenant_id`, `site_id`, `vehicle_id`, `slot_id` point at an existing seeded tenant/site/vehicle/slot in your local DB. The collection captures revision ids, draft ids, `expectedUpdatedAt`, tenant/site echoes and scheduled timestamps from responses; it never hardcodes empty vehicle/slot ids.
 4. Supply valid driver-owned vehicle/slot fixtures for the linked terms → receipt → booking flow. A separate existing booking or a revision read does not prove U19. If the commercial producer returns503, record FAIL/BLOCKED and downstream NOT RUN.
-5. Leave `payment_test_client_id`, `payment_test_api_key`, `payment_test_checksum_key` blank unless you are exercising the optional SANDBOX-credential request. When any of them is blank the request SKIPs; when supplied, the collection requires `200`, `apiKeyConfigured=true`, and no plaintext echo (a `400` never passes).
+5. Historical Payment credential UAT is DEFERRED. Leave all payment_test_* variables blank; active MVP requests do not configure credentials or change mode.
 
 Import both JSON files into Postman, or pass the env to Newman directly (§7).
 
@@ -167,7 +176,7 @@ dotnet test  SmartParking.slnx --nologo
 Expected:
 
 - Build: **0 errors**; record actual warnings and their causes.
-- Test: **0 failed**; record actual pass/skip totals. Latest independent source review recorded1190 passed /114 skipped; these are historical evidence, not the expected output of every future checkout.
+- Test: **0 failed**; record actual pass/skip totals. Historical independent source review recorded1190 passed /114 skipped; these are historical evidence, not the expected output of every future checkout.
 
 Targeted runs for the four clusters:
 
@@ -201,7 +210,7 @@ node --test tests/frontend/*.test.cjs
 Expected:
 
 - Build: exit code **0**, `FE/dist/index.html` regenerated.
-- Tests: **261 passed / 0 failed**.
+- Historical FE snapshot: **261 passed / 0 failed**. Run this checkout and report its actual totals; do not use261 as an expected result.
 
 ---
 
@@ -224,13 +233,13 @@ Useful variants:
 - Override a value without editing the env: `--env-var "site_id=<guid>"`
 - Stop on first failure: `--bail`
 
-### Per-folder scope (58 requests total; defined is not executed/passed)
+### Per-folder scope (50 active requests; defined is not executed/passed)
 
 | Folder | Requests | Key expectations |
 |---|---|---|
-| 00 - RBAC Matrix | 12 | Anonymous 401, Driver 403, Owner 403, Admin 200 for operations catalogue, payment GET, notifications GET |
+| 00 - RBAC Matrix | 8 | Anonymous 401, Driver 403, Owner 403, Admin 200 for operations catalogue and notifications GET; Payment RBAC acceptance is DEFERRED |
 | 01 - Operation Policies Lifecycle | 18 | Typed14-key catalogue with actual null/configured bounds; draft/history/pagination/by-id, valid optimistic update and stale-token409, activation/effective provenance. Four F8 negative writes reject site-only enablement true/false on both create and update with400 VALIDATION_FAILED and the correct field. |
-| 02 - Payment Integration | 6 | GET returns `apiKeyConfigured`/`checksumKeyConfigured` booleans, no raw `apiKey`/`checksumKey`, masked `clientIdMasked`, capabilities; FIXTURE switch 200 `HEALTHY`; disallowed BaseUrl 400 `INVALID_PAYMENT_BASE_URL`; invalid mode 400 `VALIDATION_FAILED`; blank credential 400; SANDBOX credentials SKIP when `payment_test_*` is blank, otherwise require 200 + configured flags + no plaintext echo |
+| 02 - Payment Admin Deferred Lock | 2 | Admin GET/PUT require empty404 and absent Content-Type. PUT uses invalid empty payload to prevent a valid save if the lock regresses. TestServer counters, not Postman alone, prove no settings/history/provider effects. |
 | 03 - Notification Integration | 1 | Exactly 4 channel enums `EMAIL`, `SMS`, `PUSH`, `IN_APP` mapped to `LOCAL_EMAIL_CAPTURE_FIXTURE`, `LOCAL_SMS_FIXTURE`, `LOCAL_PUSH_FIXTURE`, `IN_APP_FIXTURE`, all `status=ACTIVE`, `isReady=true` |
 | 04 - Immutable Operational Policy Snapshot | 10 | Linked reviewed terms → durable receipt → same booking before/after activation, plus separate comparison of raw historical platform settings. Terms503 leaves the chain FAIL/BLOCKED and downstream NOT RUN. Source/UnitOfWork guards and policy revision reads do not replace accepted-booking snapshot evidence. U19 remains a SPARK-273 dependency. |
 | 05 - Scheduling & Write RBAC | 11 | Future `effectiveFrom` activation returns `SCHEDULED` and the SCHEDULED listing contains it; a second draft activated at the same timestamp is rejected with 409 `OVERLAPPING_POLICY_INTERVAL`; Owner and Driver receive 403 on POST draft, PUT draft and activate |
@@ -241,7 +250,7 @@ The collection reports prerequisite gaps with `pm.test.skip` instead of false pa
 
 - SITE provenance SKIPs when `tenant_id`/`site_id` are blank or the site has no active policy revision (`404 POLICY_NOT_FOUND`).
 - The optional second SCHEDULED sanity check in folder 01 SKIPs when no scheduled revision exists yet; folder 05 creates one and proves the listing is non-empty.
-- SANDBOX credential proof SKIPs when any `payment_test_*` variable is blank.
+- Historical SANDBOX credential management acceptance is DEFERRED; it is absent from the active collection, not counted as a skip/pass.
 - Snapshot terms SKIPs when `vehicle_id`/`site_id`/`slot_id` are blank; booking re-reads SKIP when `reservation_id` is blank; the accepted-revision re-read SKIPs when no accepted revision was captured.
 
 ---
@@ -255,7 +264,7 @@ If Docker services cannot be started, the honest evidence path is:
    ```powershell
    node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('docs/04-testing/postman/SPARK-340-Admin-Platform-Policies.postman_collection.json','utf8'));let r=0,e=[];function w(i){for(const x of i){if(x.item)w(x.item);else{r++;for(const s of (x.event||[]))if(s.script)try{new Function(s.script.exec.join('\n'))}catch(err){e.push(x.name+': '+err.message)}}}}w(c.item);console.log('folders',c.item.length,'requests',r);if(e.length){console.log(e.join('\n'));process.exit(1)}console.log('ALL SCRIPTS SYNTAX OK')"
    ```
-   Expected for the current revision: `folders 6 requests 58`, then `ALL SCRIPTS SYNTAX OK`. Record actual script/environment counts from the checked-out files; don't copy historical51/54-request execution totals.
+   Expected for the current revision: `folders 6 requests 50`, then `ALL SCRIPTS SYNTAX OK`. Record actual script/environment counts from the checked-out files; don't copy historical51/54-request execution totals.
 3. Do **not** overwrite the recorded SPARK-370 execution with a fabricated pass; record the stack-unavailable limitation in the session log and keep the existing sanitized evidence intact.
 
 Do **not** record a Newman pass/fail that was not actually executed.
@@ -264,13 +273,12 @@ Do **not** record a Newman pass/fail that was not actually executed.
 
 ## 9. Manual verification checklists (four latent-defect clusters)
 
-### Cluster 1 — Payment persistence & Postgres schema compatibility
+### Cluster 1 — Retained Payment persistence and unavailable Admin surface
 
-- [ ] `PUT /api/v1/admin/integrations/payment` with SANDBOX credentials returns 200 and `apiKeyConfigured=true`.
-- [ ] Restart `payment-service`; `GET` the same endpoint still returns the saved mode/baseUrl/credentials (hydration round-trip).
-- [ ] In `payment-db`, confirm the appended revision conforms to the CHECK constraints:
-  `policy_type = 'TARIFF'`, `scope_type = 'GLOBAL'` (not `PAYMENT_INTEGRATION` / `PLATFORM`).
-- [ ] Confirm no plaintext credential appears in `policy_values_json` (Data Protection encrypted) and none is echoed by the API.
+- [ ] Admin GET/PUT receive empty404 in the normal pipeline; no configuration is read or changed through this surface.
+- [ ] Offline settings/history/hydration/encryption/binding regressions remain in scope; report actual results.
+- [ ] Previous Admin credential PUT/restart/GET durability acceptance is DEFERRED. It is not replaced by a fake success or counted PASS because the screen is locked.
+- [ ] Runtime durability/DB/keys checks require a separately authorized target/window. Do not provision credentials or mutate shared storage through this guide's historical setup steps.
 
 ### Cluster 2 — Webhook security & order-key invariants
 
@@ -286,10 +294,11 @@ Do **not** record a Newman pass/fail that was not actually executed.
 - [ ] Opposing owner-publish and admin-activation do not both succeed; the loser gets a conflict (GiST exclusion / compatibility check).
 - [ ] A legacy site `DRIVER_REALLOCATION_REQUEST_LIMIT = 2` does not block a normal platform activation.
 
-### Cluster 4 — Contract unification
+### Cluster 4 — P1-R1 scoped contract
 
-- [ ] Every admin payment error envelope contains **both** `code` and `errorCode` with the same value, plus `success=false`, `message`, `traceId`, `errors`, `timestamp`.
-- [ ] `INVALID_PAYMENT_BASE_URL` is present as both `code` and `errorCode` on the disallowed-BaseUrl case.
+- [ ] Payment Admin404 has an empty body/no Content-Type in the normal pipeline; do not expect its old JSON error codes.
+- [ ] CORS preflight204 and discovery-service-header403 retain existing middleware behavior; keep authentication enabled.
+- [ ] Active Notification/Policy contracts remain unchanged. Historical Payment positive/error-envelope HTTP acceptance is DEFERRED; direct handler/error-mapping unit coverage remains retained.
 
 ### Immutable snapshot
 
@@ -331,8 +340,8 @@ Do **not** record a Newman pass/fail that was not actually executed.
 - [ ] `dotnet build` 0 errors
 - [ ] `dotnet test` 0 failed; actual pass/fail/skip counts recorded
 - [ ] `npm --prefix FE run build` exit 0
-- [ ] `node --test tests/frontend/*.test.cjs` 261/261
-- [ ] Postman collection + environment valid (current collection:6 folders /58 requests; record actual variable count)
+- [ ] `node --test tests/frontend/*.test.cjs`: record actual pass/fail/skip/total, not historical261
+- [ ] Postman collection + environment valid (current collection:6 folders /50 requests; record actual variable count)
 - [ ] Newman executed **or** limitation documented in evidence + session log
 - [ ] Schema Freeze respected except the explicitly approved additive Payment binding-table exception; shared-target DDL/import requires its own authorized target/window
 - [ ] No plaintext apiKey/checksumKey anywhere in artifacts/logs

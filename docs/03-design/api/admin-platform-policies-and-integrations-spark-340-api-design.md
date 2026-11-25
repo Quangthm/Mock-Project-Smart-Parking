@@ -12,6 +12,23 @@
 
 ---
 
+## Amendment P1-R1 — PayOS-only MVP deferral
+
+**Release amendment, 25/11/2026:** P1-R1 design and CP1/CP2 source review were ACCEPTED by the Tech Lead. The v1.6 approval and specifications below remain historical design evidence; this amendment governs Payment Admin availability in the scoped MVP. Verification results are reported separately, not implied by design acceptance.
+
+| Surface | Scoped MVP contract |
+| --- | --- |
+| `GET/PUT /api/v1/admin/integrations/payment` | Deferred. `[NonController]` excludes `AdminPaymentIntegrationController` from default MVC controller/action/endpoint/ApiExplorer discovery. Normal requests, including valid Admin JWTs and malformed PUT bodies, receive route-unavailable **404 with an empty body and no Content-Type**, rather than the JSON error envelope described for active endpoints below. No Admin query/command dispatch, settings read/write, version/history allocation or PayOS HTTP is caused by these requests. |
+| Admin PayOS UI | Static **Payment configuration deferred** / **PayOS configuration is unavailable in this MVP.** No Payment GET/PUT, credential/mode/BaseUrl form, Save, Retry or fabricated health status. |
+| Notification inspection | `GET /api/v1/admin/integrations/notifications` and its read-only card remain active with existing authentication, loading/error/retry/channel ordering. Notification delivery/auth/audit are retained. |
+| Policy and Payment runtime | All Policy APIs, F8, Owner/Admin invariants, accepted snapshots, Payment settings/history/hydration, checkout/webhook/query/cancel, redaction/signatures/idempotency, signing bindings/table and DataProtection keys remain retained. |
+
+The 404 statement describes the normal pipeline, not a bypass of middleware: an allowed CORS preflight may return 204; `X-Discovery-Service-Key` sent to a non-discovery path is rejected by the existing discovery middleware with 403 `SERVICE_SCOPE_DENIED`; authentication/JWKS and transport failures retain their own behavior. Do not disable shared authentication or add global error middleware to force a uniform status/body. No feature flag or ON profile is introduced. Re-enablement needs a separately reviewed source/release change.
+
+The collection inventory changes from 58 historical requests to **48 retained requests plus 2 Admin GET/PUT lock negatives = 50 active requests**. Ten historical Payment positive/RBAC cases are **DEFERRED**, not PASS/SKIP. The two new requests verify HTTP availability only; isolated TestServer counters establish the no-settings/history/provider-effects guarantee. Notification, Operation, mixed RBAC and four F8 cases remain unchanged.
+
+Secret protection and least privilege remain mandatory for retained code. Recipient routing, the legacy MISSING_BINDING reconciliation, U19/SPARK-273 and tester acceptance remain separate dependencies. Deferral does not establish real multi-Owner recipient correctness or real-money readiness.
+
 ## 1. Overview & Architectural Context
 
 Tài liệu này là **Hợp đồng Kỹ thuật Duy nhất (Single Source of Truth - SSOT)** cho Epic **SPARK-340 [US-A02]**, quy định chi tiết 9 endpoints giao diện lập trình ứng dụng (API Design & Contract) hoàn chỉnh cho 3 nhóm tính năng:
