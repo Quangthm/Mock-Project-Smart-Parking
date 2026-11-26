@@ -3,11 +3,11 @@
 | Metadata | Value |
 |---|---|
 | Status | Implementation contract; feature decisions approved through [6 November decision](../../05-project-management/decision-log/2026-11-06-cloudinary-foundation-and-partner-policy.md) and [explicit follow-ups](../../05-project-management/decision-log/2026-11-06-user-media-cleanup-deferral.md) |
-| Contract version / date | 1 / 2026-11-07 |
+| Contract version / date | 1.1 / 2026-11-27 (user-approved SPARK-392 vehicle admission amendment) |
 | Owning service | UserService |
-| Jira implementation / integration | SPARK-373 / SPARK-243; no external Jira update performed |
-| Requirements baseline | SRS v1.1 with approved 6 November media amendment |
-| Implementation | Working tree on `feature/SPARK-373-cloudinary-media-foundation`; uncommitted; evidence in task handoff |
+| Jira implementation / integration | SPARK-373 / SPARK-243 / SPARK-392 |
+| Requirements baseline | SRS v1.1 with approved 6 November media foundation and 27 November vehicle admission amendment |
+| Implementation | Media foundation in the SPARK-273 merge baseline `474c605af`. Vehicle admission amendment on `fix/SPARK-392-vehicle-image-upload-compression`. [Acceptance handoff](../../04-testing/postman/SPARK-392-tester-handoff.md) |
 
 ## Overview
 
@@ -48,7 +48,7 @@ draftIntentId=00000000-0000-4000-8000-000000000001
 
 | Field | Location / type | Required / nullable | Meaning |
 |---|---|---|---|
-| `file` | multipart binary | Required | Nonempty, at most 5,242,880 bytes inclusive; actual JPEG/PNG/WebP; maximum 8,192 pixels per side and 25,000,000 total; no animated/multiframe content |
+| `file` | multipart binary | Required | Nonempty, vehicle up to 1,048,576 bytes inclusive or avatar up to 5,242,880 bytes inclusive; actual JPEG/PNG/WebP; maximum 8,192 pixels per side and 25,000,000 total; no animated/multiframe content |
 | `Idempotency-Key` | header string | Required | 1–128 ASCII letters/digits or `._:-`; scoped to creator Account and purpose; fingerprint includes bytes and target/draft intent |
 | `vehicleId` / `draftIntentId` | multipart UUID | Exactly one for vehicles, neither for avatar | Target is checked against bound Account; draft intent grants no access to another asset |
 | `assetId` | attach JSON UUID | Required, nonempty | Server-issued local asset identity; must match owner/purpose/state/target |
@@ -58,7 +58,9 @@ draftIntentId=00000000-0000-4000-8000-000000000001
 {"assetId":"00000000-0000-4000-8000-000000000002","expectedAssetId":null}
 ```
 
-Filename and multipart MIME are untrusted; decoded content determines MIME. ASP.NET form/temp buffering is bounded and request-owned; bytes passed inward contain no ASP.NET upload object. The whole multipart request has 64 KiB overhead allowance beyond the image size limit.
+Filename and multipart MIME are untrusted; decoded content determines MIME. ASP.NET form/temp buffering is bounded and request-owned; bytes passed inward contain no ASP.NET upload object. The whole multipart request permits 1,114,112 bytes for a vehicle or 5,308,416 for an avatar, including 65,536 bytes of overhead beyond the file limit. Ordinary requests permit 65,536 bytes.
+
+Under the user-approved SPARK-392 amendment, the Driver may select a still photo up to 5 MiB. The frontend retains the final binary file (up to 1 MiB) and retries with the same bytes, key and binding. UserService inspects, fingerprints and sends these exact bytes to authenticated provider storage. Existing owned images up to 5 MiB remain readable during their applicable retention period.
 
 ### Response sample
 

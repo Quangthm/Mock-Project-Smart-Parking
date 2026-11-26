@@ -62,6 +62,95 @@ public sealed class MediaAssetTests
         Assert.Throws<AuthException>(() => inspector.Inspect(encoded.ToArray(), default));
     }
 
+    [Theory]
+    [InlineData("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")]
+    [InlineData("UklGRpAAAABXRUJQVlA4WAoAAAACAAAAAAAAAAAAQU5JTQYAAAAAAAAAAABBTk1GLgAAAAAAAAAAAAAAAAAAAGQAAABWUDggFgAAADABAJ0BKgEAAQAOwP4lpAADcAAAAABBTk1GLgAAAAAAAAAAAAAAAAAAAGQAAABWUDggFgAAADABAJ0BKgEAAQAOwP4lpAADcAAAAAA=")]
+    public void StillGifAndAnimatedWebpAreRejected(string encoded)
+    {
+        var bytes = Convert.FromBase64String(encoded);
+        using var input = new MemoryStream(bytes);
+        using var codec = SKCodec.Create(input);
+        Assert.NotNull(codec);
+        Assert.True(codec.EncodedFormat == SKEncodedImageFormat.Gif || codec.FrameCount == 2);
+        Assert.Equal("MEDIA_INVALID_IMAGE", Assert.Throws<AuthException>(() =>
+            new SkiaImageInspector().Inspect(bytes, default)).Code);
+    }
+
+    // JPEG comment segments give exact lengths while preserving decodable image data.
+    internal static byte[] JpegOfSize(int length)
+    {
+        var jpeg = MediaTestSupport.Image(SKEncodedImageFormat.Jpeg);
+        var output = new byte[length];
+        jpeg.AsSpan(0, 2).CopyTo(output);
+        var offset = 2;
+        var remaining = length - jpeg.Length;
+        while (remaining > 0)
+        {
+            var segment = Math.Min(remaining, 65_537);
+            if (remaining > segment && remaining - segment < 4) segment -= 4;
+            output[offset] = 0xff;
+            output[offset + 1] = 0xfe;
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(output.AsSpan(offset + 2), checked((ushort)(segment - 2)));
+            remaining -= segment;
+            offset += segment;
+        }
+        jpeg.AsSpan(2).CopyTo(output.AsSpan(offset));
+        return output;
+    }
+
+    [PostgresFact, Trait("Category", "Postgres")]
+    public async Task VehicleBoundariesRejectBeforeAdmissionAndHistoricalAttachmentsRemainReadable()
+    {
+        await using var fixture = await UserServiceDatabaseFixture.CreateAsync();
+        var driver = Driver("vehicle-boundary@example.test");
+        var vehicle = new RegisteredVehicle { Id = Guid.NewGuid(), AccountId = driver.Accounts.Single().Id,
+            RawPlate = "51A12345", CanonicalPlate = "51A12345", VehicleType = "CAR",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow };
+        var provider = new FakeMediaProvider();
+        var historical = MediaTestSupport.Asset(driver, vehicleId: vehicle.Id);
+        var large = JpegOfSize(1_048_577);
+        var facts = new SkiaImageInspector().Inspect(large, default);
+        historical.MimeType = facts.MimeType;
+        historical.ByteCount = facts.ByteCount;
+        historical.Sha256 = facts.Sha256;
+        var lease = Guid.NewGuid();
+        historical.TryClaim(DateTimeOffset.UtcNow, lease);
+        historical.Complete(lease, Guid.NewGuid().ToString("N"), "1", DateTimeOffset.UtcNow);
+        provider.Bytes[historical.Id] = large;
+        await using (var db = fixture.Open())
+        {
+            db.Users.Add(driver);
+            db.RegisteredVehicles.Add(vehicle);
+            await db.SaveChangesAsync();
+            db.MediaAssets.Add(historical);
+            await db.SaveChangesAsync();
+            historical.Attach(vehicle.Id, DateTimeOffset.UtcNow);
+            vehicle.AttachImage(historical.Id, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+        await using var app = await fixture.StartHostAsync(configure: builder => MediaTestSupport.Configure(builder, provider));
+        using var client = app.GetTestClient();
+        await LoginAsync(client, driver.Email!);
+        Assert.Equal(large, await client.GetByteArrayAsync($"/api/media/images/{historical.Id}/content"));
+        foreach (var size in new[] { 4096, 65_537, 1_048_576 })
+        {
+            var image = JpegOfSize(size);
+            var draft = Guid.NewGuid();
+            var key = draft.ToString();
+            var upload = await UploadAsync(client, image, key, draft: draft);
+            Assert.Equal(HttpStatusCode.OK, upload.StatusCode);
+            var id = await AssetId(upload);
+            Assert.Equal(image, provider.Bytes[id]);
+            Assert.Equal(id, await AssetId(await UploadAsync(client, image, key, draft: draft)));
+        }
+        var rejected = await UploadAsync(client, large, "too-large", draft: Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Equal("MEDIA_INVALID_IMAGE", (await rejected.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        Assert.Equal(3, provider.Uploads);
+        await using var check = fixture.Open();
+        Assert.Equal(4, await check.MediaAssets.CountAsync());
+    }
+
     [PostgresFact, Trait("Category", "Postgres")]
     public async Task HttpByteBoundariesFormatsDisabledAndProviderFailureUseSafeEnvelope()
     {
@@ -74,7 +163,7 @@ public sealed class MediaAssetTests
             using var client = app.GetTestClient(); await LoginAsync(client, driver.Email!);
             foreach (var format in new[] { SKEncodedImageFormat.Jpeg, SKEncodedImageFormat.Png, SKEncodedImageFormat.Webp })
                 Assert.Equal(HttpStatusCode.OK, (await UploadAsync(client, MediaTestSupport.Image(format), format.ToString(), avatar: true)).StatusCode);
-            var exact = new byte[UploadImageValidator.MaximumBytes]; MediaTestSupport.Image().CopyTo(exact, 0);
+            var exact = JpegOfSize(UploadImageValidator.MaximumBytes);
             var accepted = await UploadAsync(client, exact, "exact", avatar: true);
             Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
             var id = await AssetId(accepted);

@@ -4,7 +4,7 @@
 |---|---|
 | Story / tasks | US-D09 / SPARK-243; SPARK-224 backend, SPARK-225 frontend, SPARK-226 design, SPARK-227 acceptance |
 | Owner | UserService |
-| Revision | 8 November 2026 |
+| Revision | 8 November 2026, with 27 November SPARK-392 upload limit amendment |
 | Status | Implemented in the working tree; architecture rewritten to MediatR/repositories/UoW; prior PostgreSQL results are historical; current verification recorded separately |
 | Baseline | `917975c56b5008d472bd3372cf2555aee14be87d`; changes uncommitted |
 | Traceability | FR-VEH-01–04, BR-VEH-01/02, UC-VEH-01/02; [vehicle requirements](../../01-requirements/srs/modules/01-identity-access.md), [use cases](../../01-requirements/use-cases/uc-veh-01.md), [media](user-images-api-design.md) |
@@ -39,7 +39,7 @@ No list pagination or client-supplied Account filter is currently exposed. Priva
 |---|---|
 | `plate` | Required string, maximum 30 characters; preserve case, whitespace and separators exactly |
 | `vehicleType` | Required CAR or MOTORCYCLE |
-| `imageAssetId` | Required nonempty UUID, backend-admitted owned vehicle-purpose asset |
+| `imageAssetId` | Required nonempty UUID, ready owned vehicle-purpose asset. Under SPARK-392 a new upload accepts up to 1 MiB of binary image data after frontend selection up to 5 MiB |
 | `expectedImageAssetId` | Nullable; omitted means null. Existing reference expected when replacing an image |
 
 Unknown JSON fields are ignored. Forged `accountId`, `canonicalPlate`, `status`, IDs and timestamps cannot change server-owned fields. PATCH requires the same field set; it is not a partial JSON patch. Raw-format edits that normalize to the same identity may succeed. Changing canonical plate/category is withheld with `VEHICLE_DEPENDENCY_UNAVAILABLE` until race-safe reservation/visit/pass coordination exists. A collision with another active vehicle returns `PLATE_EXISTS` without mutation.

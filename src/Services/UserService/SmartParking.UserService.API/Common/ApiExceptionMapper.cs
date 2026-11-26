@@ -4,9 +4,6 @@ using UserService.Application.Common.Models.Exceptions;
 
 namespace UserService.API.Common;
 
-/// <summary>A public response plus the diagnostic classification; neither leaks into the JSON body.</summary>
-public readonly record struct ErrorHandlingResult(ApiResponse Response, bool IsUnexpected = false);
-
 /// <summary>
 /// Immutable, exact-runtime-type dispatch. Subclasses need an explicit registration;
 /// an unregistered type (including database errors) receives the safe 500 fallback.
@@ -47,14 +44,20 @@ public sealed class ApiExceptionMapper
             [typeof(AuthException)] = exception => authenticationErrors.TryGetValue(
                 (((AuthException)exception).Code, ((AuthException)exception).StatusCode), out var result)
                 ? result : Unexpected(),
-            [typeof(BadHttpRequestException)] = exception =>
-                ApiResponseFactory.TryForStatus(((BadHttpRequestException)exception).StatusCode, out var response)
-                    ? new(response) : Unexpected(),
+            [typeof(BadHttpRequestException)] = MapBadRequest,
+            // Kestrel 10 still throws this subtype for a streamed request over its limit.
+#pragma warning disable CS0618
+            [typeof(Microsoft.AspNetCore.Server.Kestrel.Core.BadHttpRequestException)] = MapBadRequest,
+#pragma warning restore CS0618
             [typeof(ProfileAccessConflictException)] = _ => new(ApiResponseFactory.Error(
                 "PROFILE_ACCESS_CONFLICT", "Profile access changed or is busy. Retry the request.",
                 StatusCodes.Status409Conflict))
         });
     }
+
+    private static ErrorHandlingResult MapBadRequest(Exception exception) =>
+        ApiResponseFactory.TryForStatus(((BadHttpRequestException)exception).StatusCode, out var response)
+            ? new(response) : Unexpected();
 
     private static FrozenDictionary<(string Code, int Status), ErrorHandlingResult> CreateAuthenticationErrors()
     {

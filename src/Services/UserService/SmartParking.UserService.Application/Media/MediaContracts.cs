@@ -1,5 +1,4 @@
 using MediatR;
-using FluentValidation;
 using SmartParking.UserService.Domain.Entities;
 
 namespace UserService.Application.Media;
@@ -15,8 +14,6 @@ public interface IMediaProvider
     Task<ProviderImage> UploadAsync(MediaAsset asset, byte[] content, CancellationToken ct);
     Task<Stream> OpenAsync(MediaAsset asset, CancellationToken ct);
 }
-public sealed record UploadImageCommand(string Purpose, byte[] Content, string IdempotencyKey,
-    Guid? VehicleId, Guid? DraftIntentId) : IRequest<MediaAssetResponse>;
 public sealed record GetImageQuery(Guid AssetId) : IRequest<MediaContent>;
 public sealed record GetImageStatusQuery(Guid AssetId) : IRequest<MediaAssetResponse>;
 public sealed record AttachImageCommand(string Purpose, Guid? VehicleId, Guid AssetId, Guid? ExpectedAssetId) : IRequest<MediaAssetResponse>;
@@ -30,18 +27,3 @@ public sealed record MediaAssetResponse(Guid AssetId, string State, DateTimeOffs
         $"/api/media/images/{asset.Id}", asset.RecoveryCode);
 }
 public sealed record MediaContent(Stream Stream, string MimeType);
-public sealed class UploadImageValidator : AbstractValidator<UploadImageCommand>
-{
-    public const int MaximumBytes = 5 * 1024 * 1024;
-    public UploadImageValidator()
-    {
-        RuleFor(x => x.Purpose).Must(p => p is "avatar" or "vehicle");
-        RuleFor(x => x.Content).NotNull().Must(b => b is { Length: > 0 and <= MaximumBytes });
-        RuleFor(x => x.IdempotencyKey).NotEmpty().MaximumLength(128).Matches("^[A-Za-z0-9._:-]+$");
-        RuleFor(x => x).Must(x => x.Purpose == "avatar" ? x.VehicleId is null && x.DraftIntentId is null
-            : (x.VehicleId is not null) != (x.DraftIntentId is not null))
-            .WithMessage("Vehicle uploads require exactly one vehicle or draft intent; avatars have neither.");
-        RuleFor(x => x.VehicleId).Must(id => id is null || id != Guid.Empty);
-        RuleFor(x => x.DraftIntentId).Must(id => id is null || id != Guid.Empty);
-    }
-}

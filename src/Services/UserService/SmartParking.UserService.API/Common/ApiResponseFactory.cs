@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using Microsoft.AspNetCore.Mvc;
 
 namespace UserService.API.Common;
 
@@ -30,7 +29,6 @@ public static class ApiResponseFactory
             [405] = Error("METHOD_NOT_ALLOWED", "The request method is not allowed for this resource.", 405),
             [413] = Error("PAYLOAD_TOO_LARGE", "Request payload exceeds the permitted limit.", 413),
             [415] = Error("UNSUPPORTED_MEDIA_TYPE", "The request content type is not supported.", 415),
-            [413] = Error("PAYLOAD_TOO_LARGE", "The uploaded image exceeds the request limit.", 413),
             [429] = Error("TOO_MANY_REQUESTS", "Too many requests. Please try again later.", 429)
         }.ToFrozenDictionary();
 
@@ -59,14 +57,3 @@ public static class ApiResponseFactory
             errors = errors.Select(error => new { field = error.Field, message = error.Message }).ToArray()
         });
 }
-
-/// <summary>A status code and the body to serialize for it.</summary>
-public readonly record struct ApiResponse(int StatusCode, object Body)
-{
-    /// <summary>Materializes the response for a controller action.</summary>
-    public IActionResult ToActionResult() => StatusCode >= 400
-        ? new ApiErrorActionResult(this) : new ObjectResult(Body) { StatusCode = StatusCode };
-}
-
-/// <summary>One rejected field and the reason it was rejected.</summary>
-public readonly record struct ApiErrorDetail(string Field, string Message);

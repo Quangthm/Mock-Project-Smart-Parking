@@ -11,28 +11,24 @@ namespace UserService.API.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class MediaImagesController(IMediator mediator) : ControllerBase
 {
-    public sealed class ImageUploadForm
-    {
-        public IFormFile? File { get; set; }
-        public Guid? VehicleId { get; set; }
-        public Guid? DraftIntentId { get; set; }
-    }
-
     [HttpPost("api/vehicles/images")]
+    [ReadStreamedUploadForm]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(UploadImageValidator.MaximumBytes + 65536)]
-    [RequestFormLimits(MultipartBodyLengthLimit = UploadImageValidator.MaximumBytes + 1, MemoryBufferThreshold = 65536)]
+    [RequestSizeLimit(UploadImageValidator.VehicleMaximumBytes + UserHost.OrdinaryRequestLimit)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadImageValidator.VehicleMaximumBytes + UserHost.OrdinaryRequestLimit, MemoryBufferThreshold = UserHost.OrdinaryRequestLimit)]
     public Task<IActionResult> Vehicle([FromForm] ImageUploadForm request, CancellationToken ct) => UploadAsync("vehicle", request, ct);
 
     [HttpPost("api/auth/me/avatar/images")]
+    [ReadStreamedUploadForm]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(UploadImageValidator.MaximumBytes + 65536)]
-    [RequestFormLimits(MultipartBodyLengthLimit = UploadImageValidator.MaximumBytes + 1, MemoryBufferThreshold = 65536)]
+    [RequestSizeLimit(UploadImageValidator.MaximumBytes + UserHost.OrdinaryRequestLimit)]
+    [RequestFormLimits(MultipartBodyLengthLimit = UploadImageValidator.MaximumBytes + UserHost.OrdinaryRequestLimit, MemoryBufferThreshold = UserHost.OrdinaryRequestLimit)]
     public Task<IActionResult> Avatar([FromForm] ImageUploadForm request, CancellationToken ct) => UploadAsync("avatar", request, ct);
 
     private async Task<IActionResult> UploadAsync(string purpose, ImageUploadForm request, CancellationToken ct)
     {
-        if (request.File is null || request.File.Length is <= 0 or > UploadImageValidator.MaximumBytes)
+        var maximumBytes = UploadImageValidator.MaximumFor(purpose);
+        if (request.File is null || request.File.Length <= 0 || request.File.Length > maximumBytes)
             throw new AuthException("MEDIA_INVALID_IMAGE", "Invalid image size.", 400);
         await using var input = request.File.OpenReadStream();
         using var output = new MemoryStream();
@@ -40,7 +36,7 @@ public sealed class MediaImagesController(IMediator mediator) : ControllerBase
         int read;
         while ((read = await input.ReadAsync(buffer, ct)) != 0)
         {
-            if (output.Length + read > UploadImageValidator.MaximumBytes) throw new AuthException("MEDIA_INVALID_IMAGE", "Invalid image size.", 400);
+            if (output.Length + read > maximumBytes) throw new AuthException("MEDIA_INVALID_IMAGE", "Invalid image size.", 400);
             await output.WriteAsync(buffer.AsMemory(0, read), ct);
         }
         var result = await mediator.Send(new UploadImageCommand(purpose, output.ToArray(),

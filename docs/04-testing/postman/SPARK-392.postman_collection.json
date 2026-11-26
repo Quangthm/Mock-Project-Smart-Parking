@@ -1,0 +1,599 @@
+{
+  "info": {
+    "name": "SPARK-392 Vehicle and avatar upload boundaries",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{driverToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "01 Sign in as Driver",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{{requestJson}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{userBaseUrl}}/api/auth/login",
+        "description": "Enter local credentials. If configured, supply a real Turnstile token. A challenge cannot authenticate later requests."
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const env = pm.environment;",
+              "",
+              "env.unset('driverToken');",
+              "env.unset('driverAccountId');",
+              "env.unset('driverUserId');",
+              "const email = env.get('driverEmail');",
+              "const password = env.get('driverPassword');",
+              "if (!email || !password) { pm.execution.skipRequest(); throw new Error('Set local Driver credentials.'); }",
+              "const login = {email, password};",
+              "if (env.get('driverTurnstileToken')) login.turnstileToken = env.get('driverTurnstileToken');",
+              "pm.variables.set('requestJson', JSON.stringify(login));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('UserService accepts the sign-in request', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) throw new Error('Unexpected HTTP ' + pm.response.code + '. See the response and manual guide.');",
+              "const response = pm.response.json();",
+              "if (response.success !== true || !response.data) throw new Error('Expected the successful data envelope.');",
+              "const data = response.data;",
+              "const env = pm.environment;",
+              "const isId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-(0{4}-){3}0{12}$/.test(value);",
+              "if (response.mfaRequired === true) {",
+              "    throw new Error('MFA is required. Complete the existing MFA login flow as described in the guide.');",
+              "}",
+              "pm.test('Login returned a complete session', () => pm.expect(response.mfaRequired).to.eql(false));",
+              "const token = data.accessToken;",
+              "if (response.mfaRequired !== false || typeof token !== 'string' || token.split('.').length !== 3) {",
+              "    throw new Error('No usable access token was returned.');",
+              "}",
+              "// Decode only for correlation. The services validate the signature and authorize requests.",
+              "const Buffer = require('buffer').Buffer;",
+              "const claims = JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));",
+              "const driver = claims.role === 'driver' && isId(claims.sub) && isId(claims.account_id) &&",
+              "    Number.isFinite(claims.exp) && claims.exp * 1000 > Date.now();",
+              "pm.test('Complete session carries the Driver Account and user', () => pm.expect(driver).to.eql(true));",
+              "if (!driver) throw new Error('Sign in with an eligible Driver Account.');",
+              "env.set('driverToken', token);",
+              "env.set('driverAccountId', claims.account_id);",
+              "env.set('driverUserId', claims.sub);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Upload vehicle at 1 MiB",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/vehicles/images",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key02}}"
+          },
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "spark392-fixtures/1048576.png"
+            },
+            {
+              "key": "draftIntentId",
+              "value": "{{draftIntentId}}",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('key02')) pm.environment.set('key02', pm.variables.replaceIn('{{$guid}}'));",
+              "if (!pm.environment.get('draftIntentId')) pm.environment.set('draftIntentId', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Upload accepted', () => pm.expect([200,202]).to.include(pm.response.code));",
+              "if ([200,202].includes(pm.response.code)) {",
+              "  const data = pm.response.json().data;",
+              "  pm.test('Confirmed media state', () => {",
+              "    pm.expect(data.assetId).to.match(/^[0-9a-f-]{36}$/i);",
+              "    pm.expect(data.state).to.eql(pm.response.code === 200 ? 'ready' : 'pending');",
+              "  });",
+              "  pm.environment.set('assetId', data.assetId);",
+              "  pm.environment.set('assetIdState', data.state);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Check vehicle image status",
+      "request": {
+        "method": "GET",
+        "url": "{{userBaseUrl}}/api/media/images/{{assetId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const data = pm.response.json().data;",
+              "pm.test('Same asset', () => pm.expect(data.assetId).to.eql(pm.environment.get('assetId')));",
+              "pm.environment.set('assetIdState', data.state);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Register vehicle",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/vehicles",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"plate\": \"{{plate}}\", \"vehicleType\": \"{{vehicleCategory}}\", \"imageAssetId\": \"{{assetId}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.environment.get('assetIdState') !== 'ready') { pm.execution.skipRequest(); throw new Error('Wait for a ready image before continuing.'); }"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) { const v = pm.response.json().data; pm.test('Image attached', () => pm.expect(v.imageAssetId).to.eql(pm.environment.get('assetId'))); pm.environment.set('vehicleId', v.id); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Retrieve saved vehicle photo",
+      "request": {
+        "method": "GET",
+        "url": "{{userBaseUrl}}/api/media/images/{{assetId}}/content",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Authenticated PNG bytes', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png'); pm.expect(pm.response.stream.length).to.eql(1048576); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Upload vehicle replacement",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/vehicles/images",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key06}}"
+          },
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "spark392-fixtures/65537.png"
+            },
+            {
+              "key": "vehicleId",
+              "value": "{{vehicleId}}",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('key06')) pm.environment.set('key06', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Upload accepted', () => pm.expect([200,202]).to.include(pm.response.code));",
+              "if ([200,202].includes(pm.response.code)) {",
+              "  const data = pm.response.json().data;",
+              "  pm.test('Confirmed media state', () => {",
+              "    pm.expect(data.assetId).to.match(/^[0-9a-f-]{36}$/i);",
+              "    pm.expect(data.state).to.eql(pm.response.code === 200 ? 'ready' : 'pending');",
+              "  });",
+              "  pm.environment.set('replacementId', data.assetId);",
+              "  pm.environment.set('replacementIdState', data.state);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Attach replacement",
+      "request": {
+        "method": "PUT",
+        "url": "{{userBaseUrl}}/api/vehicles/{{vehicleId}}/image",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"assetId\": \"{{replacementId}}\", \"expectedAssetId\": \"{{assetId}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.environment.get('replacementIdState') !== 'ready') { pm.execution.skipRequest(); throw new Error('Wait for a ready image before continuing.'); }"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Replacement attached', () => pm.expect(pm.response.json().data.assetId).to.eql(pm.environment.get('replacementId')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Retrieve replacement",
+      "request": {
+        "method": "GET",
+        "url": "{{userBaseUrl}}/api/media/images/{{replacementId}}/content",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Authenticated PNG bytes', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png'); pm.expect(pm.response.stream.length).to.eql(65537); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Reject vehicle one byte over",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/vehicles/images",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key09}}"
+          },
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "spark392-fixtures/1048577.png"
+            },
+            {
+              "key": "draftIntentId",
+              "value": "{{draftIntentId}}",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('key09')) pm.environment.set('key09', pm.variables.replaceIn('{{$guid}}'));",
+              "if (!pm.environment.get('draftIntentId')) pm.environment.set('draftIntentId', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Safe size error', () => pm.expect(pm.response.json().code).to.eql('MEDIA_INVALID_IMAGE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Reject vehicle multipart over allowance",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/vehicles/images",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key10}}"
+          },
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "spark392-fixtures/1114112.png"
+            },
+            {
+              "key": "draftIntentId",
+              "value": "{{draftIntentId}}",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('key10')) pm.environment.set('key10', pm.variables.replaceIn('{{$guid}}'));",
+              "if (!pm.environment.get('draftIntentId')) pm.environment.set('draftIntentId', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 413', () => pm.response.to.have.status(413));",
+              "pm.test('Safe size error', () => pm.expect(pm.response.json().code).to.eql('PAYLOAD_TOO_LARGE'));",
+              "pm.test('Allowed frontend can read rejection', () => pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql(pm.environment.get('frontendOrigin')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Upload avatar at 5 MiB",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/auth/me/avatar/images",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key11}}"
+          },
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "spark392-fixtures/5242880.png"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('key11')) pm.environment.set('key11', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Upload accepted', () => pm.expect([200,202]).to.include(pm.response.code));",
+              "if ([200,202].includes(pm.response.code)) {",
+              "  const data = pm.response.json().data;",
+              "  pm.test('Confirmed media state', () => {",
+              "    pm.expect(data.assetId).to.match(/^[0-9a-f-]{36}$/i);",
+              "    pm.expect(data.state).to.eql(pm.response.code === 200 ? 'ready' : 'pending');",
+              "  });",
+              "  pm.environment.set('avatarId', data.assetId);",
+              "  pm.environment.set('avatarIdState', data.state);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Retrieve avatar draft",
+      "request": {
+        "method": "GET",
+        "url": "{{userBaseUrl}}/api/media/images/{{avatarId}}/content",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Authenticated PNG bytes', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png'); pm.expect(pm.response.stream.length).to.eql(5242880); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Reject avatar one byte over",
+      "request": {
+        "method": "POST",
+        "url": "{{userBaseUrl}}/api/auth/me/avatar/images",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key13}}"
+          },
+          {
+            "key": "Origin",
+            "value": "{{frontendOrigin}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "spark392-fixtures/5242881.png"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (!pm.environment.get('key13')) pm.environment.set('key13', pm.variables.replaceIn('{{$guid}}'));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+              "pm.test('Safe size error', () => pm.expect(pm.response.json().code).to.eql('MEDIA_INVALID_IMAGE'));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "vehicleCategory",
+      "value": "CAR",
+      "type": "string"
+    }
+  ]
+}

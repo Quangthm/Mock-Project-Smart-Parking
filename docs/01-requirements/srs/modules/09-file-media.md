@@ -9,7 +9,8 @@ Public only when facility photos/diagrams are explicitly published for public li
 | Purpose | Accepted MVP types | Accepted limit |
 |---|---|---|
 | Facility photos | JPEG, PNG, WebP | 5 MiB each; 10 per lot |
-| Avatar / vehicle image | JPEG, PNG, WebP | 5 MiB each |
+| Avatar image | JPEG, PNG, WebP | 5 MiB per upload |
+| Vehicle image (SPARK-392, user-approved amendment) | Still JPEG, PNG, WebP | Driver selects up to 5 MiB. The frontend optimizes when needed and submits up to 1 MiB. All new uploads share the 1 MiB admission limit. |
 | LPR / incident / appeal image | JPEG, PNG | 10 MiB each; 5 per submission |
 | User video / SVG / HTML / archive | Not accepted in initial upload scope | No general upload endpoint for these types |
 | Initial Partner agreement/policy upload | Readable PDF, including scanned PDF | 10 MiB (10,485,760 bytes) per file inclusive; exactly one current agreement and one current policy at submission |
