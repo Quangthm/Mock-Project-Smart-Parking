@@ -20,6 +20,16 @@ let logoutInProgress = false
 let sessionGeneration = 0
 let currentUserInFlight: { generation: number; promise: Promise<User | null> } | null = null
 export const getSessionGeneration = () => sessionGeneration
+const sessionListeners = new Set<() => void>()
+export const getAuthSessionGeneration = getSessionGeneration
+export function subscribeAuthSession(listener: () => void) {
+  sessionListeners.add(listener)
+  return () => { sessionListeners.delete(listener) }
+}
+function advanceSessionGeneration() {
+  sessionGeneration++
+  sessionListeners.forEach(listener => listener())
+}
 
 function requireSessionGeneration(expected: number) {
   if (sessionGeneration !== expected) throw new Error("Your sign-in changed. Please try again.")
@@ -126,7 +136,7 @@ function toUser(account: ApiUser): User {
 }
 
 function clearSession() {
-  sessionGeneration++
+  advanceSessionGeneration()
   sessionStorage.removeItem(tokenKey)
 
   sessionStorage.removeItem(refreshKey)
@@ -140,7 +150,7 @@ function saveLoginSession(response: ApiResponse<LoginSession>, isRefresh = false
     throw new Error("Invalid sign-in response.")
 
   const user = toUser(response.data.user)
-  if (!isRefresh) sessionGeneration++
+  if (!isRefresh) advanceSessionGeneration()
   sessionStorage.setItem(tokenKey, response.data.accessToken)
   sessionStorage.setItem(refreshKey, response.data.refreshToken)
   sessionStorage.setItem(expiryKey, String(Date.now() + response.data.expiresIn * 1000))
@@ -193,6 +203,14 @@ export async function ensureAccessToken(): Promise<string> {
   return sessionStorage.getItem(tokenKey) ?? ""
 }
 
+type AuthRequestOptions = {
+  expireSessionOnUnauthorized?: boolean
+  timeoutMs?: number
+  signal?: AbortSignal
+  redirect?: RequestRedirect
+  credentials?: RequestCredentials
+}
+
 export class ApiConnectionError extends Error {
   constructor() {
     super("Cannot reach the authentication server. Please try again.")
@@ -208,17 +226,20 @@ export function request<T>(
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
   extraHeaders?: Record<string, string>,
-  responseFormat: "json" | "blob" = "json",
+  responseFormatOrOptions: "json" | "blob" | AuthRequestOptions = "json",
 ): Promise<T> {
   // Share only in-flight reads within the same login, never cached business state.
   if (method !== "GET" || body !== undefined) {
     pendingReads.clear()
-    return performRequest(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormat)
+    return performRequest(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormatOrOptions)
   }
-  const key = JSON.stringify([sessionGeneration, serverUrl, apiPrefix, path, extraHeaders, responseFormat])
+  // Per-caller cancellation and request policies must never share another caller's request.
+  if (typeof responseFormatOrOptions !== "string")
+    return performRequest(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormatOrOptions)
+  const key = JSON.stringify([sessionGeneration, serverUrl, apiPrefix, path, extraHeaders, responseFormatOrOptions])
   const existing = pendingReads.get(key)
   if (existing) return existing as Promise<T>
-  const pending = performRequest<T>(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormat)
+  const pending = performRequest<T>(path, method, body, apiPrefix, serverUrl, extraHeaders, responseFormatOrOptions)
     .finally(() => { if (pendingReads.get(key) === pending) pendingReads.delete(key) })
   pendingReads.set(key, pending)
   return pending
@@ -231,8 +252,10 @@ async function performRequest<T>(
   apiPrefix = "/api/auth",
   serverUrl = baseUrl,
   extraHeaders?: Record<string, string>,
-  responseFormat: "json" | "blob" = "json",
+  responseFormatOrOptions: "json" | "blob" | AuthRequestOptions = "json",
 ): Promise<T> {
+  const responseFormat = typeof responseFormatOrOptions === "string" ? responseFormatOrOptions : "json"
+  const options = typeof responseFormatOrOptions === "string" ? {} : responseFormatOrOptions
   const generation = sessionGeneration
   if (!anonymousPath(path, apiPrefix) && path !== "/logout") {
     await ensureAccessToken()
@@ -242,12 +265,17 @@ async function performRequest<T>(
 
   let response: Response
   const multipart = typeof FormData !== "undefined" && body instanceof FormData
+  const timeoutMs = options.timeoutMs ?? (multipart ? 60_000 : 10_000)
 
   try {
     response = await fetch(serverUrl + apiPrefix + path, {
       method,
       cache: "no-store",
-      signal: AbortSignal.timeout(multipart ? 60_000 : 10_000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
+        : AbortSignal.timeout(timeoutMs),
+      ...(options.redirect ? { redirect: options.redirect } : {}),
+      ...(options.credentials ? { credentials: options.credentials } : {}),
 
       headers: {
         ...(body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
@@ -260,9 +288,9 @@ async function performRequest<T>(
       ...(body !== undefined ? { body: multipart ? body : JSON.stringify(body) } : {}),
     })
   } catch {
-    throw new Error(apiPrefix === "/api/auth"
-      ? "Cannot reach the authentication server. Please try again."
-      : "The service could not be reached or the request timed out. Please try again.")
+    if (options.signal?.aborted) throw new DOMException("Request cancelled.", "AbortError")
+    if (apiPrefix === "/api/auth") throw new ApiConnectionError()
+    throw new Error("The service could not be reached or the request timed out. Please try again.")
   }
 
   const payload =
@@ -279,6 +307,7 @@ async function performRequest<T>(
     const verificationFailed = isMfaManagement && ["AUTH_FAILED", "MFA_INVALID", "MFA_REQUIRED"].includes(payload?.code)
     if (
       response.status === 401 &&
+      options.expireSessionOnUnauthorized !== false &&
       token &&
       !anonymousPath(path, apiPrefix) && path !== "/logout" &&
       !verificationFailed &&

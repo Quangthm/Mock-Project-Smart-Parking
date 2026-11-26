@@ -23,6 +23,8 @@ public static class OperationHost
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddApplicationServices();
         builder.Services.AddInfrastructureServices(builder.Configuration);
+        builder.AddParkingSearch();
+        builder.AddOwnReservationReadDependencies();
         var admissionEnabled = builder.Configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var sharedHubEnabled = builder.Configuration.GetValue<bool>("Realtime:SharedMultiSiteHubEnabled");
         var authEnabled = admissionEnabled || ConsumerAuthenticationRegistration.IsConfigured(builder.Configuration);
@@ -114,6 +116,7 @@ public static class OperationHost
         if (authEnabled) app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapParkingSearch();
         var singleSiteHub = app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout", options =>
         {
             options.CloseOnAuthenticationExpiration = true;

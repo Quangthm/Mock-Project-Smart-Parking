@@ -42,7 +42,7 @@ Domain owners provide scoped reports: revenue day/week/month/quarter, lot and re
 **Actors:** Admin  
 **Stories:** US-A03
 
-Persist protected originating audit facts and project them through Notification & Audit. Each owner enforces scoped access, retention and acknowledged holds. Images max 30 days; audit 7 years; operational logs 90 days hot + 1 year cold; financial documents 7 years from issuance; conversations 90 days from last message, unaffected by administrative reads. Review holds every 30 days and at case closure; release only originating hold, preserving others. Provider deletion target 24 hours does not extend a hard retention deadline.
+Persist protected originating audit facts and project them through Notification & Audit. Each owner enforces scoped access, retention and acknowledged holds. Images max 30 days; audit 7 years; operational logs 90 days hot + 1 year cold; financial documents 7 years from issuance; Assistant keeps one current conversation per Account and role until reset. Reset hides the old transcript and makes it due for deletion after 7 days, subject to acknowledged holds. Review holds every 30 days and at case closure; release only originating hold, preserving others. Provider deletion target 24 hours does not extend a hard retention deadline.
 
 ### FR-RPT-04
 
@@ -58,7 +58,7 @@ Expose authorized Admin audit search by actor, time, lot and action; support the
 **Actors:** Admin  
 **Stories:** US-A05
 
-Persist protected originating audit facts and project them through Notification & Audit. Each owner enforces scoped access, retention and acknowledged holds. Images max 30 days; audit 7 years; operational logs 90 days hot + 1 year cold; financial documents 7 years from issuance; conversations 90 days from last message, unaffected by administrative reads. Review holds every 30 days and at case closure; release only originating hold, preserving others. Provider deletion target 24 hours does not extend a hard retention deadline.
+Persist protected originating audit facts and project them through Notification & Audit. Each owner enforces scoped access, retention and acknowledged holds. Images max 30 days; audit 7 years; operational logs 90 days hot + 1 year cold; financial documents 7 years from issuance; Assistant keeps one current conversation per Account and role until reset. Reset hides the old transcript and makes it due for deletion after 7 days, subject to acknowledged holds. Review holds every 30 days and at case closure; release only originating hold, preserving others. Provider deletion target 24 hours does not extend a hard retention deadline.
 
 ### FR-BAS-07
 

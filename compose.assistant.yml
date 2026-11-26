@@ -1,0 +1,61 @@
+# Assistant service for the local app project. Start via scripts/run-app-service.ps1 -Service Assistant.
+services:
+  assistant:
+    build:
+      context: ./src/Services/IoTService
+      dockerfile: ../../../docker/Dockerfile.assistant
+    image: smartpark/assistant:local
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__IoT: ${SMARTPARK_ASSISTANT_DOCKER_CONNECTION:?Use setup-assistant-docker.ps1}
+      Assistant__Jwt__Issuer: ${SMARTPARK_ASSISTANT_DOCKER_ISSUER:?Configure Assistant issuer}
+      Assistant__Jwt__Audience: ${SMARTPARK_ASSISTANT_DOCKER_AUDIENCE:?Configure Assistant audience}
+      Assistant__Jwt__PublicKeyPem: ${SMARTPARK_ASSISTANT_DOCKER_PUBLIC_KEY:?Configure Assistant public key}
+      Assistant__Management__KeyDirectory: /app/assistant-keys
+      Assistant__Management__KeyEncryptionCertificatePath: /run/assistant/certificate.pfx
+      Assistant__Management__KeyEncryptionCertificatePassword: ${SMARTPARK_ASSISTANT_DOCKER_CERT_PASSWORD:?Configure keyring certificate password}
+      Assistant__Guest__KnowledgeDirectory: /app/assistant-knowledge
+      Assistant__Guest__AllowedOrigins__0: ${SMARTPARK_ASSISTANT_DOCKER_ORIGIN:?Configure frontend origin}
+      Assistant__Guest__ReleaseEnabled: ${SMARTPARK_ASSISTANT_DOCKER_GUEST_RELEASE:-false}
+      Assistant__Chat__ReleaseEnabled: ${SMARTPARK_ASSISTANT_DOCKER_CHAT_RELEASE:-false}
+      Assistant__Reads__User__Enabled: ${Assistant__Reads__User__Enabled:-false}
+      Assistant__Reads__User__Origin: ${Assistant__Reads__User__Origin:-}
+      Assistant__Reads__Operations__Enabled: ${Assistant__Reads__Operations__Enabled:-false}
+      Assistant__Reads__Operations__Origin: ${Assistant__Reads__Operations__Origin:-}
+      Assistant__Reads__Search__Enabled: ${Assistant__Reads__Search__Enabled:-false}
+      Assistant__Reads__Search__Origin: ${Assistant__Reads__Search__Origin:-}
+      Assistant__Reads__Search__MaxAgeSeconds: ${Assistant__Reads__Search__MaxAgeSeconds:-0}
+      Assistant__Reads__Search__ClockSkewSeconds: ${Assistant__Reads__Search__ClockSkewSeconds:-0}
+    volumes:
+      - type: bind
+        source: ${SMARTPARK_ASSISTANT_DOCKER_KEYS:?Configure keyring directory}
+        target: /app/assistant-keys
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SMARTPARK_ASSISTANT_DOCKER_CERT:?Configure keyring certificate file}
+        target: /run/assistant/certificate.pfx
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SMARTPARK_ASSISTANT_DOCKER_KNOWLEDGE:?Configure approved knowledge directory}
+        target: /app/assistant-knowledge
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:${SMARTPARK_ASSISTANT_DOCKER_PORT:-5076}:8080"
+    networks:
+      - smartpark
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: "no"
+
+networks:
+  smartpark:
+    name: ${SMARTPARK_ASSISTANT_SCHEMA_NETWORK:-smartpark-schema_default}
+    external: true

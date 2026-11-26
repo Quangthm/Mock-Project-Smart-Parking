@@ -37,6 +37,7 @@ const rolePages: Record<string, { id: string; label: string }[]> = {
     { id: "drivers", label: "Driver accounts" },
     { id: "audit", label: "Audit log" },
     { id: "system", label: "System configuration" },
+    { id: "assistant", label: "AI Chatbot" },
   ],
   operator: [
     { id: "overview", label: "Dashboard overview" },

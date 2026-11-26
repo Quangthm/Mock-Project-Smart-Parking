@@ -62,6 +62,11 @@ export function PrivacyPolicy() {
           suốt thời gian hoạt động và tối đa 5 năm sau khi xóa tài khoản theo
           yêu cầu pháp lý.
         </p>
+        <p>
+          <strong>Lịch sử trợ lý AI:</strong> SmartParking lưu một đoạn chat đang dùng cho mỗi
+          tài khoản và vai trò. Khi bạn xác nhận tạo chat mới, đoạn chat cũ biến mất ngay khỏi
+          giao diện và đến hạn xóa khỏi hệ thống sau 7 ngày, trừ khi có yêu cầu lưu giữ đã được phê duyệt.
+        </p>
       </PolicySection>
 
       <PolicySection title="5. Chia sẻ dữ liệu với bên thứ ba">

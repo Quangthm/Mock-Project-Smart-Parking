@@ -97,7 +97,6 @@ services:
     image: smartpark/facility-service:local
     environment:
       <<: [*backend-env, *jwt-validation]
-      ReservationIntegration__OperationsPublicKeyPath: /run/keys/operations-public.pem
       ReservationIntegration__Enabled: ${SMARTPARK_RESERVATION_FACILITY_ENABLED:-false}
       ReservationIntegration__OperationsPublicKeyPem: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM:-}
       ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
@@ -105,11 +104,6 @@ services:
       Messaging__OutboxDeliveryEnabled: ${SMARTPARK_FACILITY_OUTBOX_DELIVERY_ENABLED:-true}
       # SPARK-244 realtime: enables OccupancyProjectionWorker (unset -> consumer stays off).
       RabbitMq__ConnectionString: "amqp://${SMARTPARK_RABBITMQ_USER:-smartpark}:${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}@rabbitmq:5672/${SMARTPARK_RABBITMQ_VHOST:-smartpark}"
-    volumes:
-      - type: bind
-        source: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH}
-        target: /run/keys/operations-public.pem
-        read_only: true
     ports:
       - "127.0.0.1:5045:8080"
     networks:
@@ -130,7 +124,6 @@ services:
       <<: [*backend-env, *jwt-validation]
       Services__Payment: http://payment-service:8080/
       Services__Facility: http://facility-service:8080/
-      ReservationIntegration__OperationsPrivateKeyPath: /run/keys/operations-private.pem
       ReservationIntegration__Enabled: ${SMARTPARK_RESERVATION_FACILITY_ENABLED:-false}
       ReservationIntegration__AllowHttp: ${SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP:-false}
       ReservationIntegration__OperationsPrivateKeyPem: ${SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PEM:-}
@@ -154,11 +147,6 @@ services:
       RabbitMq__ConnectionString: "amqp://${SMARTPARK_RABBITMQ_USER:-smartpark}:${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}@rabbitmq:5672/${SMARTPARK_RABBITMQ_VHOST:-smartpark}"
       # SPARK-244 realtime: SignalR backplane; empty keeps the in-memory hub (single instance).
       Redis__ConnectionString: ${SMARTPARK_REDIS_CONNECTION:-}
-    volumes:
-      - type: bind
-        source: ${SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH}
-        target: /run/keys/operations-private.pem
-        read_only: true
     ports:
       - "127.0.0.1:5055:8080"
     networks:
@@ -181,7 +169,6 @@ services:
       Services__OperationService__BaseUrl: http://operation-service:8080/
       ReservationIntegration__Enabled: ${SMARTPARK_RESERVATION_FACILITY_ENABLED:-false}
       ReservationIntegration__OperationsPublicKeyPem: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM:-}
-      ReservationIntegration__OperationsPublicKeyPath: /run/keys/operations-public.pem
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: "5672"
       RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
@@ -193,11 +180,6 @@ services:
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}
       PayOs__ChecksumKey: ${SMARTPARK_PAYOS_CHECKSUM_KEY:-}
       PayOs__BaseUrl: ${SMARTPARK_PAYOS_BASE_URL:-https://api-merchant.payos.vn}
-    volumes:
-      - type: bind
-        source: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PATH}
-        target: /run/keys/operations-public.pem
-        read_only: true
     ports:
       - "127.0.0.1:5065:8080"
     networks:
@@ -243,6 +225,7 @@ services:
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
       VITE_TURNSTILE_ENABLED: ${SMARTPARK_TURNSTILE_ENABLED:-true}
       VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+      VITE_ASSISTANT_API_BASE_URL:
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "127.0.0.1:5173:5173"
