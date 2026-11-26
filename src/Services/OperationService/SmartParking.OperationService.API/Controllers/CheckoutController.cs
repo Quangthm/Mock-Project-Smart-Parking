@@ -20,6 +20,17 @@ public sealed class CheckoutController(IMediator mediator, IHostEnvironment envi
                 body.EntryTime, body.ExitTime), ct)
         });
 
+    [HttpGet("monthly-coverage")]
+    public async Task<IActionResult> MonthlyCoverage(
+        [FromQuery] Guid siteId,
+        [FromQuery] string plateNumber,
+        CancellationToken ct) =>
+        Ok(new
+        {
+            success = true,
+            data = await Mediator.Send(new CheckMonthlyCoverageQuery(siteId, plateNumber), ct)
+        });
+
     [HttpPost("reservations/{reservationId:guid}/prepare")]
     public async Task<IActionResult> PrepareReservation(
         Guid reservationId,

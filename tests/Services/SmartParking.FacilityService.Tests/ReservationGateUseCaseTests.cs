@@ -163,6 +163,8 @@ public sealed class ReservationGateUseCaseTests
         IOperationsAuditPublisher, IOperatorIdentityClient, IOperationsConcurrency, OperationsUnitOfWork, OperationsUnitOfWorkTransaction,
         IOperatorGateSlotClaims, IOccupancyOutboxStore
     {
+        private static readonly Guid DefaultSlotId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
         public Guid Site { get; } = Guid.NewGuid();
         public Guid Tenant { get; } = Guid.NewGuid();
         public List<string> Calls { get; } = [];
@@ -199,7 +201,7 @@ public sealed class ReservationGateUseCaseTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public Task<IOperatorGateSlotLease> ClaimAvailableAsync(Guid tenantId, Guid siteId, string vehicleType,
             Guid? preferredSlotId, Guid? targetUnitId, bool allowReservedSlot, CancellationToken ct) =>
-            Task.FromResult<IOperatorGateSlotLease>(new SlotLease(new ClaimedParkingSlot(preferredSlotId!.Value, "A01", vehicleType)));
+            Task.FromResult<IOperatorGateSlotLease>(new SlotLease(new ClaimedParkingSlot(preferredSlotId ?? DefaultSlotId, "A01", vehicleType)));
         public Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
         {
             Calls.Add("release-slot");
