@@ -7,6 +7,7 @@
 // CommonJS test harness can load it without stubbing a module graph.
 import type { ParkingSlot, SlotStatus } from "./types"
 import type {
+  OperationalLayoutProjection,
   PhysicalState,
   ReservationState,
   SlotVisualStateDto,
@@ -73,4 +74,15 @@ export function mapOperationalLayoutSlots(
 ): ParkingSlot[] {
   if (!Array.isArray(slots)) return []
   return slots.map(mapOperationalLayoutSlot)
+}
+
+/** The unfiltered layout contains the registered bays for every vehicle type. */
+export function driverParkingLayout(layout: OperationalLayoutProjection) {
+  const slots = mapOperationalLayoutSlots(layout.slots)
+  return {
+    slots,
+    totalSlots: slots.length,
+    car: layout.metrics?.availableCarSlots ?? null,
+    motorcycle: layout.metrics?.motorcycleCapacity?.availableCount ?? null,
+  }
 }

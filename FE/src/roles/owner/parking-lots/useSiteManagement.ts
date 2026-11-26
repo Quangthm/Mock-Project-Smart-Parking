@@ -1,11 +1,10 @@
 import { useEffect, useState, useMemo } from "react"
 import { useApp } from "../../../context/AppContext"
-import { parkingApi, operatorsApi, type Site, type Operator } from "../../../lib/parkingApi"
+import { parkingApi, type Site, type Operator } from "../../../lib/parkingApi"
 
-export function useSiteManagement(onSiteCreated: (site: Site, created: boolean) => void) {
+export function useSiteManagement(onSiteCreated: (site: Site, created: boolean) => void, operators: Operator[]) {
   const { user } = useApp()
   const [sites, setSites] = useState<Site[]>([])
-  const [operators, setOperators] = useState<Operator[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -34,15 +33,9 @@ export function useSiteManagement(onSiteCreated: (site: Site, created: boolean) 
     setError("")
     setShowFormModal(false)
 
-    Promise.allSettled([parkingApi.list(), operatorsApi.list()])
-      .then(([siteResult, operatorResult]) => {
-        if (!current) return
-        if (siteResult.status === "fulfilled") setSites(siteResult.value)
-        else setError(siteResult.reason instanceof Error ? siteResult.reason.message : "Cannot load sites.")
-        if (operatorResult.status === "fulfilled") setOperators(operatorResult.value)
-        else if (siteResult.status === "fulfilled")
-          setError(operatorResult.reason instanceof Error ? operatorResult.reason.message : "Cannot load operators.")
-      })
+    parkingApi.list()
+      .then(sites => { if (current) setSites(sites) })
+      .catch(error => { if (current) setError(error instanceof Error ? error.message : "Cannot load sites.") })
       .finally(() => {
         if (current) setLoading(false)
       })

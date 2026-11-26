@@ -14,6 +14,7 @@ import { ErrorBoundary } from '../../../components/feedback/ErrorBoundary';
 import { DashboardSidebar } from '../../../components/layout/DashboardSidebar';
 import { reconcileOwnerLotSetups } from '../../../lib/ownerLotSetup';
 import { watchOperators } from '../../../lib/operatorLive';
+import { AuthApiError, getSessionGeneration } from '../../../lib/authApi';
 
 type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy' | 'passes';
 
@@ -40,56 +41,89 @@ export function OwnerDashboard() {
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const rosterVersion = useRef(0);
+  const [rosterError, setRosterError] = useState('');
+  const [rosterDenied, setRosterDenied] = useState(false);
+  const [rosterLoading, setRosterLoading] = useState(true);
+  const refreshRoster = useRef<(manual?: boolean) => void>(() => {});
+  const session = getSessionGeneration();
   useEffect(() => {
     if (user?.role !== 'owner') return;
-    let active = true, reading = false, dirty = false;
-    const refresh = async () => {
+    let active = true, reading = false, dirty = false, denied = false;
+    let restartNeeded = false;
+    let stop: (() => void) | undefined;
+    const current = () => active && session === getSessionGeneration();
+    setOperators([]);
+    setRosterError('');
+    setRosterDenied(false);
+    setRosterLoading(true);
+    const suspend = () => {
+      denied = true;
+      dirty = false;
+      stop?.();
+      stop = undefined;
+      if (!current()) return;
+      setOperators([]);
+      setRosterDenied(true);
+      setRosterError('You do not have permission to manage operators.');
+    };
+    const refresh = async (manual = false) => {
+      if (!current() || (denied && !manual)) return;
+      if (manual && (denied || restartNeeded)) {
+        denied = false;
+        restartNeeded = false;
+        stop?.();
+        stop = undefined;
+      }
       dirty = true;
       if (reading) return;
       reading = true;
+      if (manual) setRosterLoading(true);
       try {
         do {
           dirty = false;
-          rosterVersion.current++;
           const accounts = await operatorsApi.list();
-          if (active) setOperators(accounts);
-        } while (active && dirty);
+          if (!current() || denied) return;
+          if (!dirty) setOperators(accounts);
+          setRosterDenied(false);
+          setRosterError('');
+          stop ??= watchOperators(() => { void refresh(); }, suspend, () => {
+            restartNeeded = true;
+            if (current()) setRosterError('Live operator updates are unavailable. Showing the last loaded roster.');
+          });
+        } while (current() && dirty);
       } catch (cause) {
-        if (active) setError(cause instanceof Error ? cause.message : 'Cannot refresh operators.');
-      } finally { reading = false; }
+        if (!current()) return;
+        if (cause instanceof AuthApiError && cause.status === 403) suspend();
+        else setRosterError(cause instanceof Error ? cause.message : 'Cannot load operators.');
+      } finally {
+        reading = false;
+        if (current()) setRosterLoading(false);
+      }
     };
-    const stop = watchOperators(() => { void refresh(); });
-    return () => { active = false; stop(); };
-  }, [user?.id, user?.role]);
+    refreshRoster.current = manual => { void refresh(manual); };
+    void refresh();
+    return () => { active = false; stop?.(); refreshRoster.current = () => {}; };
+  }, [user?.id, user?.role, session]);
   useEffect(() => {
     let current = true;
-    const requestedRosterVersion = rosterVersion.current;
     setLoading(true); setSitesLoaded(false); setError('');
-    Promise.allSettled([parkingApi.list(), operatorsApi.list()])
-      .then(async ([siteResult, operatorResult]) => {
-        if (!current) return;
-        if (siteResult.status === 'fulfilled') {
-          await reconcileOwnerLotSetups(siteResult.value, user?.id ?? '').catch(() => {});
-          if (!current) return;
-          setSites(current => sameSiteList(current, siteResult.value) ? current : siteResult.value);
-          setSitesLoaded(true);
-          setSelectedSiteId(current => current === setupSiteId || current === 'all' || siteResult.value.some(site => site.id === current) ? current : 'all');
-        } else {
-          setSites([]);
-          setError(siteResult.reason instanceof Error ? siteResult.reason.message : 'Cannot load owner sites.');
-        }
-        if (operatorResult.status === 'fulfilled') {
-          if (requestedRosterVersion === rosterVersion.current) setOperators(operatorResult.value);
-        }
-        else if (requestedRosterVersion === rosterVersion.current) {
-          setOperators([]);
-          if (siteResult.status === 'fulfilled') setError(operatorResult.reason instanceof Error ? operatorResult.reason.message : 'Cannot load operators.');
-        }
+    parkingApi.list()
+      .then(async sites => {
+        if (!current || session !== getSessionGeneration()) return;
+        await reconcileOwnerLotSetups(sites, user?.id ?? '').catch(() => {});
+        if (!current || session !== getSessionGeneration()) return;
+        setSites(previous => sameSiteList(previous, sites) ? previous : sites);
+        setSitesLoaded(true);
+        setSelectedSiteId(previous => previous === setupSiteId || previous === 'all' || sites.some(site => site.id === previous) ? previous : 'all');
+      })
+      .catch(cause => {
+        if (!current || session !== getSessionGeneration()) return;
+        setSites([]);
+        setError(cause instanceof Error ? cause.message : 'Cannot load owner sites.');
       })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [user?.id, siteRefresh, setupSiteId]);
+  }, [user?.id, session, siteRefresh, setupSiteId]);
 
   useEffect(() => {
     const onNavigate = (event: Event) => setTab((event as CustomEvent<Tab>).detail);
@@ -123,9 +157,13 @@ export function OwnerDashboard() {
           <>
         {loading && <p role="status">Loading owner sites…</p>}
         {error && <div role="alert" className="owner-workspace-error">{error} <button className="btn-outline" onClick={() => setSiteRefresh(value => value + 1)}>Retry</button></div>}
+        {(tab === 'dashboard' || tab === 'sites' || tab === 'operators') && rosterError && <div role="alert" className="owner-workspace-error">
+          {rosterError} <button type="button" className="btn-outline" disabled={rosterLoading} onClick={() => refreshRoster.current(true)}>Retry operators</button>
+        </div>}
         <div key={tab} className="animate-in">
-          {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} sites={sites} operators={operators} />}
-          {tab === 'sites' && <SiteManagement onSiteCreated={(site, created) => { if (created) { setSetupSiteId(site.id); setSelectedSiteId(site.id); setTab('structure'); } setSiteRefresh(value => value + 1); }} />}
+          {tab === 'dashboard' && <OwnerOverview selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} sites={sites}
+            operators={operators} rosterUnavailable={rosterDenied || rosterLoading} />}
+          {tab === 'sites' && <SiteManagement operators={operators} rosterDenied={rosterDenied} onSiteCreated={(site, created) => { if (created) { setSetupSiteId(site.id); setSelectedSiteId(site.id); setTab('structure'); } setSiteRefresh(value => value + 1); }} />}
           {tab === 'lots' && <LotManagement siteFilterId={selectedSiteId} />}
           {tab === 'structure' && (setupSiteId && !sites.some(site => site.id === setupSiteId)
             ? <p role="status" className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Waiting for the new site to appear in the server list. Use Retry above if it does not load.</p>
@@ -134,7 +172,9 @@ export function OwnerDashboard() {
                   <ParkingStructure sites={sites} selectedSiteId={selectedSiteId} onSiteChange={setSelectedSiteId} />
                 </ErrorBoundary>
               ))}
-          {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} liveOperators={operators} onOperatorsChanged={() => setSiteRefresh(value => value + 1)} />}
+          {tab === 'operators' && <OperatorManagement selectedSiteId={selectedSiteId} liveOperators={operators}
+            rosterDenied={rosterDenied} rosterLoading={rosterLoading} onRefreshRoster={() => refreshRoster.current(true)}
+            onOperatorsChanged={() => refreshRoster.current()} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}
           {tab === 'passes' && !loading && <OwnerPassPlans sites={sites} />}
