@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS structure_maintenance_windows (
     acknowledged_at TIMESTAMPTZ NULL,
     start_notified_at TIMESTAMPTZ NULL,
     end_notified_at TIMESTAMPTZ NULL,
+    revision BIGINT NOT NULL DEFAULT 1,
     CONSTRAINT ck_window_nonempty CHECK (NOT isempty(service_window)),
     CONSTRAINT ck_window_scope CHECK (slot_id IS NULL OR unit_id IS NOT NULL)
 );
@@ -237,6 +238,8 @@ ALTER TABLE structure_maintenance_windows
     ADD COLUMN IF NOT EXISTS start_notified_at TIMESTAMPTZ NULL;
 ALTER TABLE structure_maintenance_windows
     ADD COLUMN IF NOT EXISTS end_notified_at TIMESTAMPTZ NULL;
+ALTER TABLE structure_maintenance_windows
+    ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 1;
 
 CREATE INDEX IF NOT EXISTS idx_maintenance_windows_site_time
     ON structure_maintenance_windows USING gist (site_id, service_window);

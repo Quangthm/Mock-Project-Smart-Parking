@@ -585,17 +585,40 @@ CREATE TABLE IF NOT EXISTS structure_maintenance_closures (
     scoped_unit_ids JSONB NULL,
     scoped_slot_ids JSONB NULL,
     window_start TIMESTAMPTZ NOT NULL,
-    window_end TIMESTAMPTZ NOT NULL,
+    window_end TIMESTAMPTZ NULL,
     reason TEXT NOT NULL,
     enforcement_ref UUID NOT NULL,
     acknowledged_at TIMESTAMPTZ NOT NULL,
     cancelled_at TIMESTAMPTZ NULL,
-    CONSTRAINT ck_maintenance_closure_window CHECK (window_start < window_end),
+    revision BIGINT NOT NULL DEFAULT 1,
+    CONSTRAINT ck_maintenance_closure_window CHECK (window_end IS NULL OR window_start < window_end),
     CONSTRAINT ck_maintenance_closure_scope CHECK (slot_id IS NULL OR unit_id IS NOT NULL)
 );
 
 CREATE INDEX IF NOT EXISTS ix_maintenance_closures_site_active
     ON structure_maintenance_closures(tenant_id, site_id, window_start, window_end) WHERE cancelled_at IS NULL;
+
+ALTER TABLE structure_maintenance_closures
+    ADD COLUMN IF NOT EXISTS revision BIGINT NOT NULL DEFAULT 1;
+ALTER TABLE structure_maintenance_closures
+    ALTER COLUMN window_end DROP NOT NULL;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_maintenance_closure_window'
+          AND conrelid = 'structure_maintenance_closures'::regclass
+          AND pg_get_constraintdef(oid) NOT ILIKE '%IS NULL%'
+    ) THEN
+        ALTER TABLE structure_maintenance_closures DROP CONSTRAINT ck_maintenance_closure_window;
+        ALTER TABLE structure_maintenance_closures
+            ADD CONSTRAINT ck_maintenance_closure_window
+            CHECK (window_end IS NULL OR window_start < window_end);
+    END IF;
+END
+$$;
 
 -- ============================================================================
 -- EMERGENCY CLOSURES & INBOUND EVENT RECEIPTS (SPARK-238 Phase 3, Slice 3A)
