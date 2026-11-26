@@ -6,16 +6,34 @@ using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Persistence;
 
-// Maintenance windows are recorded, never claimed effective: enforcement_state stays 'pending'
-// until an external acknowledgement arrives (DE-13). The column is `service_window` because WINDOW
-// is a reserved keyword in PostgreSQL; the wire keeps start/end.
+// Facility is the authoritative owner of maintenance windows. Every mutation commits locally as
+// 'acknowledged' with a monotonic revision and stages both LayoutInvalidatedV1 and
+// FacilityMaintenanceChangedV1 inside the same FacilityOutboxTransaction so Operations consumes
+// changes asynchronously without blocking structural scheduling. The column is `service_window`
+// because WINDOW is a reserved keyword in PostgreSQL; the wire keeps start/end.
 public sealed class PostgresMaintenanceWindowStore(
     NpgsqlDataSource source,
     ParkingDbContext? context = null,
-    ILayoutInvalidationPublisher? layoutInvalidations = null) : IMaintenanceWindowStore
+    ILayoutInvalidationPublisher? layoutInvalidations = null,
+    IFacilityMaintenancePublisher? maintenancePublisher = null,
+    TimeProvider? clock = null) : IMaintenanceWindowStore
 {
     private const string Columns = "id, tenant_id, site_id, unit_id, slot_id, lower(service_window), upper(service_window), " +
-        "reason, created_by, created_at, cancelled_at, enforcement_state, enforcement_ref, acknowledged_at";
+        "reason, created_by, created_at, cancelled_at, enforcement_state, enforcement_ref, acknowledged_at, revision";
+
+    private static readonly IReadOnlyList<string> FullLayoutResources =
+    [
+        LayoutInvalidationResources.Structure,
+        LayoutInvalidationResources.FullLayout,
+        LayoutInvalidationResources.CapacitySummary
+    ];
+
+    private static readonly IReadOnlyList<string> StructureOnlyResources =
+    [
+        LayoutInvalidationResources.Structure
+    ];
+
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     private static NpgsqlCommand Command(
         NpgsqlConnection db, NpgsqlTransaction? tx, string sql, params object?[] values)
@@ -24,10 +42,11 @@ public sealed class PostgresMaintenanceWindowStore(
         foreach (var value in values) command.Parameters.Add(new NpgsqlParameter { Value = value ?? DBNull.Value });
         return command;
     }
+
     private static MaintenanceWindow Window(NpgsqlDataReader r) => new(r.GetGuid(0), r.GetGuid(1), r.GetGuid(2),
         r.IsDBNull(3) ? null : r.GetGuid(3), r.IsDBNull(4) ? null : r.GetGuid(4), r.GetDateTime(5), r.GetDateTime(6),
         r.GetString(7), r.GetGuid(8), r.GetDateTime(9), r.IsDBNull(10) ? null : r.GetDateTime(10), r.GetString(11),
-        r.IsDBNull(12) ? null : r.GetGuid(12), r.IsDBNull(13) ? null : r.GetDateTime(13));
+        r.IsDBNull(12) ? null : r.GetGuid(12), r.IsDBNull(13) ? null : r.GetDateTime(13), r.GetInt64(14));
 
     private static async Task EnsureSiteAsync(
         NpgsqlConnection db, NpgsqlTransaction? tx, OwnerScope owner, Guid siteId, CancellationToken ct)
@@ -96,27 +115,44 @@ public sealed class PostgresMaintenanceWindowStore(
             if (await overlap.ExecuteScalarAsync(ct) is not null)
                 throw new StructureException("STRUCTURE_IN_USE", "Another maintenance window already covers this period.");
         }
+
+        var eventId = Guid.NewGuid();
+        var occurredAt = _clock.GetUtcNow();
         try
         {
             MaintenanceWindow window;
             await using (var command = Command(db, tx, $"""
-                INSERT INTO structure_maintenance_windows(id,tenant_id,site_id,unit_id,slot_id,service_window,reason,created_by,enforcement_state)
-                SELECT $1,$3,$2,$8,$9,tstzrange($4::timestamptz,$5::timestamptz,'[)'),$6,$7,'pending'
+                INSERT INTO structure_maintenance_windows(
+                    id,tenant_id,site_id,unit_id,slot_id,service_window,reason,created_by,
+                    enforcement_state,enforcement_ref,acknowledged_at,revision)
+                SELECT $1,$3,$2,$8,$9,tstzrange($4::timestamptz,$5::timestamptz,'[)'),$6,$7,
+                    'acknowledged',$10,$11,1
                 FROM parking_sites s WHERE s.id=$2 AND s.tenant_id=$3 AND s.deleted_at IS NULL
                 RETURNING {Columns}
-                """, Guid.NewGuid(), siteId, owner.TenantId, start, end, reason, owner.UserId, unitId, slotId))
+                """, Guid.NewGuid(), siteId, owner.TenantId, start, end, reason, owner.UserId,
+                unitId, slotId, eventId, occurredAt))
             await using (var reader = await command.ExecuteReaderAsync(ct))
             {
                 if (!await reader.ReadAsync(ct))
                     throw new StructureException("SITE_NOT_FOUND", "Parking site was not found in this tenant.");
                 window = Window(reader);
             }
-            await txScope.StageAndCommitAsync(
-                layoutInvalidations,
-                owner.TenantId,
-                siteId,
-                [LayoutInvalidationResources.Structure],
-                ct);
+
+            var scope = await ResolveScopeCoreAsync(db, tx, owner.TenantId, siteId, unitId, slotId, ct);
+            var resources = MaintenanceWindowState.Covers(window, occurredAt.UtcDateTime)
+                ? FullLayoutResources
+                : StructureOnlyResources;
+
+            await txScope.StageActionAsync(async token =>
+            {
+                if (layoutInvalidations is not null)
+                    await layoutInvalidations.StageAsync(owner.TenantId, siteId, resources, token);
+
+                if (maintenancePublisher is not null)
+                    await maintenancePublisher.StageChangedAsync(
+                        BuildEvent(eventId, occurredAt, window, scope, "UPSERTED"), token);
+            }, ct);
+            await txScope.CommitWithoutStagingAsync(ct);
             return window;
         }
         catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.ExclusionViolation)
@@ -167,37 +203,47 @@ public sealed class PostgresMaintenanceWindowStore(
             if (await overlap.ExecuteScalarAsync(ct) is not null)
                 throw new StructureException("STRUCTURE_IN_USE", "Another maintenance window already covers this period.");
         }
+
+        var eventId = Guid.NewGuid();
+        var occurredAt = _clock.GetUtcNow();
         try
         {
             MaintenanceWindow window;
             await using (var command = Command(db, tx, $"""
                 UPDATE structure_maintenance_windows
                 SET service_window = tstzrange(lower(service_window), $4::timestamptz, '[)'),
-                    enforcement_state='pending', enforcement_ref=NULL, acknowledged_at=NULL,
-                    end_notified_at=NULL
+                    enforcement_state='acknowledged', enforcement_ref=$5, acknowledged_at=$6,
+                    end_notified_at=NULL, revision=revision+1
                 WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL
                 RETURNING {Columns}
-                """, windowId, owner.TenantId, siteId, newEnd))
+                """, windowId, owner.TenantId, siteId, newEnd, eventId, occurredAt))
             await using (var reader = await command.ExecuteReaderAsync(ct))
             {
                 if (!await reader.ReadAsync(ct))
                     throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
                 window = Window(reader);
             }
+
             if (window.End != current.End ||
                 !string.Equals(window.EnforcementState, current.EnforcementState, StringComparison.Ordinal))
             {
-                await txScope.StageAndCommitAsync(
-                    layoutInvalidations,
-                    owner.TenantId,
-                    siteId,
-                    [LayoutInvalidationResources.Structure],
-                    ct);
+                var scope = await ResolveScopeCoreAsync(db, tx, owner.TenantId, siteId, window.UnitId, window.SlotId, ct);
+                var resources = MaintenanceWindowState.Covers(window, occurredAt.UtcDateTime)
+                    ? FullLayoutResources
+                    : StructureOnlyResources;
+
+                await txScope.StageActionAsync(async token =>
+                {
+                    if (layoutInvalidations is not null)
+                        await layoutInvalidations.StageAsync(owner.TenantId, siteId, resources, token);
+
+                    if (maintenancePublisher is not null)
+                        await maintenancePublisher.StageChangedAsync(
+                            BuildEvent(eventId, occurredAt, window, scope, "UPSERTED"), token);
+                }, ct);
             }
-            else
-            {
-                await txScope.CommitWithoutStagingAsync(ct);
-            }
+
+            await txScope.CommitWithoutStagingAsync(ct);
             return window;
         }
         catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.ExclusionViolation)
@@ -213,9 +259,10 @@ public sealed class PostgresMaintenanceWindowStore(
         var tx = txScope.Transaction;
         await EnsureSiteAsync(db, tx, owner, siteId, ct);
         var current = await LockAsync(db, tx, owner, siteId, windowId, ct);
+        var occurredAt = _clock.GetUtcNow();
         // Reopening early must never bypass another closure that still covers now AND
         // overlaps this window's own scope; unrelated windows must not block the cancel.
-        if (MaintenanceWindowState.Covers(current, DateTime.UtcNow))
+        if (MaintenanceWindowState.Covers(current, occurredAt.UtcDateTime))
         {
             await using var other = Command(db, tx, """
                 SELECT 1 FROM structure_maintenance_windows
@@ -232,43 +279,63 @@ public sealed class PostgresMaintenanceWindowStore(
             if (await other.ExecuteScalarAsync(ct) is not null)
                 throw new StructureException("STRUCTURE_IN_USE", "Another maintenance window still covers this period.");
         }
-        int affected;
-        await using (var command = Command(db, tx,
-            "UPDATE structure_maintenance_windows SET cancelled_at=now() WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL",
-            windowId, owner.TenantId, siteId))
-            affected = await command.ExecuteNonQueryAsync(ct);
 
-        if (affected > 0)
+        MaintenanceWindow? cancelled = null;
+        await using (var command = Command(db, tx, $"""
+            UPDATE structure_maintenance_windows
+            SET cancelled_at=now(), revision=revision+1
+            WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL
+            RETURNING {Columns}
+            """, windowId, owner.TenantId, siteId))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
         {
-            // An acknowledged window is live in the operator projection, so cancelling it must
-            // publish the full invalidation set to drop the MAINTENANCE overlay immediately.
-            IReadOnlyList<string> resources = string.Equals(current.EnforcementState, "acknowledged", StringComparison.Ordinal)
-                ? [LayoutInvalidationResources.Structure, LayoutInvalidationResources.FullLayout, LayoutInvalidationResources.CapacitySummary]
-                : [LayoutInvalidationResources.Structure];
-            await txScope.StageAndCommitAsync(
-                layoutInvalidations,
-                owner.TenantId,
-                siteId,
-                resources,
-                ct);
+            if (await reader.ReadAsync(ct)) cancelled = Window(reader);
         }
-        else
+
+        if (cancelled is not null)
         {
-            await txScope.CommitWithoutStagingAsync(ct);
+            var eventId = Guid.NewGuid();
+            var scope = await ResolveScopeCoreAsync(db, tx, owner.TenantId, siteId, cancelled.UnitId, cancelled.SlotId, ct);
+            // A live window is visible in the operator projection, so cancelling it drops the overlay immediately.
+            var resources = MaintenanceWindowState.Covers(current, occurredAt.UtcDateTime)
+                ? FullLayoutResources
+                : StructureOnlyResources;
+
+            await txScope.StageActionAsync(async token =>
+            {
+                if (layoutInvalidations is not null)
+                    await layoutInvalidations.StageAsync(owner.TenantId, siteId, resources, token);
+
+                if (maintenancePublisher is not null)
+                    await maintenancePublisher.StageChangedAsync(
+                        BuildEvent(eventId, occurredAt, cancelled, scope, "CLEARED"), token);
+            }, ct);
         }
+
+        await txScope.CommitWithoutStagingAsync(ct);
     }
 
     public async Task<MaintenanceWindowScope> ResolveScopeAsync(
         Guid tenantId, Guid siteId, Guid? unitId, Guid? slotId, CancellationToken ct)
     {
         if (unitId is not { } targetUnit) return new MaintenanceWindowScope([], []);
-        // A slot-scoped window covers only itself; a unit-scoped window covers the whole subtree.
         if (slotId is { } targetSlot) return new MaintenanceWindowScope([targetUnit], [targetSlot]);
 
         await using var db = await source.OpenConnectionAsync(ct);
+        return await ResolveScopeCoreAsync(db, null, tenantId, siteId, targetUnit, null, ct);
+    }
+
+    private static async Task<MaintenanceWindowScope> ResolveScopeCoreAsync(
+        NpgsqlConnection db, NpgsqlTransaction? tx, Guid tenantId, Guid siteId, Guid? unitId, Guid? slotId,
+        CancellationToken ct)
+    {
+        if (unitId is not { } targetUnit) return new MaintenanceWindowScope([], []);
+        // A slot-scoped window covers only itself; a unit-scoped window covers the whole subtree.
+        if (slotId is { } targetSlot) return new MaintenanceWindowScope([targetUnit], [targetSlot]);
+
         var units = new List<Guid>();
         var slots = new List<Guid>();
-        await using (var unitCommand = Command(db, null, """
+        await using (var unitCommand = Command(db, tx, """
             SELECT subtree.id
             FROM spatial_units target
             JOIN spatial_units subtree
@@ -281,7 +348,7 @@ public sealed class PostgresMaintenanceWindowStore(
             while (await reader.ReadAsync(ct)) units.Add(reader.GetGuid(0));
         }
 
-        await using (var slotCommand = Command(db, null, """
+        await using (var slotCommand = Command(db, tx, """
             SELECT slot.id
             FROM spatial_units target
             JOIN spatial_units subtree
@@ -298,131 +365,6 @@ public sealed class PostgresMaintenanceWindowStore(
         }
 
         return new MaintenanceWindowScope(units, slots);
-    }
-
-    public async Task<MaintenanceWindow> MarkAcknowledgedAsync(
-        Guid tenantId, Guid siteId, Guid windowId, Guid enforcementRef, DateTime acknowledgedAt, CancellationToken ct)
-    {
-        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
-        var db = txScope.Connection;
-        var tx = txScope.Transaction;
-        MaintenanceWindow window;
-        await using (var command = Command(db, tx, $"""
-            UPDATE structure_maintenance_windows
-            SET enforcement_state='acknowledged', enforcement_ref=$4, acknowledged_at=$5
-            WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL
-            RETURNING {Columns}
-            """, windowId, tenantId, siteId, enforcementRef, acknowledgedAt))
-        await using (var reader = await command.ExecuteReaderAsync(ct))
-        {
-            if (!await reader.ReadAsync(ct))
-                throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
-            window = Window(reader);
-        }
-        await txScope.StageAndCommitAsync(
-            layoutInvalidations,
-            tenantId,
-            siteId,
-            [
-                LayoutInvalidationResources.Structure,
-                LayoutInvalidationResources.FullLayout,
-                LayoutInvalidationResources.CapacitySummary
-            ],
-            ct);
-        return window;
-    }
-
-    public async Task MarkFailedAsync(Guid tenantId, Guid siteId, Guid windowId, CancellationToken ct)
-    {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = Command(db, null,
-            "UPDATE structure_maintenance_windows SET enforcement_state='failed' WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL",
-            windowId, tenantId, siteId);
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    public async Task DeletePendingAsync(Guid tenantId, Guid siteId, Guid windowId, CancellationToken ct)
-    {
-        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
-        var db = txScope.Connection;
-        var tx = txScope.Transaction;
-        int affected;
-        await using (var command = Command(db, tx, """
-            UPDATE structure_maintenance_windows
-            SET cancelled_at=now()
-            WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND enforcement_state='pending' AND cancelled_at IS NULL
-            """, windowId, tenantId, siteId))
-        {
-            affected = await command.ExecuteNonQueryAsync(ct);
-        }
-        if (affected > 0)
-        {
-            await txScope.StageAndCommitAsync(
-                layoutInvalidations, tenantId, siteId, [LayoutInvalidationResources.Structure], ct);
-        }
-        else
-        {
-            await txScope.CommitWithoutStagingAsync(ct);
-        }
-    }
-
-    public async Task<MaintenanceWindow> RevertExtensionAsync(
-        Guid tenantId, Guid siteId, Guid windowId, DateTime previousEnd, string previousEnforcementState,
-        Guid? previousEnforcementRef, DateTime? previousAcknowledgedAt, CancellationToken ct)
-    {
-        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
-        var db = txScope.Connection;
-        var tx = txScope.Transaction;
-        MaintenanceWindow window;
-        await using (var command = Command(db, tx, $"""
-            UPDATE structure_maintenance_windows
-            SET service_window = tstzrange(lower(service_window), $4::timestamptz, '[)'),
-                enforcement_state=$5, enforcement_ref=$6, acknowledged_at=$7
-            WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NULL
-            RETURNING {Columns}
-            """, windowId, tenantId, siteId, previousEnd, previousEnforcementState, previousEnforcementRef,
-            previousAcknowledgedAt))
-        await using (var reader = await command.ExecuteReaderAsync(ct))
-        {
-            if (!await reader.ReadAsync(ct))
-                throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
-            window = Window(reader);
-        }
-        await txScope.StageAndCommitAsync(
-            layoutInvalidations, tenantId, siteId, [LayoutInvalidationResources.Structure], ct);
-        return window;
-    }
-
-    public async Task ClearEnforcementRefAsync(Guid tenantId, Guid siteId, Guid windowId, CancellationToken ct)
-    {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var command = Command(db, null,
-            "UPDATE structure_maintenance_windows SET enforcement_ref=NULL WHERE id=$1 AND tenant_id=$2 AND site_id=$3 AND cancelled_at IS NOT NULL",
-            windowId, tenantId, siteId);
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    public async Task<IReadOnlyList<MaintenanceWindow>> ListPendingEnforcementAsync(DateTime now, CancellationToken ct)
-    {
-        await using var db = await source.OpenConnectionAsync(ct);
-        var windows = new List<MaintenanceWindow>();
-        await using var command = Command(db, null,
-            $"SELECT {Columns} FROM structure_maintenance_windows WHERE cancelled_at IS NULL AND enforcement_state='pending' AND upper(service_window) > $1 ORDER BY created_at",
-            now);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct)) windows.Add(Window(reader));
-        return windows;
-    }
-
-    public async Task<IReadOnlyList<MaintenanceWindow>> ListCancelledPendingRemoteSyncAsync(CancellationToken ct)
-    {
-        await using var db = await source.OpenConnectionAsync(ct);
-        var windows = new List<MaintenanceWindow>();
-        await using var command = Command(db, null,
-            $"SELECT {Columns} FROM structure_maintenance_windows WHERE cancelled_at IS NOT NULL AND enforcement_ref IS NOT NULL ORDER BY cancelled_at");
-        await using var reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct)) windows.Add(Window(reader));
-        return windows;
     }
 
     // Watermarks make each boundary transition observable exactly once, however often the ticker runs.
@@ -464,17 +406,35 @@ public sealed class PostgresMaintenanceWindowStore(
 
         foreach (var (tenantId, siteId) in affected)
         {
-            await txScope.StageAsync(layoutInvalidations, tenantId, siteId,
-                [
-                    LayoutInvalidationResources.Structure,
-                    LayoutInvalidationResources.FullLayout,
-                    LayoutInvalidationResources.CapacitySummary
-                ],
-                ct);
+            await txScope.StageAsync(layoutInvalidations, tenantId, siteId, FullLayoutResources, ct);
         }
 
         await txScope.CommitWithoutStagingAsync(ct);
         return total;
+    }
+
+    private static FacilityMaintenanceChangedV1 BuildEvent(
+        Guid eventId, DateTimeOffset occurredAt, MaintenanceWindow window, MaintenanceWindowScope scope,
+        string changeType)
+    {
+        var windowScope = window.SlotId is not null ? "SLOT" : window.UnitId is not null ? "UNIT" : "SITE";
+        return new FacilityMaintenanceChangedV1(
+            eventId,
+            FacilityMaintenanceTopology.CurrentSchemaVersion,
+            window.Id,
+            window.Revision,
+            occurredAt,
+            window.TenantId,
+            window.SiteId,
+            changeType,
+            "SCHEDULED",
+            windowScope,
+            window.UnitId,
+            scope.UnitIds,
+            scope.SlotIds,
+            new DateTimeOffset(DateTime.SpecifyKind(window.Start, DateTimeKind.Utc)),
+            new DateTimeOffset(DateTime.SpecifyKind(window.End, DateTimeKind.Utc)),
+            window.Reason);
     }
 
     private static async Task<MaintenanceWindow> LockAsync(

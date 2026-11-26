@@ -2,7 +2,7 @@ namespace SmartParking.FacilityService.Domain;
 
 public sealed record MaintenanceWindow(Guid Id, Guid TenantId, Guid SiteId, Guid? UnitId, Guid? SlotId,
     DateTime Start, DateTime End, string Reason, Guid CreatedBy, DateTime CreatedAt, DateTime? CancelledAt,
-    string EnforcementState, Guid? EnforcementRef, DateTime? AcknowledgedAt);
+    string EnforcementState, Guid? EnforcementRef, DateTime? AcknowledgedAt, long Revision = 1);
 
 // Service availability is derived at read time. Lifecycle status (ACTIVE/INACTIVE) is the Owner's
 // separate decision and is never written by the window lifecycle.

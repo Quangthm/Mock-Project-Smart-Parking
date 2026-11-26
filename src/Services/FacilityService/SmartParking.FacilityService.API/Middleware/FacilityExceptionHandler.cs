@@ -29,15 +29,6 @@ public sealed class FacilityExceptionHandler(ILogger<FacilityExceptionHandler> l
                 return new(409, batch.Code, batch.Message, Items:
                     batch.Failures.Select(f => new { resourceId = f.ResourceId, code = f.Code, message = f.Message }).ToArray());
             },
-            [typeof(MaintenanceConflictException)] = error =>
-            {
-                var conflict = (MaintenanceConflictException)error;
-                return new(409, "STRUCTURE_IN_USE", conflict.Message, Commitments:
-                    conflict.Commitments.Select(c => new
-                    {
-                        id = c.Id, type = c.Type, start = c.Start, end = c.End, unitId = c.UnitId, slotId = c.SlotId
-                    }).ToArray());
-            },
             [typeof(StructureException)] = error =>
             {
                 var structure = (StructureException)error;

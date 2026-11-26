@@ -583,7 +583,7 @@ public sealed class PostgresStructureWorkflowTests
         var end = now.AddHours(2);
 
         var created = await windows.CreateAsync(fixture.Owner, fixture.SiteId, start, end, "Repaving", null, null, CancellationToken.None);
-        Assert.Equal("pending", created.EnforcementState);
+        Assert.Equal("acknowledged", created.EnforcementState);
         Assert.Null(created.CancelledAt);
 
         // A future closure is scheduled, never MAINTENANCE, and the lot stays lifecycle-ACTIVE.
@@ -627,7 +627,7 @@ public sealed class PostgresStructureWorkflowTests
 
         // Growing is allowed and re-arms the pending acknowledgement state.
         var grown = await windows.ExtendAsync(fixture.Owner, fixture.SiteId, window.Id, null, end.AddHours(1), CancellationToken.None);
-        Assert.Equal("pending", grown.EnforcementState);
+        Assert.Equal("acknowledged", grown.EnforcementState);
         Assert.True((grown.End - end.AddHours(1)).Duration() < TimeSpan.FromMilliseconds(1));
 
         // A window that already ended cannot be extended (seeded to the past: create rejects past starts).

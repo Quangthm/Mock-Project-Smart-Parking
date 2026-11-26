@@ -18,6 +18,7 @@ public static class FacilityMessaging
         {
             services.AddScoped<ILayoutInvalidationPublisher, NoOpLayoutInvalidationPublisher>();
             services.AddScoped<IFacilityCapacityRestrictionPublisher, NoOpFacilityCapacityRestrictionPublisher>();
+            services.AddScoped<IFacilityMaintenancePublisher, NoOpFacilityMaintenancePublisher>();
             return services;
         }
 
@@ -35,6 +36,7 @@ public static class FacilityMessaging
 
         services.AddScoped<ILayoutInvalidationPublisher, MassTransitLayoutInvalidationPublisher>();
         services.AddScoped<IFacilityCapacityRestrictionPublisher, MassTransitFacilityCapacityRestrictionPublisher>();
+        services.AddScoped<IFacilityMaintenancePublisher, MassTransitFacilityMaintenancePublisher>();
         services.AddMassTransit(registration =>
         {
             registration.AddEntityFrameworkOutbox<ParkingDbContext>(outbox =>
@@ -84,6 +86,16 @@ public static class FacilityMessaging
                 bus.Message<FacilityCapacityRestrictionReleasedV1>(message =>
                     message.SetEntityName(FacilityCapacityRestrictionTopology.ReleasedExchangeName));
                 bus.Publish<FacilityCapacityRestrictionReleasedV1>(publish =>
+                {
+                    publish.Durable = true;
+                    publish.AutoDelete = false;
+                    publish.ExchangeType = "fanout";
+                });
+
+                // Authoritative scheduled maintenance change events consumed by OperationService.
+                bus.Message<FacilityMaintenanceChangedV1>(message =>
+                    message.SetEntityName(FacilityMaintenanceTopology.ChangedExchangeName));
+                bus.Publish<FacilityMaintenanceChangedV1>(publish =>
                 {
                     publish.Durable = true;
                     publish.AutoDelete = false;

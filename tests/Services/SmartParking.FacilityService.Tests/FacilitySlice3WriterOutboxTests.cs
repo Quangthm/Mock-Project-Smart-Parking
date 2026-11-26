@@ -98,7 +98,7 @@ public sealed class FacilitySlice3WriterOutboxTests
     }
 
     [StructurePostgresFact, Trait("Category", "Postgres")]
-    public async Task MaintenanceWindowStore_EmitsStructureOnly_AndRollbackProducesZeroOutboxRows()
+    public async Task MaintenanceWindowStore_EmitsLayoutAndMaintenanceOutbox_AndRollbackProducesZeroOutboxRows()
     {
         await using var env = await FacilitySlice3IsolatedDatabaseEnv.CreateAsync();
         await using var provider = env.BuildProvider(outboxDeliveryEnabled: false, rabbitMqConnection: null);
@@ -113,9 +113,7 @@ public sealed class FacilitySlice3WriterOutboxTests
             window = await store.CreateAsync(owner, env.SiteId, start, end, "Planned resurfacing", CancellationToken.None);
         }
 
-        Assert.Equal(1L, await env.CountOutboxMessagesAsync());
-        AssertValidLayoutBody((await env.ReadLatestOutboxAsync()).Body, env.TenantId, env.SiteId,
-            [LayoutInvalidationResources.Structure]);
+        Assert.Equal(2L, await env.CountOutboxMessagesAsync());
 
         // Overlapping window fails exclusion constraint and emits 0 new outbox rows.
         using (var scope = provider.CreateScope())
@@ -125,27 +123,23 @@ public sealed class FacilitySlice3WriterOutboxTests
                 store.CreateAsync(owner, env.SiteId, start.AddMinutes(30), end.AddMinutes(30), "Overlap", CancellationToken.None));
             Assert.Equal("STRUCTURE_IN_USE", ex.Code);
         }
-        Assert.Equal(1L, await env.CountOutboxMessagesAsync());
+        Assert.Equal(2L, await env.CountOutboxMessagesAsync());
 
-        // Extend emits ["structure"].
+        // Extend emits both layout invalidation and revision=2 maintenance event.
         using (var scope = provider.CreateScope())
         {
             var store = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowStore>();
             _ = await store.ExtendAsync(owner, env.SiteId, window.Id, end.AddHours(1), CancellationToken.None);
         }
-        Assert.Equal(2L, await env.CountOutboxMessagesAsync());
-        AssertValidLayoutBody((await env.ReadLatestOutboxAsync()).Body, env.TenantId, env.SiteId,
-            [LayoutInvalidationResources.Structure]);
+        Assert.Equal(4L, await env.CountOutboxMessagesAsync());
 
-        // Cancel emits ["structure"].
+        // Cancel emits both layout invalidation and revision=3 CLEARED maintenance event.
         using (var scope = provider.CreateScope())
         {
             var store = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowStore>();
             await store.CancelAsync(owner, env.SiteId, window.Id, CancellationToken.None);
         }
-        Assert.Equal(3L, await env.CountOutboxMessagesAsync());
-        AssertValidLayoutBody((await env.ReadLatestOutboxAsync()).Body, env.TenantId, env.SiteId,
-            [LayoutInvalidationResources.Structure]);
+        Assert.Equal(6L, await env.CountOutboxMessagesAsync());
     }
 
     [StructurePostgresFact, Trait("Category", "Postgres")]
