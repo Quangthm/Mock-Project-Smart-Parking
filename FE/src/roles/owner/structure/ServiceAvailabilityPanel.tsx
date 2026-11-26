@@ -35,30 +35,26 @@ function formatInstant(value: string | null | undefined) {
 
 type RunAction = (action: () => Promise<unknown>, success?: string | ((result: unknown) => string)) => Promise<boolean>
 
-/** The acknowledgement copy must reflect the state Operations actually returned. */
-function enforcementNotice(result: unknown, action: "scheduled" | "extended") {
-  const enforcementState = (result as MaintenanceWindow | null | undefined)?.enforcementState
-  if (enforcementState === "acknowledged") {
-    return `Maintenance window ${action} and enforced by Operations.`
-  }
-  return "Maintenance window recorded as pending; awaiting Operations acknowledgement."
+/** The UI reflects committed Facility maintenance schedules and async Operations sync state. */
+function enforcementNotice(_result: unknown, action: "scheduled" | "extended") {
+  return `Maintenance window ${action} and published to Operations.`
 }
 
 function enforcementCopy(window: MaintenanceWindow) {
   if (window.enforcementState === "acknowledged") {
-    return { tone: "success" as BadgeTone, label: "Enforced", help: "Admission acknowledged this closure." }
+    return { tone: "success" as BadgeTone, label: "Active schedule", help: "Committed by Facility and published to Operations." }
   }
   if (window.enforcementState === "failed") {
     return {
       tone: "danger" as BadgeTone,
       label: "Enforcement failed",
-      help: "This window is not in force. Admission may still accept bookings; re-read and reconcile before claiming the lot is closed.",
+      help: "Legacy window could not be confirmed; re-read and reconcile before claiming the lot is closed.",
     }
   }
   return {
     tone: "warning" as BadgeTone,
-    label: "Enforcement pending",
-    help: "Created as pending. It is not in force until admission acknowledges it; the lot reads as MAINTENANCE_UNCERTAIN, never closed.",
+    label: "Pending sync",
+    help: "Legacy pending window. Recreate or extend to publish via the event stream.",
   }
 }
 
