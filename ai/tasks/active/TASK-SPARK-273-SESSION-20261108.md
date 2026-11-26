@@ -1143,7 +1143,7 @@ Exact unstaged C paths grouped by review unit (123 modified, 41 added and 47 del
 
 ## Checkpoint D implementation and verification, 26 November 2026
 
-The user approved the revised D1-D5 inventory, Option C, bounded native retries, retained exhausted jobs, the expiry-only structure exception and isolated durability verification. The branch and tracked upstream both resolved to `6edc3ea35514787901529457f17d8128d8414ec5`. All D changes are local and unstaged. Manual acceptance and deployment are pending.
+The user approved the revised D1-D5 inventory, Option C, bounded native retries, retained exhausted jobs, the expiry-only structure exception and isolated durability verification. At the time of this implementation entry, the branch and tracked upstream both resolved to `6edc3ea35514787901529457f17d8128d8414ec5` and the D changes were local and unstaged. See the current Checkpoint E entry below for Git and acceptance status.
 
 | Slice | Implementation and evidence |
 |---|---|
@@ -1244,3 +1244,89 @@ Use the existing SPARK-273 deployment checklist, manual test guide and Reservati
 Excluded user files: `ai/AGENTS.md`, `ai/context/user-coding-instructions.md`, `ai/tasks/active/TASK-SPARK-243-SESSION-20261107.md`, `scripts/seed-site-car-tariff.ps1`.
 
 Suggested commit: `feat(operations): schedule reservation deadlines with Quartz (SPARK-273)`.
+
+## Current checkpoint E audit and handoff — 26 November 2026
+
+Checkpoint C (`6edc3ea35514787901529457f17d8128d8414ec5`) was accepted and manually verified by the user. D was implemented, committed and pushed. Local HEAD and tracked upstream `origin/feature/SPARK-273-driver-book-parking-ahead-of-arrival` both resolve to `3dc3a57322158507a59c4028851f0b4cecc7d162`. The index was empty at entry. Pre-existing modifications to `ai/AGENTS.md`, the SPARK-243 session, and `scripts/seed-site-car-tariff.ps1`, and the untracked `ai/context/user-coding-instructions.md`, are user work. E is current. The user assigned D runtime durability and customer acceptance to the tester. [Tester handoff](../../../docs/04-testing/reports/SPARK-273-checkpoint-e-tester-handoff.md)
+
+### Source audit and findings
+
+Paths below use **Operations** for `src/Services/OperationService` and **Operations tests** for `tests/Services/SmartParking.OperationService.Tests`.
+
+| ID and severity | Source, current callers and impact | Proposed action, assumptions and regression check | Owner and approval |
+|---|---|---|---|
+| **E1-01 · justified cleanup** | Operations `SmartParking.OperationService.Infrastructure/Reservations/ReservationCommercialClient.cs` implements `IReservationCommercialOwner.ReconcileAsync`. Checked-in production code has no caller. The only other implementation is a test-double method in Operations tests `QuoteBookingDatabaseTests.cs` that appends to an otherwise unread list. The method formerly staged reconciliation via HTTP and validated an acknowledgement. The supported paid-denial and zero-disposition paths send durable `RequestReservationDispositionV1` via the outbox. | Remove that method and its private acknowledgement shape, plus the unused fixture implementation/list. Retain shared preview and proof, `CollectionsAsync` (paired callback rollback/binding evidence and client auth tests), and the Payment endpoints/financial obligation. Low risk within the checked-in Operations call graph. Verify compile and focused disposition tests after approval. Payment owner must assess external usage before considering any server endpoint removal. | Operations, approval required |
+| **E2-01 · genuine historical-return defect** | `FE/src/roles/driver/payments/PaymentResultPage.tsx` receives a Payment `HISTORICAL` order and resolves the request via `ReadOwnOrderRequestHandler` and `ReservationRequestRepository.FindOwnByOrderAsync`. The render compares the snapshot's reservation ID with the request ID. For a historical paid return carrying distinct IDs, the authorized snapshot is ignored and a confirmed result can keep saying that it is awaiting confirmation. `ReservationRow.PrepareQuote` uses equal IDs for the reviewed path. SPARK-286 demo history demonstrates distinct ID shape with synthetic orders, so a return test needs an actual paired historical fixture. | Hand off to frontend. Carry Payment's authoritative reservation ID alongside the separately resolved request ID and match the scoped snapshot to that reservation. Cover distinct-ID, reviewed, mismatched and standalone results. Moderate regression risk at return routing and owner isolation. Impact is conditional on offering historical return for populated cutover. | Frontend, with Payment and Operations contract support. Separate approval required for code. |
+| **E3-01 · documentation-only** | `docs/03-design/api/reservation-first-slice-api-design.md` still prescribes `quoteVersion` and a confirmation token. Copying its body can fail the strict reviewed POST. The architecture target still routes booking through Facility protection and HTTP order provisioning. The Facility API design includes retired acquire/complete/abort instructions. `LOCAL-SETUP.md` contains an old finalization smoke path. The deployment report already has a correct D section but its historical body and an earlier readiness report can still be reached from setup links. | Put current reviewed contracts and the D cutover section first. Label historical examples and point old entry points to the active handoff. Keep Facility signed slot metadata, historical evidence and decision log entries. Check snippets against controller DTOs and existing collection without runtime calls. Low regression risk, focused on setup and contract consumers. | Operations docs with Facility and Payment review where applicable. Broader edits proposed for approval. |
+| **E4-01 · verification blocker** | `tests/Services/SmartParking.UserService.Tests/StructureHttpContractTests.cs` has a stale `NoopReservationFacts` used by its structure harness. It omits two required methods in Operations `IReservationFactsPublisher.cs`. The committed ledger reports a build blocker for the ordinary User test project. | Hand off the fixture repair to User/structure owner. Verify the two missing methods and the fixture's expected call behavior before rebuilding its project. Risk is fixture fidelity. The temporary focused User build supplied narrower evidence. | User/structure, separate approval required for changes |
+| **E4-02 · documentation-only evidence gap** | Operations tests `ReservationQuartzDurabilityTests.cs` sends a duplicate, then reads triggers without waiting for evidence that the duplicate was handled. It uses an orderly host stop and a residual-job replay. Its offline branch starts ADO Quartz alone, and redrive calls `TriggerJob` directly. The required infrastructure run remains unexecuted. | Require evidence of both deliveries and the actual crash/outage/CLI boundaries in tester cases I03–I12. A clean fixture run alone leaves those gaps. No infrastructure or business change is proposed for E. | Tester and Operations, handoff authorized |
+
+### Completed or retained by source inspection
+
+- **Admission and deadlines.** `AdmitQuoteReservationHandler` captures authenticated Driver intent and D. `ReservationAdmissionMachine` and owner consumers join one Account, Vehicle and Facility decision. `QuoteEvaluationConsumer` continues to `CommitQuoteHoldHandler` with signed QuoteId proof, same-site canonical plate and named-slot checks, and terminal `STRUCTURE_BUSY` when a live joined evaluation sees the structure hold. `CheckAdmissionDeadlineHandler` fences late progress. The A–D removals cover terms-based creation, anonymous-scope paths, Facility token orchestration, reviewed quote versioning, Account backoff and both polling workers. `FindForWorkerAsync` is used by Account decision routing, joined evaluation and deadline registration. Attempt identity, owner correlation, transport retries, and policy/tariff/coverage revisions remain meaningful.
+- **Financial and reader integration.** `CommitQuoteHoldHandler` commits H and order intent with the positive hold, or confirms zero immediately with null H. `EnsureReservationOrderConsumer`, Payment checkout reads, the shared `PaymentSucceededV1`, `RecordReservationPaymentHandler` and `LinkReservationZeroReceiptHandler` cover order readiness, exact binding, pre-H confirmation, ordinary pre-T reacquisition, terminal denial/disposition and asynchronous zero linkage. The own booking handlers and SPARK-286 history accept optional financial IDs, and the scoped SignalR watcher uses connect/reconnect reads and hints. Expiry progress is queued by Operations `UnitOfWork.SaveChangesAsync` from the changed booking. Gate/session settlement has its independently gated `PaymentSucceededConsumer` for `PARKING_SESSION`. The manual guide already records the legacy departure-reference collision and directs it to the owners.
+- **Persistence and setup.** The owning `03b-reservation-operations-service-db.sql` and Operations EF mappings keep the request, Saga, financial evidence and Quartz persistence. No remaining worker due query/index or token table was identified. The Payment `is_provisioning_fence` is used by the reviewed order/checkout path for cutoff closure. The Operations historical terms FK, snapshots and legacy request states support old reads and the `06-reservation-history.sql` SPARK-286 demo seed. D updated its request columns. The seed represents historical closed bookings, including a historical zero row, and supplies no evidence for live zero admission. Keep that purpose and use handoff Z01 for live zero. Compose, host runner and application options agree on the 15-second default and 1–90-second override.
+- **Activation.** Quartz registration is an outbox intent with a durable endpoint and exact key. The persistent clustered job uses original D/H, local MediatR, bounded retry, durable exhaustion and exact-key operator redrive. Source preserves the expiry-only guard exception. Runtime cutover, fault boundaries and customer acceptance are pending. D08 affected-slot coordination remains with SPARK-244. D09 stays withdrawn.
+
+### Proposed implementation inventory
+
+- **E1, approval requested.** Modify `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationCommercialOwner.cs`, `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationCommercialClient.cs` and `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.cs`. Delete `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/DispositionAcknowledgement.cs`. This removes only the unused reconciliation write and test stub. Verify an Operations build and the existing commercial client and paid/zero disposition regressions, including opt-in guard cases where appropriate. Leave the paired collection lookup available for its recorded purpose.
+- **E2.** No Operations production edits proposed. Refer E2-01 to the frontend owner. The smallest separate candidate touches `FE/src/roles/driver/payments/PaymentResultPage.tsx` and `tests/frontend/reservation-happy-path.test.cjs`. Owner approval and a historical fixture are needed to validate the proposed correction.
+- **E3.** No schema, seed or runtime configuration edits proposed. For the documentation reconciliation, update `docs/03-design/api/reservation-first-slice-api-design.md`, `docs/03-design/api/reservation-facility-dependency-api-design.md`, `docs/02-architecture/architecture-decisions/reservation-workflow-target.md`, `docs/04-testing/reports/SPARK-273-reviewed-admission-integration.md`, `docs/04-testing/reports/SPARK-273-reservation-workflow-readiness-audit.md` and `LOCAL-SETUP.md`. Keep old decisions and reports identifiable as historical. The scope is the implemented specific-slot contract and its activation instructions, with documentation checks after approval.
+- **E4, delivered.** Added `docs/04-testing/reports/SPARK-273-checkpoint-e-tester-handoff.md` and updated this active session and the current guide/checklist entry links. The handoff links the existing Facility/SPARK-244, walk-in and Payment owner records. Tester execution and any fixture repair remain pending.
+
+E verification used source and recorded evidence only. No test, service/container startup, deployment or data operation was performed. The approval choice is whether to apply the small E1 Operations cleanup and E3 documentation reconciliation, or close E with the authorized handoff and retain the dormant method.
+
+## Checkpoint E completion record — 26 November 2026
+
+### Final baseline and scope
+
+- Branch `feature/SPARK-273-driver-book-parking-ahead-of-arrival`; HEAD and upstream remain `3dc3a57322158507a59c4028851f0b4cecc7d162`. No commit or push was made.
+- Final index inspection: `git diff --cached --name-only` empty. All changes remain in the working tree.
+- Preserved user work: `ai/AGENTS.md`, `ai/tasks/active/TASK-SPARK-243-SESSION-20261107.md`, `scripts/seed-site-car-tariff.ps1`, `ai/context/user-coding-instructions.md`, and the pre-existing Postman guide/checklist changes.
+- Applied only the approved E1 cleanup, E2/E4 handoffs, E3 seven-file documentation inventory, and this session record. No frontend production code, schema, seed, runtime configuration, database, broker, service, package, commit, or push was changed.
+
+### E1 and background-worker closure
+
+- Removed unused `IReservationCommercialOwner.ReconcileAsync`, its HTTP implementation, the private `DispositionAcknowledgement` shape/file, and the unread Operations test fixture list/stub.
+- Preserved Payment-owned `/internal/reservation-reconciliations`, paired `CollectionsAsync`, paid denial/zero disposition outbox effects, durable EF outbox delivery, MassTransit infrastructure, Quartz hosted service/internal trigger acquisition, occupancy outbox, and all independent allocation/gate/occupancy/checkout/maintenance responsibilities.
+- Source-level matrix closure: no reachable `ReservationFacilityDependencyWorker`, `ReservationOrderProvisioningWorker`, `ReservationAuthorizationWorker`, or `ReservationHoldExpiryWorker`; no obsolete hosted-service registrations, worker-only commands, due-work scans, or retry persistence specific to those workers. `FindForWorkerAsync` remains independently used by account decision routing, joined evaluation, and deadline registration.
+- No replacement worker scan or polling admission/checkout path was introduced. Runtime durability, crash/outage, actual CLI redrive, populated-schema transition, and customer acceptance remain tester-owned.
+
+### E2/E3/E4 documentation and handoffs
+
+- E2-01 is a frontend handoff only: `docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-E2-payment-return-frontend-handoff.md`, linked from the handoff README and tester handoff. No `PaymentResultPage.tsx` edit was authorized.
+- E3 corrected exactly seven files: the Operations API and Facility API designs, workflow target, reviewed-admission integration report, readiness audit, `LOCAL-SETUP.md`, and `FE/docs/REALTIME_REQUEST_HANDOFF.md`.
+- Corrections put current `quoteId`-only, nullable Operations `OrderId`, Payment-owned checkout readiness, immediate zero-deposit coverage confirmation, B4/C/D retirement chronology, and no-recurring-reservation-polling facts first. Historical reports retain original baseline, commands, results, observations, and source references under historical labels with separate dated current-status sections.
+- Corrected approved broken handoff links to the `docs/05-project-management/handoffs/SPARK-273 — Reservation/` directory. Current guide/checklist/tester-handoff links were added where needed.
+- E4 remains a handoff: `docs/04-testing/reports/SPARK-273-checkpoint-e-tester-handoff.md` with 13 customer/regression and 15 infrastructure cases. The UserService `NoopReservationFacts` blocker remains untouched pending its owner.
+
+### Static verification evidence
+
+- `git -c core.safecrlf=false diff --check`: passed with no whitespace errors; Git emitted only existing LF-to-CRLF normalization warnings.
+- Local Markdown target scan over the seven E3 files: `ALL_LOCAL_MARKDOWN_TARGETS_EXIST`. Destination-file existence was verified for every non-HTTP Markdown link in scope.
+- Anchor spot-check: `owner-agreement-and-wire-contracts`, `owner-queues-and-broker-trust`, `covered-acceptance-recovery`, `schema-and-rollout`, `verification-totals`, `reproducing-the-checks`, `request-to-confirmation`, and `checkpoint-d-coordinated-cutover-and-recovery` all resolve to existing headings in their target files.
+- Final diff review inspected the E1 removals and the seven E3 documentation paths. No stage, commit, push, restore, build, test, package, service, container, database, or broker operation was performed.
+- Compilation remains `[UNVERIFIED]` and was not authorized in this turn. Minimal candidate if approved: `dotnet build tests/Services/SmartParking.OperationService.Tests/SmartParking.OperationService.Tests.csproj --no-restore --nologo`.
+
+### Proposed staging inventory (not staged)
+
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationCommercialOwner.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationCommercialClient.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/DispositionAcknowledgement.cs` (deletion)
+- `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.cs`
+- `docs/02-architecture/architecture-decisions/reservation-workflow-target.md`
+- `docs/03-design/api/reservation-first-slice-api-design.md`
+- `docs/03-design/api/reservation-facility-dependency-api-design.md`
+- `docs/04-testing/reports/SPARK-273-reviewed-admission-integration.md`
+- `docs/04-testing/reports/SPARK-273-reservation-workflow-readiness-audit.md`
+- `LOCAL-SETUP.md`
+- `FE/docs/REALTIME_REQUEST_HANDOFF.md`
+- `docs/04-testing/reports/SPARK-273-checkpoint-e-tester-handoff.md` (new)
+- `docs/05-project-management/handoffs/SPARK-273 — Reservation/SPARK-273-E2-payment-return-frontend-handoff.md` (new)
+- `docs/05-project-management/handoffs/README.md`
+- `ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md`
+- Exclude all preserved user work listed in the final baseline.
+
+Suggested commit: `refactor(operations): close checkpoint E cleanup and documentation (SPARK-273)`.
+ Historical frontend return and the User test blocker are separate owner work.

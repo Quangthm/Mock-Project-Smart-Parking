@@ -1,6 +1,6 @@
 # SPARK-273 Driver reservation to Payment order
 
-Use this guide on an isolated local SmartPark stack. The paid scenario passes at **05.1** when an active `PENDING_PAYMENT` reservation has a genuine payable order in Payment, a future `holdExpiresAt`, and `confirmedAt = null`. The collection stops before checkout, QR, provider callbacks, or payment confirmation. Use the separate [payOS acceptance plan](../payment-integration/payos-test-plan.md) for provider testing.
+Use this guide on an isolated local SmartPark stack. **05.1** verifies payable order readiness with a future `holdExpiresAt` and `confirmedAt = null`. **05.2** verifies Operations confirmation after a controlled successful test settlement. Use the current tester checklist for acceptance, durability and evidence capture. [Checkpoint E tester handoff](../reports/SPARK-273-checkpoint-e-tester-handoff.md)
 
 - [Import the collection](./SPARK-273-Reservation-Flow.postman_collection.json)
 - [Import the blank local environment](./SPARK-273-Local.postman_environment.example.json)

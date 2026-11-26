@@ -2,12 +2,22 @@
 
 | Metadata | Value |
 | --- | --- |
-| Status | Approved target semantics; conceptual field names and compatibility mapping pending |
-| Contract version / date | SPARK-273 Slice 1 target / 2026-11-18; wire version to agree |
+| Status | Implemented SPARK-273 reviewed-admission contract; remaining verification and deployment evidence listed separately |
+| Contract version / date | SPARK-273 reviewed admission / 2026-11-26; receipt `contractVersion` 3 for reviewed admission, 2 for legacy |
 | Owning service / author | Operations / SmartPark architecture |
 | Jira design / implementation / verification | [SPARK-273](https://mangamanagement.atlassian.net/browse/SPARK-273) / follow-on slices / [QA](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md) |
 | Requirements baseline | SRS v1.1 and [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) |
-| Historical Slice 1 checkpoint | Operations plate review and Facility slot resolution were implemented at this checkpoint. For subsequent Payment and admission delivery, see the [current owner handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md). See the [historical Payment quote handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md). |
+| Historical Slice 1 checkpoint | Operations plate review and Facility slot resolution were implemented at this checkpoint. For subsequent Payment and admission delivery, see the [current owner handoff](<../../05-project-management/handoffs/SPARK-273 — Reservation/2026-11-18-SPARK-273-reservation-owner-handoffs.md>). See the [historical Payment quote handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-18-SPARK-273-payment-quote-handoff.md). |
+
+## Current SPARK-273 status (2026-11-26)
+
+- The reviewed quote and admission contracts below are implemented with `quoteId` only; there is no `quoteVersion` or `FacilityVersion` wire field. `acceptedQuoteId` is a Postman variable used to pass the selected `quoteId`, not a wire property.
+- Operations `OrderId` is intentionally nullable. A positive admission atomically commits `PENDING_PAYMENT`, a concrete hold with exact H and durable order-creation intent; Payment creates the payable order independently. Operations may still report null `OrderId` after Payment creates the order, and binds the order only when it consumes authoritative successful settlement data. Checkout readiness comes from Payment, never from Operations `OrderId` or `HoldExpiresAt`.
+- Covered/zero-deposit admission is implemented: the committed admission handler evaluates coverage binding and authoritative accepted commercial evidence, and a zero-deposit quote confirms immediately without an unpaid H. Only specifically deferred subscription functionality remains pending; coverage, tariff, and policy revisions remain meaningful.
+- Checkpoint chronology: B4 retired the `ADMISSION`-purpose dependency token path, C retired the remaining reservation-specific `CONFIRMATION` acquire/complete/abort token workflow, and D retired the remaining authorization and unpaid hold-expiry polling workers. HTTP slot metadata lookup remains separate from messaging-based interval-aware Facility eligibility.
+- Current verification entry points: [manual test guide](../../04-testing/postman/SPARK-273-manual-test-guide.md), [deployment checklist](../../04-testing/reports/SPARK-273-deployment-checklist.md#checkpoint-d-coordinated-cutover-and-recovery), and [Checkpoint E tester handoff](../../04-testing/reports/SPARK-273-checkpoint-e-tester-handoff.md).
+
+> The remainder of this document preserves the approved target flow, corrected to the implemented DTO field names. It is not runtime or deployment evidence.
 
 ## Overview
 
@@ -21,7 +31,7 @@ Driver reviews an authoritative quote, submits durable admission, and observes c
 
 ## API Specification
 
-Examples use conceptual wire names and the existing Operations `success/data` convention. Existing paths are reuse candidates. Target endpoints accept/return JSON and use authenticated Driver JWT, original Account from trusted actor context and owner-scoped reads. IDs are nonempty UUIDs unless stated otherwise. Required values cannot be omitted or null. Reject contradictory server-owned fields and agree unknown-field handling/version migration before publishing the DTOs.
+Examples use the implemented wire names and the Operations `success/data` convention. The endpoints accept/return JSON and use authenticated Driver JWT, original Account from trusted actor context and owner-scoped reads. IDs are nonempty UUIDs unless stated otherwise. Required values cannot be omitted or null. Review DTOs disallow unmapped members. `quoteId` is the only accepted quote reference; `acceptedQuoteId` remains a Postman variable name only.
 
 ### Commercial review
 
@@ -49,16 +59,16 @@ Examples use conceptual wire names and the existing Operations `success/data` co
 **Response sample** (200, review). Preview is estimate-only and cannot supply an accepted quote reference.
 
 ```json
-{"success":true,"data":{"quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1","validUntil":"2026-12-01T07:55:00Z","canonicalPlate":"51A12345","siteId":"77777777-7777-4777-8777-777777777777","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","tariffVersion":"tariff-1","isCovered":false,"coverageVersion":"none-v1","bookedAmount":20000,"coveredAmount":0,"depositAmount":20000,"currency":"VND","disclosure":"Full prepayment"}}
+{"success":true,"data":{"quoteId":"22222222-2222-4222-8222-222222222222","validUntil":"2026-12-01T07:55:00Z","canonicalPlate":"51A12345","siteId":"77777777-7777-4777-8777-777777777777","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","tariffVersion":"tariff-1","isCovered":false,"coverageVersion":"none-v1","bookedAmount":20000,"depositAmount":20000,"currency":"VND","disclosure":"Full prepayment","operationalPolicy":{"platformRevisionId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","platformVersion":1,"siteRevisionId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","siteVersion":3,"values":{"CANCELLATION_CUTOFF_MINUTES":30},"arrivalLateToleranceEnabled":true,"cancellationTimezone":"Asia/Ho_Chi_Minh"}}}
 ```
 
-Quote ID/version and validity are required. The reviewed result exposes the immutable selection and applicable terms, including the authoritative location, interval and method, for consent. Monetary fields are Payment-owned decimal amounts in the stated currency. Coverage and tariff versions are opaque. Stale or changed terms require fresh review. Dependency unavailability cannot be priced as zero.
+`quoteId` and `validUntil` are required. The reviewed result exposes the immutable selection and applicable terms, including the authoritative location, interval and method, for consent. Monetary fields are Payment-owned decimal amounts in the stated currency. Coverage and tariff versions are opaque and remain meaningful; platform/site policy revisions are independently meaningful and must not be collapsed into a single version. Stale or changed terms require fresh review. Dependency unavailability cannot be priced as zero. There is no `quoteVersion` field.
 
 The response also includes `operationalPolicy` with `platformRevisionId`, `platformVersion`, `siteRevisionId`, `siteVersion`, effective integer `values`, `arrivalLateToleranceEnabled` and `cancellationTimezone`. Display these policies and Payment’s disclosure before consent. Clearing or changing the canonical plate, slot, either instant or method clears consent. A change of driver Account, expiry, changed policy, tariff terms or coverage that invalidates the binding requires a new review. A preview cannot restore consent.
 
 Malformed input returns 400. An owner-confirmed missing slot returns 404. A stale quote returns 409. Definitive interval ineligibility is a later admission outcome. Missing owner routes, credentials, incomplete pricing evidence and mismatched owner responses fail closed with 503. Review creates no reservation, dependency token or order.
 
-**Reviewed hold.** The Driver submits the reviewed quote ID/version with the same selection. Operations retrieves Payment’s immutable proof before taking its transaction guards, then checks the exact proof, joined Account/Vehicle/Facility results and current local facts. One Operations transaction commits the named reservation, accepted buffer, exact H, terminal `HOLD_CREATED`, progress and outbox effects. Reviewed admission uses one interval-aware Facility eligibility decision and creates zero Facility tokens. Confirmation retains its separate `CONFIRMATION` token. Payment order readiness follows the committed hold independently.
+**Reviewed hold.** The Driver submits the reviewed `quoteId` with the same selection. Operations retrieves Payment’s immutable proof before taking its transaction guards, then checks the exact proof, joined Account/Vehicle/Facility results and current local facts. One Operations transaction commits the named reservation, accepted buffer, exact H, terminal `HOLD_CREATED`, progress and outbox effects. Reviewed admission uses one interval-aware Facility eligibility decision and creates zero Facility tokens. Checkpoint C retired the former separate `CONFIRMATION` token workflow; HTTP slot metadata lookup and messaging-based interval-aware Facility eligibility remain. Payment order readiness follows the committed hold independently.
 
 ### Submit durable admission
 
@@ -79,18 +89,18 @@ Content-Type: application/json
 ```
 
 ```json
-{"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","quoteId":"22222222-2222-4222-8222-222222222222","quoteVersion":"v1"}
+{"licensePlate":"51A12345","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","paymentMethod":"PAYOS","quoteId":"22222222-2222-4222-8222-222222222222"}
 ```
 
-`quoteId` is a required UUID and `quoteVersion` a required opaque version. Submission of the exact reviewed binding records consent. Client VehicleId and SiteId are not required or authoritative. Client amounts, coverage and actor fields confer no authority. `quoteVersion` remains temporarily because Payment proof, order and financial replay use it.
+`quoteId` is a required UUID and is the only accepted quote reference. In Postman collections the selected quote may be held in the `acceptedQuoteId` variable, but the serialized body property remains `quoteId`. Submission of the exact reviewed binding records consent. Client VehicleId and SiteId are not required or authoritative. Client amounts, coverage and actor fields confer no authority. Unknown fields are rejected by the reviewed request DTO.
 
 **Response sample** (202 Accepted after durable capture). Preserve the existing `Location: /api/reservation-requests/{requestId}` receipt link or version a change.
 
 ```json
-{"success":true,"data":{"requestId":"44444444-4444-4444-8444-444444444444","admissionState":"PENDING"}}
+{"success":true,"data":{"requestId":"44444444-4444-4444-8444-444444444444","state":"PENDING","reservationId":null,"code":null,"contractVersion":3}}
 ```
 
-Request ID is required and stable for replay. The software may return the same request and current receipt on replay per the agreed wire version. Scope idempotency to Account and canonical intent. Same key and same intent resolves the original request, even if the quote subsequently expires. Same key and different intent conflicts. The 202 receipt gives no booking or payment entitlement.
+Request ID is required and stable for replay. The receipt carries a `contractVersion` (`3` for the reviewed-admission mapping, `2` for legacy receipts); this is a compatibility version, not a quote version. Scope idempotency to Account and canonical intent. Same key and same intent resolves the original request, even if the quote subsequently expires. Same key and different intent conflicts. HTTP `202` means durable admission processing was accepted; it gives no booking, coverage, or payment entitlement.
 
 ### Read own progress
 
@@ -106,10 +116,12 @@ Request ID is required and stable for replay. The software may return the same r
 **Response sample** (200).
 
 ```json
-{"success":true,"data":{"requestId":"44444444-4444-4444-8444-444444444444","version":4,"admissionState":"PENDING","checks":{"account":"SUCCEEDED","vehicle":"SUCCEEDED","facility":"PENDING","booking":"PENDING"},"reservationId":null,"reservationState":null,"paymentReadiness":null,"commercialReadiness":null,"outcomeCode":null}}
+{"success":true,"data":{"requestId":"44444444-444444444444","version":4,"admissionState":"PENDING_PAYMENT","checks":{"account":"SUCCEEDED","vehicle":"SUCCEEDED","facility":"SUCCEEDED","booking":"SUCCEEDED"},"reservationId":"55555555-5555-4555-8555-555555555555","reservationState":"PENDING_PAYMENT","outcomeCode":null,"orderId":null,"holdExpiresAt":"2026-12-01T07:59:00Z","bookedAmount":20000,"depositAmount":20000,"currency":"VND","eventId":"44444444444484444444444444444444/4"}}
 ```
 
-Version is a required monotonic status revision per request. Checks are required persisted states, such as pending, succeeded, rejected, dependency failure or skipped. The reservation ID/lifecycle and readiness are nullable until a hold exists. Outcome code is nullable machine-readable detail. A terminal dependency code distinguishes timed out from unavailable. Payment readiness, commercial readiness and booking lifecycle remain independent of admission status. Admission may terminate as rejected, dependency unavailable/timed out, or hold committed. Readiness can be preparing, available, closed, or unknown. Subscription commercial readiness applies only on the future covered branch. The progress snapshot includes the scoped authoritative order ID when ready and current booking status for reconnection.
+`Version` is a required monotonic status revision per request; `EventId` is `{requestId:N}/{Version}` and may repeat for redelivery. `Checks` are required persisted states: `account`, `vehicle`, `facility`, `booking`. Reservation lifecycle, `outcomeCode`, `orderId`, `holdExpiresAt`, amounts and currency are nullable until the corresponding committed evidence exists. `orderId` is **not** checkout readiness: a positive admission records durable order-creation intent and exact H while `orderId` remains null until authoritative settlement binding; Payment is authoritative for checkout readiness. Admission may terminate as rejected, dependency unavailable/timed out, paid hold committed, or zero-deposit confirmed coverage. The snapshot carries the current booking state for reconnection.
+
+There is no recurring reservation-progress or reservation-checkout-readiness polling contract: SignalR `ReservationProgress` and `ReservationCheckoutChanged` notifications drive updates, with one authoritative read on initial join, reconnect, or explicit page restoration. Independent Payment QR/transaction status checks are Payment-scoped and are not reservation lifecycle polling.
 
 ### Read own booking
 
@@ -122,13 +134,13 @@ Version is a required monotonic status revision per request. Checks are required
 
 **Request sample** `GET /api/me/reservations/55555555-5555-4555-8555-555555555555`. Required UUID path parameter.
 
-**Response sample** (200, after paid order readiness).
+**Response sample** (200, after durable paid admission but before Payment creates the payable order).
 
 ```json
-{"success":true,"data":{"reservationId":"55555555-5555-4555-8555-555555555555","state":"PENDING_PAYMENT","holdExpiresAt":"2026-12-01T07:59:00Z","paymentReadiness":"AVAILABLE","orderId":"66666666-6666-4666-8666-666666666666","confirmedAt":null}}
+{"success":true,"data":{"reservationId":"55555555-5555-4555-8555-555555555555","state":"PENDING_PAYMENT","siteId":"77777777-7777-4777-8777-777777777777","requestedSlotId":"33333333-3333-4333-8333-333333333333","start":"2026-12-01T08:00:00Z","end":"2026-12-01T10:00:00Z","holdExpiresAt":"2026-12-01T07:59:00Z","orderId":null,"bookedAmount":20000,"depositAmount":20000,"currency":"VND","confirmedAt":null,"createdAt":"2026-11-30T00:00:00Z","zeroReceiptId":null,"requestId":"44444444-4444-4444-8444-444444444444","vehicle":{"vehicleType":"CAR","displayLabel":"51A12345"},"siteName":"North garage","siteAddress":"1 Example Road","licensePlate":"51A12345","allocatedSlotId":null,"allocationStatus":null,"parkingSessionId":null,"paymentStatus":null}}
 ```
 
-State and reservation ID are required. H is the persisted hold deadline (nullable when inapplicable). Order ID is nullable until authoritative readiness and only payable when still eligible. `confirmedAt` is nullable until committed confirmation and records guarded evaluation time. Paid checkout uses Payment’s existing `POST /api/v1/payments/orders/{orderId}/checkout` under its own authorization and expiry contract. Future `PENDING_COMMERCIAL_ACCEPTANCE` is an internal lifecycle state. `PROCESSING_SUBSCRIPTION` is presentation terminology. Neither is an admission outcome.
+The sample follows `BookingView`: all nullable fields are present and explicit. `state` and `reservationId` are required. H (`holdExpiresAt`) is the persisted hold deadline and is null for zero-deposit confirmation or otherwise inapplicable cases. `orderId` is nullable: positive admission commits order-creation intent without waiting for Payment, and Operations binds the concrete order when it consumes authoritative successful settlement data; it may still be null after Payment creates the order. `confirmedAt` is nullable until committed confirmation. Paid checkout uses Payment’s existing `POST /api/v1/payments/orders/{orderId}/checkout` under its own authorization and expiry contract. `PENDING_COMMERCIAL_ACCEPTANCE` and `PROCESSING_SUBSCRIPTION` are presentation/internal terminology, not admission outcomes.
 
 ### Validation and error responses
 
@@ -146,13 +158,15 @@ Codes below are semantic examples to map to the existing envelope and finalized 
 
 ### Authorization workflow and retry outcomes
 
-[Authorization ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [saga design](../../02-architecture/architecture-decisions/reservation-workflow-target.md#request-to-confirmation) define trusted actor, durable start, read-only concurrency, branch/attempt fences and effect ownership. Current role/Account, plate and Facility all gate the hold. Use ADR §9 budgets with owner-reviewed overrides. Unknown commits or commercial effects resolve under the original identity. Timeouts on read-only checks may terminate admission without implying ineligibility. Paid confirmation uses one guarded Operations database timestamp strictly before T. For the future covered branch, H is `min(hold creation + effective reservation hold duration, T)`. Require authoritative acceptance and a protected claim at the guarded evaluation strictly before H. If expiry wins, release the hold and require fresh review and a new request. Later acceptance is for reconciliation only. See [owner recovery handoff](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md#covered-acceptance-recovery).
+[Authorization ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md) and [saga design](../../02-architecture/architecture-decisions/reservation-workflow-target.md#request-to-confirmation) define trusted actor, durable start, read-only concurrency, branch/attempt fences and effect ownership. Current role/Account, plate and Facility all gate the hold. Use ADR §9 budgets with owner-reviewed overrides. Unknown commits or commercial effects resolve under the original identity. Timeouts on read-only checks may terminate admission without implying ineligibility.
+
+Positive paid confirmation uses one guarded Operations database timestamp strictly before T. For covered terms with an unpaid hold, H is `min(hold creation + effective reservation hold duration, T)`; require authoritative acceptance and a protected claim at the guarded evaluation strictly before H. If expiry wins, release the hold and require fresh review and a new request. Later acceptance is for reconciliation only. Zero-deposit accepted evidence confirms immediately and creates no unpaid H. Checkpoint B4 retired the `ADMISSION` token path, C retired the remaining reservation-specific `CONFIRMATION` token workflow, and D retired the remaining authorization and unpaid hold-expiry polling workers; the guarded evaluation and interval-aware Facility eligibility remain. See [owner recovery handoff](<../../05-project-management/handoffs/SPARK-273 — Reservation/2026-11-18-SPARK-273-reservation-owner-handoffs.md#covered-acceptance-recovery>).
 
 ### SignalR progress contract
 
 Authenticate the connection and authorize subscription against the persisted initiating Account and request on every join/rejoin. Derive group membership server-side. Apply the existing revocation/forced logout contract and close or remove unauthorized subscriptions, including expired authentication. Reauthorize on reconnect with a valid token. Treat group IDs as routing and prohibit caller-selected cross-Account membership. Avoid exposing plates or financial evidence to unintended recipients.
 
-Conceptual notification content is event ID, request ID, optional reservation ID, monotonic request revision and the committed UI-safe progress snapshot. Relay only after Operations commits. Repeated delivery may reuse the event ID. Discard duplicate or older revisions, and apply a notification only to its scoped request. Snapshots must carry enough state to handle skipped revisions. Failed hub delivery leaves backend outcomes intact. Show disconnected/stale or unknown until authoritative data resumes. Rejoin and perform one authoritative progress read per initial connection, reconnect or explicit page restoration, merging by revision to handle races with arriving events. Deduplicate recovery when triggers coincide. No timer-based status reads or polling in admission, payment return or covered processing. Connection retry and local display-only countdowns can run without status requests. Render `CONFIRMED` only from committed Operations evidence. The implemented hub is `/hubs/reservation-progress`. Call `Subscribe(requestId)` and handle `ReservationProgress` snapshots.
+Conceptual notification content is event ID, request ID, optional reservation ID, monotonic request revision and the committed UI-safe progress snapshot. Relay only after Operations commits. Repeated delivery may reuse the event ID. Discard duplicate or older revisions, and apply a notification only to its scoped request. Snapshots must carry enough state to handle skipped revisions. Failed hub delivery leaves backend outcomes intact. Show disconnected/stale or unknown until authoritative data resumes. Rejoin and perform one authoritative progress read per initial connection, reconnect or explicit page restoration, merging by revision to handle races with arriving events. Deduplicate recovery when triggers coincide. There is no timer-based reservation progression polling and no recurring reservation checkout-readiness polling; independent Payment QR/transaction status checks are Payment-scoped and are not authorization for reservation lifecycle polling. Connection retry and local display-only countdowns can run without status requests. Render `CONFIRMED` only from committed Operations evidence. The implemented hub is `/hubs/reservation-progress`. Call `Subscribe(requestId)` and handle `ReservationProgress` and `ReservationCheckoutChanged` events.
 
 ## Sequence diagram
 
@@ -160,7 +174,7 @@ See the [HTTP, MassTransit and SignalR sequence and state table](../../02-archit
 
 ## Cross-owner interfaces to agree
 
-[Facility API](reservation-facility-dependency-api-design.md) · [Service handoffs](../../05-project-management/handoffs/2026-11-18-SPARK-273-reservation-owner-handoffs.md) · [Payment paid/covered owner gates](../../05-project-management/handoffs/2026-11-19-SPARK-273-payment-authority.md#owner-agreement-and-wire-contracts)
+[Facility API](reservation-facility-dependency-api-design.md) · [Service handoffs](<../../05-project-management/handoffs/SPARK-273 — Reservation/2026-11-18-SPARK-273-reservation-owner-handoffs.md>) · [Payment paid/covered owner gates](<../../05-project-management/handoffs/SPARK-273 — Reservation/2026-11-19-SPARK-273-payment-authority.md#owner-agreement-and-wire-contracts>)
 
 ## Open questions and deferred items
 
@@ -169,7 +183,7 @@ See the [HTTP, MassTransit and SignalR sequence and state table](../../02-archit
 | Wire compatibility | Route reuse, field/state names, expiry/error mappings and recovery of existing committed receipts | Review, create, reads, hub | Operations, Payment, frontend / SPARK-273 |
 | Owner contracts | Slot lookup route, plate and slot message versions, trust and bounded deadlines | Review and admission | Facility, UserService, Operations / SPARK-273 |
 | Paid event | Prove immutable quote and distinct collection identity under the 11 November contract, or agree a versioned event | Paid confirmation | Payment and Operations / SPARK-273 |
-| Covered integration | Exact HTTP route/fields and receipt implementation; entitlement logic deferred | Covered acceptance | Payment, Operations / SPARK-273 |
+| Covered integration | Coverage binding, authoritative accepted quote evaluation, and immediate zero-deposit confirmation are implemented; only specifically identified subscription functionality remains deferred | Covered acceptance | Payment, Operations / SPARK-273 |
 
 ## Review checks
 

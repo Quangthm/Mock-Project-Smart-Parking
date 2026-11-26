@@ -32,7 +32,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     private int holdMinutes = 1;
     private Func<ReservationQuoteBinding, ReservationQuoteBinding> proofBinding = binding => binding;
     private bool expired, covered;
-    private readonly List<Guid> reconciled = [];
     public Guid? AccountId { get; } = Guid.NewGuid();
     public Guid? UserId { get; } = Guid.NewGuid();
     public string Role => "driver";
@@ -127,11 +126,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
             proofBinding(binding), "tariff-1", 100, covered ? 100 : 0, covered ? 0 : 100, "VND", "FULL", "Full prepayment"));
     }
 
-    public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct)
-    {
-        reconciled.Add(collection.CollectionId);
-        return Task.CompletedTask;
-    }
     public Task<PaymentReservationQuote> IssuePlateQuoteAsync(ReservationQuoteBinding binding, CancellationToken ct) => throw new NotSupportedException();
     public Task<PricePreview> PreviewAsync(Guid account, ReservationPricePreview intent, CancellationToken ct) => throw new NotSupportedException();
     public Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct) => throw new NotSupportedException();

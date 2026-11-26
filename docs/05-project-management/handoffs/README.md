@@ -9,6 +9,7 @@ Handoffs identify baseline, current evidence, known gaps and owning next actions
 ## SPARK-273 reservation
 
 - [Driver frontend](./2026-11-09-reservation-frontend-handoff.md) — reviewed client cutover, realtime progress, checkout handoff and browser acceptance.
+- [Historical payment-return defect (E2-01)](<./SPARK-273 — Reservation/SPARK-273-E2-payment-return-frontend-handoff.md>) — frontend-owned distinct request/reservation ID handoff; no production code changed in Checkpoint E.
 - [Reservation owners](./2026-11-18-SPARK-273-reservation-owner-handoffs.md) — quote and Saga contracts, guarded capacity, recovery and rollout.
 - [Payment authority](./2026-11-19-SPARK-273-payment-authority.md) — quote/order ownership, payOS settlement, reconciliation and verification.
 
