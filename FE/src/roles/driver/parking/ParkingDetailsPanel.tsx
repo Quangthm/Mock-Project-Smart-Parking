@@ -14,8 +14,9 @@ const lotTypeLabels: Record<LotType, string> = {
   "multi-storey": "Indoor (Multi-storey)",
 }
 
-export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, routeError, coordinateError, onDirection, onCloseRoute, onBook, onClose }: {
+export function ParkingDetailsPanel({ lot, availabilityUnknown, vehicleCapacity, route, routeStatus, routeError, coordinateError, onDirection, onCloseRoute, onBook, onClose }: {
   lot: ParkingLot
+  availabilityUnknown?: boolean
   vehicleCapacity: VehicleCapacityInfo
   route: DrivingRoute | null
   routeStatus: RouteStatus
@@ -27,7 +28,7 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
   onClose: () => void
 }) {
   const [policyOpen, setPolicyOpen] = useState(false)
-  const hasSlots = Array.isArray(lot.slots)
+  const hasSlots = !availabilityUnknown && Array.isArray(lot.slots)
   const available = hasSlots ? lot.slots.filter((slot) => slot.status === "available").length : null
   const canBook = lot.status === "active" && available !== null && available > 0
   const hourlyRate = Number.isFinite(lot.hourlyRate) ? `${lot.hourlyRate.toLocaleString("vi-VN")} VND / hour` : "Rate unavailable"

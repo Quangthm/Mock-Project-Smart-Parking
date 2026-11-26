@@ -37,7 +37,7 @@ function fixture(failFirst = false) {
     setTimeout(callback) { const id = ++nextTimer; timers.set(id, callback); return id; },
     clearTimeout(id) { timers.delete(id); },
     require(name) {
-      if (name === '@microsoft/signalr') return { HubConnectionBuilder, LogLevel: { None: 6 } };
+      if (name === '@microsoft/signalr') return { HubConnectionBuilder, HttpTransportType: { WebSockets: 1 }, LogLevel: { None: 6 } };
       if (name === './authApi') return { ensureAccessToken: async () => token };
       throw new Error(name);
     },
@@ -56,7 +56,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 test('uses the current token factory and handles one targeted revocation', async () => {
   const f = fixture();
   await settle();
-  assert.equal(f.url, 'http://localhost:5035/hubs/operators');
+  assert.equal(f.url, 'http://localhost:5035/hubs/access');
+  assert.equal(f.options.transport, 1);
   assert.equal(await f.options.accessTokenFactory(), 'current-token');
   const event = f.listeners.get('AccessRevoked');
   event({ reasonCode: 'USER_LOCKED' });

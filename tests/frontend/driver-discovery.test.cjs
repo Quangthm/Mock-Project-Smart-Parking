@@ -12,17 +12,18 @@ const envelope = JSON.parse(fs.readFileSync(path.join(fixturesDir, 'driver-disco
  * Same harness as operational-layout-adapter.test.cjs: transpile the real TS
  * module to CommonJS, run it in a vm, and stub every import by name.
  */
-function load(file, imports, replacements = {}) {
+function load(file, imports, replacements = {}, globals = {}) {
   let source = fs.readFileSync(path.join(__dirname, '../../FE/src', file), 'utf8')
     .replace(/import\.meta\.env\.\w+/g, 'undefined');
   for (const [from, to] of Object.entries(replacements)) source = source.split(from).join(to);
   const js = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const context = {
     exports: {},
     Error,
     Promise,
+    ...globals,
     require: name => {
       if (!(name in imports)) throw new Error(`Unexpected import: ${name}`);
       return imports[name];
@@ -172,4 +173,75 @@ test('maps an operational-layout projection into a bookable driver lot (Note 3)'
   };
   const canBook = lot.status === 'active' && availableCount > 0;
   assert.equal(canBook, true);
+});
+
+test('Find Parking resolves registered capacity before opening details, with at most three reads in flight', async () => {
+  const source = slotsOperationalEnvelope.data;
+  const sites = Array.from({ length: 4 }, (_, index) => ({
+    id: `a0000000-0000-4000-8000-00000000000${index}`,
+    name: `Site ${index}`, address: 'Address', type: 'outdoor', status: 'active', slots: [],
+    totalSlots: 0, lat: 10.7, lng: 106.7,
+  }));
+  const requests = [];
+  const states = [], effects = [];
+  let cursor = 0;
+  const jsx = (type, props) => ({ type, props });
+  const react = {
+    useState(initial) {
+      const index = cursor++;
+      if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
+      return [states[index], next => { states[index] = typeof next === 'function' ? next(states[index]) : next; }];
+    },
+    useRef(initial) {
+      const index = cursor++;
+      states[index] ??= { current: initial };
+      return states[index];
+    },
+    useMemo(compute, deps) {
+      const index = cursor++, previous = states[index];
+      if (!previous || deps.some((dep, i) => !Object.is(dep, previous.deps[i]))) states[index] = { value: compute(), deps };
+      return states[index].value;
+    },
+    useEffect(effect) { effects.push(effect); },
+  };
+  const { FindParking } = load('roles/driver/parking/FindParking.tsx', {
+    react, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    '@maptiler/sdk': {}, '@maptiler/sdk/dist/maptiler-sdk.css': {}, animejs: {},
+    '../data/data': { driverData: { getLots: () => sites, saveLot() { assert.fail('Preloading must not write to the store'); } } },
+    './ParkingDetailsPanel': { ParkingDetailsPanel: 'details' },
+    '../../../components/ui/RoundedSelect': { RoundedSelect: 'select' },
+    '../../../components/ui/PageHeader': { PageHeader: 'header' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../../../context/AppContext': { useApp: () => ({ theme: 'light' }) },
+    '../../../lib/authApi': { getSessionGeneration: () => 1 },
+    '../../../lib/driverDiscoveryApi': api, '../../../lib/routingApi': {},
+    '../../../lib/driverSlotMapping': load('lib/driverSlotMapping.ts', {}),
+    '../../../lib/parkingCoordinates': load('lib/parkingCoordinates.ts', {}),
+    '../../../lib/parkingApi': { parkingApi: { operationalLayout: id => new Promise((resolve, reject) => requests.push({ id, resolve, reject })) } },
+  }, {}, { window: { addEventListener() {}, setTimeout() {} }, requestAnimationFrame() {} });
+  const render = () => {
+    cursor = 0;
+    const tree = FindParking({ onBook() {} });
+    effects.splice(0).forEach(effect => effect());
+    return tree;
+  };
+  function copy(node) {
+    if (Array.isArray(node)) return node.map(copy).join(' ');
+    return typeof node === 'object' && node !== null ? copy(node.props?.children) : String(node ?? '');
+  }
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  assert.match(copy(render()), /Availability unknown/);
+  assert.equal(requests.length, 3);
+  requests[0].resolve({ ...source, siteId: sites[0].id, slots: source.slots.slice(0, 2) });
+  await settle();
+  assert.match(copy(render()), /1 spaces available\s+· 2 registered/);
+  assert.equal(requests.length, 4);
+  requests[1].resolve({ ...source, siteId: sites[1].id, slots: [] });
+  requests[2].reject(new Error('offline'));
+  requests[3].resolve({ ...source, siteId: sites[3].id, slots: [] });
+  await settle();
+  const labels = copy(render());
+  assert.match(labels, /0 spaces available\s+· 0 registered/);
+  assert.match(labels, /Availability unknown/);
+  assert.equal(requests.length, 4);
 });

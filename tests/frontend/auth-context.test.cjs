@@ -48,7 +48,7 @@ function fixture() {
     require: name => {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
-      if (name === '../lib/authApi') return { authApi: api, authExpiredEvent: 'sp-auth-expired' };
+      if (name === '../lib/authApi') return { authApi: api, authExpiredEvent: 'sp-auth-expired', getSessionGeneration: () => 0 };
       if (name === '../lib/accessRealtime') return { watchAccessRevocation: () => () => {} };
       if (name === '../lib/uiToast') return { showUiToast() {} };
       if (name === '../roles/authentications/Sign Up/DriverOtpForm') return { restoreDriverRegistration: () => null };
