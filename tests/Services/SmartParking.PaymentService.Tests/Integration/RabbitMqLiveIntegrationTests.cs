@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using MassTransit;
@@ -377,7 +378,8 @@ public class RabbitMqLiveIntegrationTests
                 orderRepo,
                 txRepo,
                 invoiceRepo,
-                new FakeRefundRequestRepository(),
+                new ReviewedPayOsSettlement(orderRepo, txRepo, new FakeRefundRequestRepository(), publisher, uow,
+                    NullLogger<ReviewedPayOsSettlement>.Instance),
                 publisher,
                 uow,
                 NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

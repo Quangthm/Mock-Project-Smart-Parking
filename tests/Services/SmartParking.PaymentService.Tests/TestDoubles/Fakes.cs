@@ -103,6 +103,7 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
     );
 
     public int QueryTransactionCallCount { get; private set; }
+    public Func<Task>? BeforeVerificationReturns { get; set; }
 
     public Task<PaymentInitiateResult> InitiatePaymentAsync(PaymentInitiateRequest request, CancellationToken cancellationToken = default)
     {
@@ -115,10 +116,13 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
         return Task.FromResult(CallbackResult);
     }
 
-    public Task<PaymentVerificationResult> QueryTransactionAsync(long orderCode, string? gatewayTransactionId, CancellationToken cancellationToken = default)
+    public async Task<PaymentVerificationResult> QueryTransactionAsync(long orderCode, string? gatewayTransactionId, CancellationToken cancellationToken = default,
+        string? reviewedCheckoutQr = null)
     {
         QueryTransactionCallCount++;
-        return Task.FromResult(VerificationResult);
+        if (BeforeVerificationReturns is not null)
+            await BeforeVerificationReturns();
+        return VerificationResult;
     }
 
     public Task<PaymentCancellationResult> CancelPaymentAsync(long orderCode, Guid transactionId, string? gatewayTransactionId, CancellationToken cancellationToken = default)

@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 using SmartParking.PaymentService.Domain.Entities;
@@ -26,7 +27,8 @@ public class ProcessPayOsWebhookCommandHandlerTests
             _orderRepo,
             _txRepo,
             _invoiceRepo,
-            new FakeRefundRequestRepository(),
+            new ReviewedPayOsSettlement(_orderRepo, _txRepo, new FakeRefundRequestRepository(), _eventPublisher, _uow,
+                NullLogger<ReviewedPayOsSettlement>.Instance),
             _eventPublisher,
             _uow,
             NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

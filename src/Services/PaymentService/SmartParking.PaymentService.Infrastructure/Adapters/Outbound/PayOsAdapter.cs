@@ -304,7 +304,8 @@ public class PayOsAdapter : IPaymentGatewayPort
     public async Task<PaymentVerificationResult> QueryTransactionAsync(
         long orderCode,
         string? gatewayTransactionId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? reviewedCheckoutQr = null)
     {
         if (string.IsNullOrWhiteSpace(_options.ClientId) ||
             string.IsNullOrWhiteSpace(_options.ApiKey) ||
@@ -328,7 +329,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-client-id", _options.ClientId);
             httpRequest.Headers.Add("x-api-key", _options.ApiKey);
 
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return new PaymentVerificationResult(
@@ -340,7 +341,7 @@ public class PayOsAdapter : IPaymentGatewayPort
                 );
             }
 
-            var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var root = doc.RootElement;
             var data = root.GetProperty("data");
 
@@ -360,7 +361,9 @@ public class PayOsAdapter : IPaymentGatewayPort
                 PaymentStatus: normalizedStatus,
                 AmountVnd: amount,
                 GatewayTransactionId: gatewayTransactionId,
-                PaidAt: normalizedStatus == "SUCCESS" ? DateTimeOffset.UtcNow : null
+                PaidAt: normalizedStatus == "SUCCESS" ? DateTimeOffset.UtcNow : null,
+                ReviewedTransfers: reviewedCheckoutQr is null ? null :
+                    ReadReviewedTransfers(root, data, orderCode, gatewayTransactionId, reviewedCheckoutQr)
             );
         }
         catch (Exception ex)
@@ -374,6 +377,73 @@ public class PayOsAdapter : IPaymentGatewayPort
                 PaidAt: null
             );
         }
+    }
+
+    // Development status checks use the existing checkout QR as the provider's checkout-currency evidence.
+    private IReadOnlyList<ReviewedPayOsTransfer>? ReadReviewedTransfers(JsonElement root, JsonElement data,
+        long orderCode, string? paymentLinkId, string checkoutQr)
+    {
+        _logger.LogInformation("PayOS status response received for reviewed OrderCode {OrderCode}", orderCode);
+        var signature = PayOsSignatureService.CreatePaymentLinkResponseSignature(data, _options.ChecksumKey);
+        if (ReadString(root, "code") != "00" || signature is null ||
+            !PayOsSignatureService.VerifySignature(signature, ReadString(root, "signature") ?? ""))
+            return Reject("RESPONSE_SIGNATURE");
+
+        if (!data.TryGetProperty("orderCode", out var returnedCode) || returnedCode.ValueKind != JsonValueKind.Number ||
+            !returnedCode.TryGetInt64(out var returnedOrderCode) || returnedOrderCode != orderCode ||
+            string.IsNullOrWhiteSpace(paymentLinkId) || ReadString(data, "id") != paymentLinkId)
+            return Reject("ORDER_OR_LINK_BINDING");
+
+        if (!PayOsCheckoutCurrency.IsVnd(checkoutQr) || ConflictingCurrency(data))
+            return Reject("CHECKOUT_CURRENCY");
+
+        if (!data.TryGetProperty("transactions", out var items) || items.ValueKind != JsonValueKind.Array)
+            return Reject("TRANSFER_LIST");
+
+        var transfers = new Dictionary<string, ReviewedPayOsTransfer>(StringComparer.Ordinal);
+        foreach (var item in items.EnumerateArray())
+        {
+            var reference = ReadString(item, "reference");
+            var time = ReadTransferTime(ReadString(item, "transactionDateTime"));
+            if (ConflictingCurrency(item) || time is null || string.IsNullOrWhiteSpace(reference) || reference.Length > 255 ||
+                !item.TryGetProperty("amount", out var amountField) || amountField.ValueKind != JsonValueKind.Number ||
+                !amountField.TryGetInt64(out var amount) || amount <= 0)
+                return Reject("TRANSFER_FIELDS");
+
+            var transfer = new ReviewedPayOsTransfer(orderCode, paymentLinkId, reference, amount, time);
+            if (!transfers.TryAdd(reference, transfer) && transfers[reference] != transfer)
+                return Reject("TRANSFER_REFERENCE_CONFLICT");
+        }
+
+        _logger.LogInformation("PayOS status transfer evidence accepted for reviewed OrderCode {OrderCode}, transfer count {TransferCount}",
+            orderCode, transfers.Count);
+        return transfers.Values.ToArray();
+
+        IReadOnlyList<ReviewedPayOsTransfer>? Reject(string reason)
+        {
+            _logger.LogWarning("PayOS status transfer evidence rejected for reviewed OrderCode {OrderCode}, reason {Reason}", orderCode, reason);
+            return null;
+        }
+    }
+
+    private static bool ConflictingCurrency(JsonElement data) =>
+        data.TryGetProperty("currency", out var currency) &&
+        (currency.ValueKind != JsonValueKind.String || currency.GetString() != "VND");
+
+    private static DateTimeOffset? ReadTransferTime(string? value)
+    {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var styles = System.Globalization.DateTimeStyles.None;
+        if (DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:sszzz", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz"],
+            culture, styles, out var offsetTime))
+            return offsetTime.ToUniversalTime();
+        if (DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"],
+            culture, System.Globalization.DateTimeStyles.AssumeUniversal, out var utcTime))
+            return utcTime.ToUniversalTime();
+        if (DateTime.TryParseExact(value, "yyyy-MM-dd HH:mm:ss", culture, styles, out var localTime) &&
+            localTime.Ticks >= TimeSpan.FromHours(7).Ticks)
+            return new DateTimeOffset(localTime, TimeSpan.FromHours(7)).ToUniversalTime();
+        return null;
     }
 
     private bool HasLiveCredentials() =>

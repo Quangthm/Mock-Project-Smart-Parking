@@ -361,6 +361,19 @@ docker compose --project-name smartpark-app --env-file .env -f compose.app.yml l
 
 **Recover an unknown submission.** If **03.1** was sent but did not return a captured receipt, use **03.1** again with the same Account, saved `submittedIntent`, and `reservationIdempotencyKey` even if the quote has since expired. If **03.1** already returned `requestId`, inspect **04.1** or **04.2**, or use **03.2** to verify exact replay. Do one diagnostic read at a time after background processing. A new scenario starts after the previous result is understood. Import a fresh local environment or clear the old review, acceptance, intent, key, and result fields together at that point.
 
+### Temporary Development verification for an existing payOS checkout
+
+The registered webhook destination for this development channel is unavailable. In PaymentService running as `Development`, the existing transaction-status action can verify transfers from the signed payOS payment-link response. Payment matches the order code and link ID, uses the VND currency tag in the provider-issued VietQR already stored with that same checkout, and checks each transfer's reference, amount and timestamp. Conflicting or missing evidence leaves the order pending. Both sources use the same reviewed settlement operation.
+
+For an explicitly selected existing checkout with a known transfer, sign in as its owning Driver and open the original checkout or browser return page. Use **Check payment status** or **Check status again** once. This check can record the selected order's transfers. Use the existing link and the original Payment transaction ID. The Payment status response should show authoritative success after the settlement commit. A repeat should show the same success with one logical `PaymentSucceededV1`. Compare the financial SignalR update and the separate Operations entitlement outcome using the original hold deadline and reservation start. Use the Payment logs for `Active PayOS status verification requested`, evidence acceptance or rejection, replay, and commit. No additional transfer or checkout is needed.
+
+After webhook settlement is verified end to end, remove these Development-only additions:
+
+1. Remove `EnableReviewedVerification` and the environment argument from `GetPaymentStatusQuery` and `PaymentsController.GetTransactionStatus`. Retain owning-account authorization for reviewed status reads and the cache directive.
+2. Remove the provider call and settlement dependency from `GetPaymentStatusQueryHandler.ReadReviewedStatusAsync`, and the Development snapshot selection and legacy reload from `Handle`. Remove `GetStatusSnapshotAsync` from `IPaymentTransactionRepository` and `PaymentTransactionRepository`.
+3. Remove the reviewed QR argument and evidence extraction from `IPaymentGatewayPort.QueryTransactionAsync` and `PayOsAdapter.QueryTransactionAsync`. Remove `PaymentVerificationResult.ReviewedTransfers`, `PayOsCheckoutCurrency`, and the payment-link-response signing helpers in `PayOsSignatureService`. Keep the legacy status mapping and webhook signature verification.
+4. Simplify `ReviewedPayOsSettlement.RecordTransfersAsync` back to its single-transfer call in `RecordAsync`. Retain `RecordTransferAsync` for the webhook, the existing outbox event, and Operations confirmation and SignalR. Retire the temporary active-verification tests and re-run the legacy status and reviewed webhook regressions.
+
 ## 6. Optional cases and verification
 
 - **06 — Zero Amount.** Run **06.1** after an accepted zero deposit. An uncovered site can exercise this path through a genuine zero tariff. Subscription-specific coverage requires a genuine plate entitlement.

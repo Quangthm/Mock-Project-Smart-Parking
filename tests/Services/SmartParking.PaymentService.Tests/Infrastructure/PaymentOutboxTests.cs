@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using MassTransit;
 using MassTransit.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -236,7 +237,8 @@ public class PaymentOutboxTests
                 orderRepo,
                 txRepo,
                 invoiceRepo,
-                new FakeRefundRequestRepository(),
+                new ReviewedPayOsSettlement(orderRepo, txRepo, new FakeRefundRequestRepository(), publisher, uow,
+                    NullLogger<ReviewedPayOsSettlement>.Instance),
                 publisher,
                 uow,
                 NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

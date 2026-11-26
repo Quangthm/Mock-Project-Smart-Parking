@@ -6,6 +6,7 @@ namespace SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 public interface IPaymentTransactionRepository
 {
     Task<PaymentTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<PaymentTransaction?> GetStatusSnapshotAsync(Guid id, CancellationToken cancellationToken = default);
     Task<PaymentTransaction?> GetByGatewayTransactionIdAsync(string gatewayTxId, CancellationToken cancellationToken = default);
     Task<PaymentTransaction?> GetByProviderCollectionReferenceAsync(PaymentMethod method, string reference, CancellationToken cancellationToken = default);
     Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default);

@@ -286,13 +286,14 @@ public class PaymentsController : ControllerBase
     /// </summary>
     [HttpGet("transactions/{transactionId:guid}/status")]
     [Authorize]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTransactionStatus(
         [FromRoute] Guid transactionId,
         CancellationToken cancellationToken)
     {
-        var query = new GetPaymentStatusQuery(transactionId);
+        var query = new GetPaymentStatusQuery(transactionId, AuthenticatedAccountId(), _environment.IsDevelopment());
         var result = await _mediator.Send(query, cancellationToken);
 
         return Ok(new

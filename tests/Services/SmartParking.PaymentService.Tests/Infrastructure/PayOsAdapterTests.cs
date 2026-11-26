@@ -10,6 +10,90 @@ namespace SmartParking.PaymentService.Tests.Infrastructure;
 
 public class PayOsAdapterTests
 {
+    private const string VndCheckoutQr =
+        "00020101021238570010A00000072701270006970422011300110037630580208QRIBFTTA53037045405100005802VN62120808DH00000163047616";
+
+    [Theory]
+    [InlineData("valid", true)]
+    [InlineData("tampered", false)]
+    [InlineData("link", false)]
+    [InlineData("order", false)]
+    [InlineData("currency", false)]
+    [InlineData("transfer-currency", false)]
+    [InlineData("qr-currency", false)]
+    [InlineData("missing-reference", false)]
+    [InlineData("missing-time", false)]
+    [InlineData("duplicate-reference-conflict", false)]
+    [InlineData("aggregate-only", false)]
+    public async Task QueryTransactionAsync_RequiresSignedBoundTransferAndCheckoutCurrency(string scenario, bool accepted)
+    {
+        const string checksum = "fixture-checksum";
+        const string data = """
+            {"status":"PAID","orderCode":123456,"id":"LINK-123","canceledAt":null,"transactions":[
+              {"reference":"BANK-1","description":"Đã trả","transactionDateTime":"2026-11-26T17:49:03+07:00","amount":25000}]}
+            """;
+        const string canonical = """canceledAt=&id=LINK-123&orderCode=123456&status=PAID&transactions=[{"amount":25000,"description":"Đã trả","reference":"BANK-1","transactionDateTime":"2026-11-26T17:49:03+07:00"}]""";
+        var responseData = scenario switch
+        {
+            "link" => data.Replace("LINK-123", "LINK-456"),
+            "order" => data.Replace("123456", "234567"),
+            "currency" => data.Insert(1, "\"currency\":\"USD\","),
+            "transfer-currency" => data.Replace("{\"reference\"", "{\"currency\":\"USD\",\"reference\""),
+            "missing-reference" => data.Replace("BANK-1", ""),
+            "missing-time" => data.Replace("2026-11-26T17:49:03+07:00", ""),
+            "duplicate-reference-conflict" => data.Replace("25000}]", """
+                25000},{"reference":"BANK-1","transactionDateTime":"2026-11-26T17:49:03+07:00","amount":25001}]
+                """),
+            "aggregate-only" => """{"status":"PAID","orderCode":123456,"id":"LINK-123","amountPaid":25000}""",
+            _ => data
+        };
+        using var body = System.Text.Json.JsonDocument.Parse(responseData);
+        var signature = responseData == data ? PayOsSignatureService.ComputeHmacSha256(canonical, checksum) :
+            PayOsSignatureService.CreatePaymentLinkResponseSignature(body.RootElement, checksum);
+        if (scenario == "tampered")
+            responseData = responseData.Replace("25000", "25001");
+
+        using var http = new HttpClient(new StatusResponseHandler(responseData, signature))
+        {
+            BaseAddress = new Uri("https://api-merchant.payos.vn")
+        };
+        var adapter = new PayOsAdapter(http, Options.Create(new PayOsOptions
+        {
+            ClientId = "test-client", ApiKey = "test-api", ChecksumKey = checksum
+        }), NullLogger<PayOsAdapter>.Instance);
+
+        var qr = scenario == "qr-currency" ? VndCheckoutQr.Replace("5303704", "5303840") : VndCheckoutQr;
+        var checkedStatus = await adapter.QueryTransactionAsync(123456, "LINK-123", reviewedCheckoutQr: qr);
+        Assert.Equal("SUCCESS", checkedStatus.PaymentStatus);
+        if (accepted)
+        {
+            var transfer = Assert.Single(checkedStatus.ReviewedTransfers!);
+            Assert.Equal(new ReviewedPayOsTransfer(123456, "LINK-123", "BANK-1", 25000,
+                new DateTimeOffset(2026, 11, 26, 10, 49, 03, TimeSpan.Zero)), transfer);
+        }
+        else
+            Assert.Null(checkedStatus.ReviewedTransfers);
+
+        var legacy = await adapter.QueryTransactionAsync(123456, "LINK-123");
+        Assert.Equal("SUCCESS", legacy.PaymentStatus);
+        Assert.Null(legacy.ReviewedTransfers);
+    }
+
+    private sealed class StatusResponseHandler(string data, string? signature) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("/v2/payment-requests/123456", request.RequestUri?.AbsolutePath);
+            Assert.Equal("test-client", Assert.Single(request.Headers.GetValues("x-client-id")));
+            Assert.Equal("test-api", Assert.Single(request.Headers.GetValues("x-api-key")));
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent($$"""{"code":"00","data":{{data}},"signature":"{{signature}}"}""")
+            });
+        }
+    }
+
     [Fact]
     public async Task VerifyAndParseWebhookAsync_AcceptsPublishedPayOsSignature()
     {

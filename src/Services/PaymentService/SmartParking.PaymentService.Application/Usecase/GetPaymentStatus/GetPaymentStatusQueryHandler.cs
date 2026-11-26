@@ -8,6 +8,7 @@ using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Events;
 using SmartParking.PaymentService.Domain.Exceptions;
 using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
+using SmartParking.PaymentService.Application.Reservations;
 
 namespace SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 
@@ -20,6 +21,7 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPaymentGatewayPort _gatewayPort;
     private readonly ILogger<GetPaymentStatusQueryHandler> _logger;
+    private readonly ReviewedPayOsSettlement _reviewedSettlement;
 
     public GetPaymentStatusQueryHandler(
         IPaymentTransactionRepository transactionRepository,
@@ -28,7 +30,8 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
         IPaymentGatewayPort gatewayPort,
-        ILogger<GetPaymentStatusQueryHandler> logger)
+        ILogger<GetPaymentStatusQueryHandler> logger,
+        ReviewedPayOsSettlement reviewedSettlement)
     {
         _transactionRepository = transactionRepository;
         _orderRepository = orderRepository;
@@ -37,11 +40,14 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
         _unitOfWork = unitOfWork;
         _gatewayPort = gatewayPort;
         _logger = logger;
+        _reviewedSettlement = reviewedSettlement;
     }
 
     public async Task<PaymentTransactionStatusDto> Handle(GetPaymentStatusQuery request, CancellationToken cancellationToken)
     {
-        var tx = await _transactionRepository.GetByIdAsync(request.TransactionId, cancellationToken);
+        var tx = request.EnableReviewedVerification
+            ? await _transactionRepository.GetStatusSnapshotAsync(request.TransactionId, cancellationToken)
+            : await _transactionRepository.GetByIdAsync(request.TransactionId, cancellationToken);
         if (tx == null)
         {
             throw new PaymentDomainException("TRANSACTION_NOT_FOUND", $"Payment transaction {request.TransactionId} was not found.");
@@ -53,6 +59,9 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
         {
             orderCodeNumber = oc;
         }
+
+        if (order?.ReviewedMethod is not null)
+            return await ReadReviewedStatusAsync(request, tx, order, orderCodeNumber, cancellationToken);
 
         // Authoritative state check:
         // If already in definitive terminal state, return immediately from database
@@ -73,9 +82,17 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
         }
 
         // Active reconciliation with payOS when in non-definitive state (PENDING / UNKNOWN)
-        // A paid link total cannot attest a distinct bank transfer for a reviewed order.
-        if (orderCodeNumber > 0 && order?.ReviewedMethod == null)
+        if (orderCodeNumber > 0)
         {
+            if (request.EnableReviewedVerification)
+            {
+                tx = await _transactionRepository.GetByIdAsync(request.TransactionId, cancellationToken)
+                    ?? throw TransactionNotFound(request.TransactionId);
+                order = tx.PaymentOrder;
+                if (tx.Status is PaymentStatus.SUCCESS or PaymentStatus.CANCELLED)
+                    return StatusOf(tx, orderCodeNumber, authoritative: true);
+            }
+
             var reconcile = await _gatewayPort.QueryTransactionAsync(orderCodeNumber, tx.GatewayTransactionId, cancellationToken);
             if (reconcile.IsFound)
             {
@@ -159,4 +176,40 @@ public class GetPaymentStatusQueryHandler : IRequestHandler<GetPaymentStatusQuer
             IsAuthoritative: tx.Status == PaymentStatus.SUCCESS
         );
     }
+
+    private async Task<PaymentTransactionStatusDto> ReadReviewedStatusAsync(GetPaymentStatusQuery request,
+        PaymentTransaction tx, PaymentOrder order, long orderCode, CancellationToken ct)
+    {
+        if (request.AccountId == Guid.Empty || request.AccountId != order.AccountId)
+            throw TransactionNotFound(tx.Id);
+
+        // Temporary Development-only fallback while this channel has no working webhook destination.
+        if (request.EnableReviewedVerification && orderCode > 0 &&
+            order.ReferenceType == ReferenceType.RESERVATION && tx.TenantId == order.TenantId &&
+            order.ReviewedMethod == nameof(PaymentMethod.PAYOS) && order.ReviewedCurrency == "VND" &&
+            tx.PaymentMethod == PaymentMethod.PAYOS && tx.TransactionType == TransactionType.PAYMENT &&
+            tx.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN &&
+            !string.IsNullOrWhiteSpace(tx.GatewayTransactionId) && !string.IsNullOrWhiteSpace(tx.QrCode))
+        {
+            _logger.LogInformation("Active PayOS status verification requested. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}",
+                orderCode, order.Id, tx.Id);
+            var result = await _gatewayPort.QueryTransactionAsync(orderCode, tx.GatewayTransactionId, ct, tx.QrCode);
+            if (result.ReviewedTransfers is { Count: > 0 } transfers)
+                await _reviewedSettlement.RecordTransfersAsync(order.Id, transfers, ct);
+
+            tx = await _transactionRepository.GetStatusSnapshotAsync(tx.Id, ct) ?? throw TransactionNotFound(tx.Id);
+        }
+
+        var boundOrder = tx.PaymentOrder ?? order;
+        var verifiedSettlement = boundOrder.Status == PaymentOrderStatus.PAID && tx.Amount == boundOrder.FinalAmount &&
+            !string.IsNullOrWhiteSpace(tx.GatewayTransactionId) && tx.HasVerifiedProviderCollection();
+        return StatusOf(tx, orderCode, authoritative: verifiedSettlement || tx.Status == PaymentStatus.CANCELLED);
+    }
+
+    private static PaymentDomainException TransactionNotFound(Guid id) =>
+        new("TRANSACTION_NOT_FOUND", $"Payment transaction {id} was not found.");
+
+    private static PaymentTransactionStatusDto StatusOf(PaymentTransaction tx, long orderCode, bool authoritative) =>
+        new(tx.Id, tx.PaymentOrderId, orderCode, (long)tx.Amount, tx.PaymentMethod.ToString(),
+            tx.GatewayTransactionId, tx.Status.ToString(), tx.PaidAt, authoritative);
 }

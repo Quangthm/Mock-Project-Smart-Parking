@@ -11,6 +11,9 @@ public class FakePaymentTransactionRepository : IPaymentTransactionRepository
     public Task<PaymentTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Transactions.FirstOrDefault(x => x.Id == id));
 
+    public Task<PaymentTransaction?> GetStatusSnapshotAsync(Guid id, CancellationToken cancellationToken = default) =>
+        GetByIdAsync(id, cancellationToken);
+
     public Task<PaymentTransaction?> GetByGatewayTransactionIdAsync(string gatewayTxId, CancellationToken cancellationToken = default) =>
         Task.FromResult(Transactions.FirstOrDefault(x => x.GatewayTransactionId == gatewayTxId));
 

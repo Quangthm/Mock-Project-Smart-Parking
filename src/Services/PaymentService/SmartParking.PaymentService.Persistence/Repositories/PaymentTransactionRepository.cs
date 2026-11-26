@@ -21,6 +21,10 @@ public class PaymentTransactionRepository : IPaymentTransactionRepository
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
+    public Task<PaymentTransaction?> GetStatusSnapshotAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _dbContext.PaymentTransactions.AsNoTracking().Include(x => x.PaymentOrder)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
     public async Task<PaymentTransaction?> GetByGatewayTransactionIdAsync(string gatewayTxId, CancellationToken cancellationToken = default)
     {
         return await _dbContext.PaymentTransactions

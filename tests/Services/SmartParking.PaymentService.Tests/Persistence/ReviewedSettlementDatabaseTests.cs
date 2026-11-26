@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using System.Security.Cryptography;
 using System.Text.Json;
 using MassTransit;
@@ -7,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using SmartParking.PaymentService.Application.Common.Interfaces;
+using SmartParking.PaymentService.Application.Common.Interfaces.Ports;
+using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
@@ -21,6 +24,45 @@ namespace SmartParking.PaymentService.Tests.Persistence;
 public sealed class ReviewedSettlementDatabaseTests
 {
     private static readonly DateTimeOffset TransferTime = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+    [ReviewedOrderDatabaseFact]
+    public async Task WebhookCommitDuringStatusVerificationIsObservedWithoutSecondSettlement()
+    {
+        await using var statusDb = Open();
+        var order = await AddOrderAsync(statusDb, linked: true);
+        var checkout = Assert.Single(order.Transactions);
+        checkout.QrCode = "provider QR";
+        await statusDb.SaveChangesAsync();
+        statusDb.ChangeTracker.Clear();
+        var reference = Guid.NewGuid().ToString("N");
+        var events = new FakeEventPublisher();
+        var gateway = new FakePaymentGatewayPort
+        {
+            VerificationResult = new(true, "SUCCESS", 25_000, LinkFor(order), null,
+                [new ReviewedPayOsTransfer(long.Parse(order.OrderCode), LinkFor(order), reference, 25_000, TransferTime)]),
+            BeforeVerificationReturns = async () =>
+            {
+                var webhook = await DeliverAsync(order, reference);
+                Assert.True(webhook.Result.Success);
+                Assert.Single(webhook.Events);
+            }
+        };
+        var transactions = new PaymentTransactionRepository(statusDb);
+        var orders = new PaymentOrderRepository(statusDb);
+        var unit = new UnitOfWork(statusDb);
+        var settlement = new ReviewedPayOsSettlement(orders, transactions, new RefundRequestRepository(statusDb),
+            events, unit, NullLogger<ReviewedPayOsSettlement>.Instance);
+        var handler = new GetPaymentStatusQueryHandler(transactions, orders, new InvoiceRepository(statusDb), events,
+            unit, gateway, NullLogger<GetPaymentStatusQueryHandler>.Instance, settlement);
+
+        var status = await handler.Handle(new(checkout.Id, order.AccountId.GetValueOrDefault(), true), default);
+
+        Assert.Equal("SUCCESS", status.Status);
+        Assert.True(status.IsAuthoritative);
+        Assert.Equal(TransferTime, status.PaidAt);
+        Assert.Empty(events.PublishedEvents);
+        Assert.Equal(1, await statusDb.PaymentTransactions.CountAsync(tx => tx.PaymentOrderId == order.Id));
+    }
 
     [ReviewedOrderDatabaseFact]
     public async Task OutboxAndCollectionRollBackTogetherAndAdditionalOnlyCreatesDisposition()
@@ -214,7 +256,9 @@ public sealed class ReviewedSettlementDatabaseTests
                 "SUCCESS", TransferTime, "{}", TransferTime)
         };
         return new ProcessPayOsWebhookCommandHandler(gateway, new ProviderWebhookRepository(db), new PaymentOrderRepository(db),
-            new PaymentTransactionRepository(db), new InvoiceRepository(db), new RefundRequestRepository(db), events, new UnitOfWork(db),
+            new PaymentTransactionRepository(db), new InvoiceRepository(db), new ReviewedPayOsSettlement(new PaymentOrderRepository(db),
+                new PaymentTransactionRepository(db), new RefundRequestRepository(db), events, new UnitOfWork(db),
+                NullLogger<ReviewedPayOsSettlement>.Instance), events, new UnitOfWork(db),
             NullLogger<ProcessPayOsWebhookCommandHandler>.Instance);
     }
 }

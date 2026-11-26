@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
+using SmartParking.PaymentService.Application.Reservations;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Events;
@@ -16,7 +17,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
     private readonly IPaymentOrderRepository _orderRepository;
     private readonly IPaymentTransactionRepository _transactionRepository;
     private readonly IInvoiceRepository _invoiceRepository;
-    private readonly IRefundRequestRepository _refundRepository;
+    private readonly ReviewedPayOsSettlement _reviewedSettlement;
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ProcessPayOsWebhookCommandHandler> _logger;
@@ -27,7 +28,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         IPaymentOrderRepository orderRepository,
         IPaymentTransactionRepository transactionRepository,
         IInvoiceRepository invoiceRepository,
-        IRefundRequestRepository refundRepository,
+        ReviewedPayOsSettlement reviewedSettlement,
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
         ILogger<ProcessPayOsWebhookCommandHandler> logger)
@@ -37,7 +38,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         _orderRepository = orderRepository;
         _transactionRepository = transactionRepository;
         _invoiceRepository = invoiceRepository;
-        _refundRepository = refundRepository;
+        _reviewedSettlement = reviewedSettlement;
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -61,11 +62,9 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         {
             _logger.LogInformation("PayOS webhook selected reviewed settlement. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}",
                 parseResult.OrderCode, orderId);
-            var result = await _unitOfWork.WithLocksAsync([orderId], () => RecordTransferAsync(orderId, parseResult, cancellationToken), cancellationToken);
-            if (result.RecordedTransactionId is { } transactionId)
-                _logger.LogInformation("Reviewed PayOS transaction committed. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}, settled order {SettledOrder}",
-                    parseResult.OrderCode, orderId, transactionId, result.SettledOrder);
-            return result;
+            var transfer = new ReviewedPayOsTransfer(parseResult.OrderCode, parseResult.GatewayTransactionId,
+                parseResult.BankReference, parseResult.AmountVnd, parseResult.VerifiedTransferTime, parseResult.EvidenceFailure);
+            return await _reviewedSettlement.RecordAsync(orderId, transfer, cancellationToken);
         }
 
         _logger.LogInformation("PayOS webhook selected legacy settlement. OrderCode {OrderCode}", parseResult.OrderCode);
@@ -224,101 +223,5 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         }
 
         return new ProcessPayOsWebhookResult(true, "Webhook processed successfully.");
-    }
-
-    private async Task<ProcessPayOsWebhookResult> RecordTransferAsync(Guid orderId, PaymentCallbackResult callback, CancellationToken ct)
-    {
-        ProcessPayOsWebhookResult Reject(string code, string reason, string message, bool retryable = false)
-        {
-            _logger.LogWarning("Reviewed PayOS webhook rejected. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}, code {ErrorCode}, reason {Reason}",
-                callback.OrderCode, orderId, code, reason);
-            return new(false, message, code, retryable);
-        }
-
-        const string invalidEvidence = "INVALID_PROVIDER_EVIDENCE";
-        const string evidenceMessage = "Missing verified transfer evidence.";
-        if (callback.VerifiedTransferTime is not { } transferTime || transferTime == default)
-            return Reject(invalidEvidence, callback.EvidenceFailure ?? "TRANSFER_TIMESTAMP", evidenceMessage);
-        if (callback.AmountVnd <= 0)
-            return Reject(invalidEvidence, "TRANSFER_AMOUNT", evidenceMessage);
-        if (string.IsNullOrWhiteSpace(callback.BankReference) || callback.BankReference.Length > 255)
-            return Reject(invalidEvidence, "TRANSFER_REFERENCE", evidenceMessage);
-        if (string.IsNullOrWhiteSpace(callback.GatewayTransactionId) || callback.GatewayTransactionId.Length > 255)
-            return Reject(invalidEvidence, "PAYMENT_LINK_ID", evidenceMessage);
-
-        var order = await _orderRepository.GetByIdAsync(orderId, ct) ?? throw new InvalidOperationException("Missing reviewed order.");
-        if (order.ReviewedMethod != nameof(PaymentMethod.PAYOS) || order.ReviewedCurrency != "VND")
-            return Reject("COLLECTION_BINDING_CONFLICT", "REVIEWED_METHOD_OR_CURRENCY", "The reviewed method or currency does not match this PayOS transfer.");
-
-        var checkouts = order.Transactions.Where(t => t.TransactionType == TransactionType.PAYMENT &&
-            t.PaymentMethod == PaymentMethod.PAYOS && t.TenantId == order.TenantId).ToList();
-        var linked = checkouts.Where(t => !string.IsNullOrWhiteSpace(t.GatewayTransactionId)).ToList();
-        // Additional transfers share the order's checkout. Only that checkout row carries the link ID.
-        if (linked.Count != 1 || linked[0].GatewayTransactionId != callback.GatewayTransactionId)
-        {
-            if (linked.Count == 0 && checkouts.Any(t => t.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN))
-                return Reject("PAYOS_CHECKOUT_LINK_UNAVAILABLE", "CHECKOUT_LINK_PENDING", "The PayOS checkout link has not been recorded yet.", retryable: true);
-
-            return Reject("COLLECTION_BINDING_CONFLICT", "CHECKOUT_LINK_MISMATCH", "The transfer does not match the recorded PayOS checkout.");
-        }
-
-        var prior = await _transactionRepository.GetByProviderCollectionReferenceAsync(PaymentMethod.PAYOS, callback.BankReference, ct);
-        if (prior != null)
-        {
-            if (!prior.HasVerifiedProviderCollection() || prior.PaymentOrderId != order.Id || prior.TenantId != order.TenantId ||
-                prior.Amount != callback.AmountVnd || prior.PaidAt != transferTime)
-                return Reject("COLLECTION_BINDING_CONFLICT", "TRANSFER_REFERENCE_CONFLICT", "Conflicting transfer evidence.");
-            _logger.LogInformation("Reviewed PayOS transfer replay. PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}",
-                order.Id, prior.Id);
-            return new(true, "Transfer already recorded.");
-        }
-
-        var verifiedAt = await _unitOfWork.DatabaseNowAsync(ct);
-        var settlesOrder = order.CanSettleReviewedPayment(callback.AmountVnd);
-        var checkout = linked[0];
-        _logger.LogInformation("Reviewed PayOS transfer validated. PaymentOrderId {PaymentOrderId}, CheckoutTransactionId {CheckoutTransactionId}, expected VND {ExpectedAmount}, received VND {TransferredAmount}, settles order {SettlesOrder}",
-            order.Id, checkout.Id, order.FinalAmount, callback.AmountVnd, settlesOrder);
-        var reuseCheckout = settlesOrder && checkout.ProviderCollectionReference is null &&
-            checkout.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN;
-        var tx = reuseCheckout ? checkout : new PaymentTransaction
-        {
-            Id = Guid.NewGuid(), PaymentOrderId = order.Id, TenantId = order.TenantId,
-            PaymentMethod = PaymentMethod.PAYOS, CreatedAt = verifiedAt
-        };
-        tx.RecordVerifiedProviderCollection(callback.BankReference, callback.AmountVnd, transferTime, verifiedAt);
-        if (!reuseCheckout)
-            await _transactionRepository.AddAsync(tx, ct);
-
-        if (settlesOrder)
-        {
-            order.MarkPaid(verifiedAt);
-            await _eventPublisher.PublishAsync(new PaymentSucceededV1
-            {
-                EventId = tx.Id, OccurredAt = transferTime, CorrelationId = order.OrderCode,
-                SettlementClassification = PaymentSucceededV1.ReviewedReservationOrderPaid,
-                PaymentOrderId = order.Id, PaymentTransactionId = tx.Id, PaymentMethod = order.ReviewedMethod!,
-                GatewayReference = callback.GatewayTransactionId, TenantId = order.TenantId, SiteId = order.SiteId,
-                ReferenceType = order.ReferenceType.ToString(), ReferenceId = order.ReferenceId, PlateNumber = order.PlateNumber,
-                AccountId = order.AccountId, Amount = tx.Amount, ParkingFee = order.FinalAmount, Currency = order.ReviewedCurrency!
-            }, ct);
-            _logger.LogInformation("Reviewed PaymentSucceededV1 staged. EventId {EventId}, PaymentOrderId {PaymentOrderId}, ReservationId {ReservationId}",
-                tx.Id, order.Id, order.ReferenceId);
-        }
-        else
-        {
-            var dispositionReason = order.Status switch
-            {
-                PaymentOrderStatus.PAID => "ADDITIONAL_COLLECTION",
-                PaymentOrderStatus.CANCELLED => "ORDER_CANCELLED",
-                _ => null
-            };
-            if (dispositionReason is not null)
-                await _refundRepository.AddAsync(RefundRequest.ForVerifiedCollection(tx, dispositionReason), ct);
-
-            _logger.LogWarning("Reviewed PayOS non-settling collection staged. PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}, order status {OrderStatus}, disposition {Disposition}",
-                order.Id, tx.Id, order.Status, dispositionReason);
-        }
-        await _unitOfWork.SaveChangesAsync(ct);
-        return new(true, "Verified transfer recorded.") { RecordedTransactionId = tx.Id, SettledOrder = settlesOrder };
     }
 }

@@ -22,14 +22,6 @@ public record PaymentInitiateResult(
     string? ErrorMessage
 );
 
-public record PaymentVerificationResult(
-    bool IsFound,
-    string PaymentStatus, // "SUCCESS", "FAILED", "PENDING", "UNKNOWN"
-    long AmountVnd,
-    string? GatewayTransactionId,
-    DateTimeOffset? PaidAt
-);
-
 public record PaymentCancellationResult(
     bool IsSuccess,
     string PaymentStatus,
