@@ -2,6 +2,7 @@
 @driverId = 11111111-1111-1111-1111-111111111111
 @otherUserId = 22222222-2222-2222-2222-222222222222
 @notificationId = 33333333-3333-3333-3333-333333333333
+@jwtToken = replace-with-driver-jwt-token
 
 ### 1. Health Check (Happy Path)
 # Kiểm tra trạng thái hoạt động của Notification & Audit Service
@@ -52,3 +53,12 @@ POST {{baseUrl}}/api/notifications/00000000-0000-0000-0000-000000000000/retry
 Accept: application/json
 X-User-Id: {{driverId}}
 X-User-Role: Driver
+
+### 9. Global Error Handling - Route Not Found (SPARK-269 - Expect 404 NOT_FOUND)
+GET {{baseUrl}}/api/v1/notifications/non-existent-endpoint
+Accept: application/json
+
+### 10. Global Error Handling - Invalid Query Parameter Type (SPARK-269 - Expect 400 VALIDATION_ERROR)
+GET {{baseUrl}}/api/v1/notifications?status=INVALID_STATUS_VALUE
+Accept: application/json
+Authorization: Bearer {{jwtToken}}

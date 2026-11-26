@@ -804,7 +804,7 @@ export function OnboardingWizard({
                     setSelectedLocation(null)
                     setLocationPickerOpen(false)
                   }}>
-                    <option value="" disabled>Select a district</option>
+                    <option value="">None</option>
                     {(DISTRICTS_BY_PROVINCE[provinceCode] ?? []).map(name => <option key={name} value={name}>{name}</option>)}
                     <option value="__other__">Other district / area</option>
                   </RoundedSelect>
@@ -899,8 +899,8 @@ export function OnboardingWizard({
                 className="btn-primary"
                 onClick={() => setStep(3)}
                 disabled={
-                  !lotConfig.name ||
-                  !lotConfig.address || !district.trim() || !validParkingCoordinates(selectedLocation) ||
+                  !lotConfig.name.trim() ||
+                  !lotConfig.address.trim() || !ward.trim() || !validParkingCoordinates(selectedLocation) ||
                   (LOT_TYPE_INFO[lotType].hasFloors && !lotConfig.floors)
                 }
               >

@@ -19,6 +19,9 @@ public class PaymentDbContext : DbContext
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<ReservationQuote> ReservationQuotes => Set<ReservationQuote>();
     public DbSet<RefundRequest> RefundRequests => Set<RefundRequest>();
+    public DbSet<SubscriptionFinancialTerm> SubscriptionFinancialTerms => Set<SubscriptionFinancialTerm>();
+    public DbSet<SubscriptionFinancialTermRevision> SubscriptionFinancialTermRevisions => Set<SubscriptionFinancialTermRevision>();
+    public DbSet<SubscriptionClosureCompensation> SubscriptionClosureCompensations => Set<SubscriptionClosureCompensation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

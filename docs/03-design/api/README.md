@@ -29,6 +29,7 @@ All new API endpoint specifications and refactors must follow the standard templ
 | Driver Maps & Recorded Vehicle Location | [driver-maps-vehicle-location-api-design.md](driver-maps-vehicle-location-api-design.md) | OperationService (discovery/location) + FacilityService (layout projection) |
 | Driver Payment History & Server-Side PDF Invoices | [driver-payment-history-and-pdf-invoice-api-design.md](driver-payment-history-and-pdf-invoice-api-design.md) | PaymentService |
 | Admin Audit Search & Inspection (`SPARK-338`) | [admin-audit-search-api-design.md](admin-audit-search-api-design.md) | NotificationAuditService |
+| Monthly & Yearly Parking Products (Configuration & Handoff Contract — SPARK-331) | [monthly-yearly-parking-products-api-design.md](monthly-yearly-parking-products-api-design.md) | OperationService (plan & entitlement) + PaymentService (financial terms & refunds) |
 
 > **Machine-Readable Specifications:** The OpenAPI 3.1 contract for the 3D Digital Twin subsystem is located at [3d-digital-twin-openapi.yaml](3d-digital-twin-openapi.yaml).
 > **Task-Specific History:** Historical task split specs (SPARK-228, SPARK-244) are preserved in [../../archive/api/](../../archive/api/README.md).

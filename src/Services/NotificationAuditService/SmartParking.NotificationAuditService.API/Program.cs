@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using SmartParking.NotificationAuditService.API.Middleware;
+using SmartParking.NotificationAuditService.API.Extensions;
 using SmartParking.NotificationAuditService.API.Services;
 using SmartParking.NotificationAuditService.Application;
 using SmartParking.NotificationAuditService.Application.Common.Interfaces.Services;
@@ -99,6 +99,7 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
     });
 
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy =>
@@ -129,6 +130,8 @@ builder.Services.AddCors(options =>
         }
     });
 });
+builder.Services.AddNotificationAuditApiErrorResponses();
+
 
 // Clean Architecture DI registrations
 builder.Services.AddApplicationServices();
@@ -155,7 +158,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseRouting();
+app.UseNotificationAuditApiErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {
