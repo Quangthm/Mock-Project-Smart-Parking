@@ -12,6 +12,14 @@ public sealed class ConsumerJwksCacheTests
     {
         public DateTimeOffset Now = new(2026, 11, 9, 0, 0, 0, TimeSpan.Zero);
         public override DateTimeOffset GetUtcNow() => Now;
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) => new NoOpTimer();
+
+        private sealed class NoOpTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
     }
     private sealed class Transport : HttpMessageHandler
     {

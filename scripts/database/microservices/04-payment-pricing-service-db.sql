@@ -345,3 +345,70 @@ CREATE INDEX IF NOT EXISTS "IX_OutboxMessage_ExpirationTime" ON "OutboxMessage" 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber" ON "OutboxMessage" ("InboxMessageId", "InboxConsumerId", "SequenceNumber");
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_OutboxMessage_OutboxId_SequenceNumber" ON "OutboxMessage" ("OutboxId", "SequenceNumber");
 CREATE INDEX IF NOT EXISTS "IX_OutboxState_Created" ON "OutboxState" ("Created");
+
+-- 9. BẢNG GIÁ TRỌN KỲ & ĐIỀU KHOẢN HOÀN TIỀN GÓI ĐỖ XE (SPARK-331)
+-- Gắn logical UUID (plan_id) + plan_revision sang OperationsDb; sinh revision bất biến cho mỗi cập nhật.
+CREATE TABLE IF NOT EXISTS subscription_financial_terms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    plan_id UUID NOT NULL,
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    active_revision INT NOT NULL DEFAULT 1 CHECK (active_revision >= 1),
+    currency VARCHAR(10) NOT NULL DEFAULT 'VND',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, plan_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sub_fin_terms_site ON subscription_financial_terms(site_id, is_active);
+
+CREATE TABLE IF NOT EXISTS subscription_financial_term_revisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    financial_term_id UUID NOT NULL REFERENCES subscription_financial_terms(id) ON DELETE RESTRICT,
+    plan_id UUID NOT NULL,
+    plan_revision INT NOT NULL CHECK (plan_revision >= 1),
+    revision_number INT NOT NULL CHECK (revision_number >= 1),
+    vehicle_prices JSONB NOT NULL,
+    refund_policy JSONB NOT NULL,
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_to TIMESTAMPTZ NULL,
+    idempotency_key VARCHAR(128) NULL,
+    idempotency_payload_hash VARCHAR(128) NULL,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (financial_term_id, revision_number)
+);
+CREATE INDEX IF NOT EXISTS idx_sub_fin_rev_plan
+    ON subscription_financial_term_revisions(plan_id, plan_revision, effective_from DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_fin_rev_idempotency
+    ON subscription_financial_term_revisions(financial_term_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+-- 10. BẢNG CHỐNG HOÀN TIỀN TRÙNG LẶP KHI ĐÓNG CỬA TẠM THỜI / VĨNH VIỄN (SPARK-331 / M-06)
+CREATE TABLE IF NOT EXISTS subscription_closure_compensations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    closure_event_id UUID NOT NULL,
+    closure_type VARCHAR(20) NOT NULL CHECK (closure_type IN ('TEMPORARY', 'PERMANENT')),
+    pass_id UUID NOT NULL,
+    payment_order_id UUID NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
+    refund_request_id UUID NULL REFERENCES refund_requests(id) ON DELETE RESTRICT,
+    compensated_from TIMESTAMPTZ NULL,
+    compensated_to TIMESTAMPTZ NULL,
+    compensated_intervals JSONB NOT NULL DEFAULT '[]'::jsonb,
+    refund_amount DECIMAL(14,2) NOT NULL CHECK (refund_amount >= 0),
+    idempotency_key VARCHAR(128) NOT NULL UNIQUE,
+    idempotency_payload_hash VARCHAR(128) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (
+        (refund_amount = 0 AND compensated_from IS NULL AND compensated_to IS NULL)
+        OR (compensated_from IS NOT NULL AND compensated_to IS NOT NULL AND compensated_to > compensated_from)
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_sub_closure_comp_order
+    ON subscription_closure_compensations(payment_order_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sub_closure_comp_pass
+    ON subscription_closure_compensations(pass_id);

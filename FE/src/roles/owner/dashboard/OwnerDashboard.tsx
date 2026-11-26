@@ -5,6 +5,7 @@ import { OnboardingWizard } from '../parking-lots/CreateParkingLotForOwner';
 import { OwnerOverview } from './OwnerOverview';
 import { OperatorManagement } from '../operators/OperatorManagement';
 import { PolicySettings } from '../policies/PolicySettings';
+import { OwnerPassPlans } from '../passes/OwnerPassPlans';
 import { SiteManagement } from '../parking-lots/SiteManagement';
 import { LotManagement } from '../parking-lots/LotManagement';
 import { RevenueDashboard } from '../revenue/RevenueDashboard';
@@ -15,7 +16,7 @@ import { reconcileOwnerLotSetups } from '../../../lib/ownerLotSetup';
 import { watchOperators } from '../../../lib/operatorLive';
 import { AuthApiError, getSessionGeneration } from '../../../lib/authApi';
 
-type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy';
+type Tab = 'dashboard' | 'sites' | 'lots' | 'structure' | 'operators' | 'finance' | 'policy' | 'passes';
 
 // A background site-list reload can return an equal list with a brand-new array
 // identity. Keeping the previous array in that case stops every child that depends
@@ -144,6 +145,7 @@ export function OwnerDashboard() {
         { id: 'operators', label: 'Operators', icon: '♙', active: tab === 'operators', onClick: () => setTab('operators') },
         { id: 'finance', label: 'Financial', icon: 'banknote', active: tab === 'finance', onClick: () => setTab('finance') },
         { id: 'policy', label: 'Policies', icon: '⚖', active: tab === 'policy', onClick: () => setTab('policy') },
+        { id: 'passes', label: 'Parking passes', icon: 'ticket', active: tab === 'passes', onClick: () => setTab('passes') },
       ] },
     ]}>
       <main className={`owner-workspace-main min-w-0 overflow-y-auto${showOnboarding ? '' : ' p-4 sm:p-7'}`}>
@@ -175,6 +177,7 @@ export function OwnerDashboard() {
             onOperatorsChanged={() => refreshRoster.current()} />}
           {tab === 'finance' && <RevenueDashboard selectedSiteId={selectedSiteId} sites={sites} />}
           {tab === 'policy' && <PolicySettings />}
+          {tab === 'passes' && !loading && <OwnerPassPlans sites={sites} />}
         </div>
           </>
         )}

@@ -568,3 +568,53 @@ CREATE TABLE IF NOT EXISTS structure_release_receipts (
 -- Direct SQL, bulk writes, direct DbContext saves and cascades bypass these C# safeguards.
 -- confirmed_at records history only; it is NOT evidence that confirmation committed before booking start.
 -- CREATE IF NOT EXISTS does not remove triggers or upgrade columns in a previously deployed database.
+
+-- 13. BẢNG ĐỊNH NGHĨA GÓI ĐỖ XE THEO THÁNG / NĂM (SPARK-331 - WHEN_SPACE_AVAILABLE ONLY)
+-- Tách biệt hoàn toàn khỏi giá & điều khoản hoàn tiền bên PaymentDb; không giữ chỗ hay chiếm công suất.
+CREATE TABLE IF NOT EXISTS parking_pass_plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    entitlement_type VARCHAR(50) NOT NULL DEFAULT 'WHEN_SPACE_AVAILABLE'
+        CHECK (entitlement_type = 'WHEN_SPACE_AVAILABLE'),
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT', 'PUBLISHED', 'DISABLED')),
+    active_revision INT NOT NULL DEFAULT 0 CHECK (active_revision >= 0),
+    draft_revision INT NULL,
+    draft_payload JSONB NULL,
+    created_by UUID NOT NULL,
+    updated_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, product_type)
+);
+CREATE INDEX IF NOT EXISTS idx_parking_pass_plans_site ON parking_pass_plans(site_id, is_enabled);
+
+-- Snapshot bất biến mỗi lần Owner Publish gói (chỉ INSERT, không UPDATE nội dung revision đã phát hành)
+CREATE TABLE IF NOT EXISTS parking_pass_plan_revisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_id UUID NOT NULL REFERENCES parking_pass_plans(id) ON DELETE RESTRICT,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    revision_number INT NOT NULL CHECK (revision_number >= 1),
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    zone_id UUID NULL,
+    vehicle_types JSONB NOT NULL,
+    ordinary_coverage_rules JSONB NOT NULL,
+    contract_timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_to TIMESTAMPTZ NULL,
+    publish_note TEXT NULL,
+    idempotency_key VARCHAR(128) NULL,
+    idempotency_payload_hash VARCHAR(128) NULL,
+    published_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (plan_id, revision_number)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pass_plan_rev_idempotency
+    ON parking_pass_plan_revisions(plan_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pass_plan_rev_site
+    ON parking_pass_plan_revisions(site_id, product_type, revision_number DESC);

@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Domain.Exceptions;
 
@@ -44,8 +47,13 @@ public sealed class ExceptionHandlingMiddleware
         {
             case ValidationException validationEx:
                 statusCode = (int)HttpStatusCode.BadRequest;
-                errorCode = "VALIDATION_ERROR";
-                message = "Validation failed for the requested operation.";
+                var passValidationCode = validationEx.Errors
+                    .Select(e => e.ErrorCode)
+                    .FirstOrDefault(c => c is "INVALID_FINANCIAL_TERMS" or "INVALID_CLOSURE_INTERVALS" or "INVALID_PRODUCT_TYPE");
+                errorCode = passValidationCode ?? "VALIDATION_ERROR";
+                message = passValidationCode is not null
+                    ? (validationEx.Errors.FirstOrDefault()?.ErrorMessage ?? "Validation failed for the requested operation.")
+                    : "Validation failed for the requested operation.";
                 foreach (var err in validationEx.Errors)
                 {
                     errors.Add(new
@@ -69,6 +77,19 @@ public sealed class ExceptionHandlingMiddleware
                 message = unauthEx.Message;
                 break;
 
+            case PaymentJwksUnavailableException jwksEx:
+                statusCode = (int)HttpStatusCode.ServiceUnavailable;
+                errorCode = "AUTHENTICATION_KEYS_UNAVAILABLE";
+                message = jwksEx.Message;
+                break;
+
+            case DbUpdateException dbEx when dbEx.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }:
+            case PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }:
+                statusCode = (int)HttpStatusCode.Conflict;
+                errorCode = "IDEMPOTENCY_CONFLICT";
+                message = "A conflicting request or duplicate idempotency key already exists.";
+                break;
+
             case PaymentDomainException paymentEx:
                 statusCode = paymentEx.Code switch
                 {
@@ -77,15 +98,20 @@ public sealed class ExceptionHandlingMiddleware
                     PaymentDomainException.TariffNotFound or
                     "TRANSACTION_NOT_FOUND" or
                     "QUOTE_NOT_FOUND" or
-                    "COLLECTION_NOT_FOUND" => (int)HttpStatusCode.NotFound,
+                    "COLLECTION_NOT_FOUND" or
+                    "SITE_NOT_FOUND" or
+                    "FINANCIAL_TERMS_NOT_FOUND" => (int)HttpStatusCode.NotFound,
 
                     PaymentDomainException.ForbiddenInvoiceAccess or
                     PaymentDomainException.OperatorSiteMismatch or
                     PaymentDomainException.CrossTenantAccessDenied or
+                    "FORBIDDEN" or
+                    "FORBIDDEN_SITE_SCOPE" or
                     "FORBIDDEN_ORDER_ACCESS" or
                     "FORBIDDEN_RESERVATION_DEPOSIT_CREATION" => (int)HttpStatusCode.Forbidden,
 
-                    PaymentDomainException.Unauthorized => (int)HttpStatusCode.Unauthorized,
+                    PaymentDomainException.Unauthorized or
+                    "UNAUTHENTICATED" => (int)HttpStatusCode.Unauthorized,
 
                     PaymentDomainException.OrderAlreadyPaid or
                     PaymentDomainException.IdempotencyPayloadMismatch or
@@ -94,17 +120,32 @@ public sealed class ExceptionHandlingMiddleware
                     "PAYMENT_RETRY_LIMIT_EXCEEDED" or
                     "UNKNOWN_TRANSACTION_EXISTS" or
                     "TERMS_STALE" or
+                    "FINANCIAL_TERMS_CHANGED" or
+                    "PLAN_VERSION_CONFLICT" or
                     "QUOTE_EXPIRED" or
                     "QUOTE_STATUS_INVALID" or
                     "TRANSACTION_NOT_SETTLED" => (int)HttpStatusCode.Conflict,
 
                     PaymentDomainException.UnsettledPaymentOrder or
-                    PaymentDomainException.OrderExpired => (int)HttpStatusCode.UnprocessableEntity,
+                    PaymentDomainException.OrderExpired or
+                    "YEARLY_POLICY_BLOCKED_Q05" or
+                    "FINANCIAL_TERMS_MISSING" or
+                    "CLOSURE_COMPENSATION_EXCEEDS_ORDER" or
+                    "ORDER_NOT_PAID" or
+                    "ORDER_SCOPE_MISMATCH" or
+                    "PASS_ORDER_MISMATCH" => (int)HttpStatusCode.UnprocessableEntity,
 
                     PaymentDomainException.InvalidCutoffTime or
                     "INVALID_WEBHOOK_SIGNATURE" or
+                    "INVALID_FINANCIAL_TERMS" or
+                    "INVALID_CLOSURE_INTERVALS" or
+                    "INVALID_PRODUCT_TYPE" or
                     "QUOTE_ACCOUNT_MISMATCH" or
                     "QUOTE_AMOUNT_MISMATCH" => (int)HttpStatusCode.BadRequest,
+
+                    "IDENTITY_UNAVAILABLE" or
+                    "FACILITY_UNAVAILABLE" or
+                    "AUTHENTICATION_KEYS_UNAVAILABLE" => (int)HttpStatusCode.ServiceUnavailable,
 
                     "GATEWAY_TIMEOUT" => (int)HttpStatusCode.GatewayTimeout,
                     _ => (int)HttpStatusCode.BadRequest
