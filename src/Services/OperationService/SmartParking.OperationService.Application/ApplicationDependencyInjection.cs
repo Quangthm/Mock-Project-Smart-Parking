@@ -19,6 +19,7 @@ public static class ApplicationDependencyInjection
         services.AddValidatorsFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
         services.TryAddSingleton(Options.Create(new PassPlanDefaultsOptions()));
         services.AddScoped<IPassPlanSnapshotService, PassPlanSnapshotService>();
+        services.AddScoped<Usecase.ReservationGate.GateSlotOccupancy>();
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(ApplicationDependencyInjection).Assembly);

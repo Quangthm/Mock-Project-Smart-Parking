@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.Domain.Exceptions;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
@@ -13,14 +16,10 @@ public sealed class PaymentExceptionHandler(ILogger<PaymentExceptionHandler> log
         Func<Exception, (int Status, string Code, string Message, object[] Errors)>> Mappings =
         new Dictionary<Type, Func<Exception, (int, string, string, object[])>>
         {
-            [typeof(ValidationException)] = exception =>
-                (400, "VALIDATION_ERROR", "Validation failed for the requested operation.",
-                    ((ValidationException)exception).Errors.Select(error => (object)new
-                    {
-                        field = error.PropertyName, code = error.ErrorCode, message = "The value is invalid."
-                    }).ToArray()),
+            [typeof(ValidationException)] = exception => MapValidation((ValidationException)exception),
             [typeof(KeyNotFoundException)] = _ => (404, "RESOURCE_NOT_FOUND", "The requested resource was not found.", []),
             [typeof(UnauthorizedAccessException)] = _ => (401, "UNAUTHORIZED", "Authentication is required.", []),
+            [typeof(PaymentJwksUnavailableException)] = _ => (503, "AUTHENTICATION_KEYS_UNAVAILABLE", "Authentication keys are temporarily unavailable.", []),
             [typeof(PaymentDomainException)] = exception => MapPayment((PaymentDomainException)exception),
             [typeof(PricingDomainException)] = exception => MapPricing((PricingDomainException)exception)
         };
@@ -33,13 +32,21 @@ public sealed class PaymentExceptionHandler(ILogger<PaymentExceptionHandler> log
 
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
         var result = (Status: 500, Code: "INTERNAL_SERVER_ERROR", Message: "An unexpected internal server error occurred.", Errors: Array.Empty<object>());
-        var known = false;
-        for (Type? type = exception.GetType(); type is not null; type = type.BaseType)
+        var known = exception is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } or
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } };
+        if (known)
         {
-            if (!Mappings.TryGetValue(type, out var map)) continue;
-            result = map(exception);
-            known = true;
-            break;
+            result = (409, "IDEMPOTENCY_CONFLICT", "A conflicting request or duplicate idempotency key already exists.", []);
+        }
+        else
+        {
+            for (Type? type = exception.GetType(); type is not null; type = type.BaseType)
+            {
+                if (!Mappings.TryGetValue(type, out var map)) continue;
+                result = map(exception);
+                known = true;
+                break;
+            }
         }
 
         var callback = context.Items[typeof(ProcessPayOsWebhookCommand)] as long?;
@@ -81,24 +88,39 @@ public sealed class PaymentExceptionHandler(ILogger<PaymentExceptionHandler> log
         return true;
     }
 
+    private static (int, string, string, object[]) MapValidation(ValidationException exception)
+    {
+        var code = exception.Errors.Select(error => error.ErrorCode).FirstOrDefault(value =>
+            value is "INVALID_FINANCIAL_TERMS" or "INVALID_CLOSURE_INTERVALS" or "INVALID_PRODUCT_TYPE")
+            ?? "VALIDATION_ERROR";
+        var errors = exception.Errors.Select(error => (object)new
+        {
+            field = error.PropertyName, code = error.ErrorCode, message = "The value is invalid."
+        }).ToArray();
+        return (400, code, "Validation failed for the requested operation.", errors);
+    }
+
     private static (int, string, string, object[]) MapPayment(PaymentDomainException error)
     {
         var status = error.Code switch
         {
             PaymentDomainException.InvoiceNotFound or PaymentDomainException.OrderNotFound or
             PaymentDomainException.TariffNotFound or "TRANSACTION_NOT_FOUND" or "QUOTE_NOT_FOUND" or
-            "COLLECTION_NOT_FOUND" => 404,
+            "COLLECTION_NOT_FOUND" or "SITE_NOT_FOUND" or "FINANCIAL_TERMS_NOT_FOUND" => 404,
             PaymentDomainException.ForbiddenInvoiceAccess or PaymentDomainException.OperatorSiteMismatch or
             PaymentDomainException.CrossTenantAccessDenied or "FORBIDDEN_ORDER_ACCESS" or
-            "FORBIDDEN_RESERVATION_DEPOSIT_CREATION" => 403,
-            PaymentDomainException.Unauthorized => 401,
+            "FORBIDDEN_RESERVATION_DEPOSIT_CREATION" or "FORBIDDEN" or "FORBIDDEN_SITE_SCOPE" => 403,
+            PaymentDomainException.Unauthorized or "UNAUTHENTICATED" => 401,
             PaymentDomainException.OrderAlreadyPaid or PaymentDomainException.IdempotencyPayloadMismatch or
             "IDEMPOTENCY_CONFLICT" or "IDEMPOTENCY_PAYLOAD_MISMATCH" or "PAYMENT_RETRY_LIMIT_EXCEEDED" or
             "UNKNOWN_TRANSACTION_EXISTS" or "TERMS_STALE" or "QUOTE_EXPIRED" or "QUOTE_CONSUMED" or
             "QUOTE_HOLD_EXPIRED" or "QUOTE_BINDING_CONFLICT" or "QUOTE_STATUS_INVALID" or
-            "TRANSACTION_NOT_SETTLED" => 409,
-            PaymentDomainException.UnsettledPaymentOrder or PaymentDomainException.OrderExpired => 422,
-            "QUOTE_PRICING_UNAVAILABLE" => 503,
+            "TRANSACTION_NOT_SETTLED" or "FINANCIAL_TERMS_CHANGED" or "PLAN_VERSION_CONFLICT" => 409,
+            PaymentDomainException.UnsettledPaymentOrder or PaymentDomainException.OrderExpired or
+            "YEARLY_POLICY_BLOCKED_Q05" or "FINANCIAL_TERMS_MISSING" or "CLOSURE_COMPENSATION_EXCEEDS_ORDER" or
+            "ORDER_NOT_PAID" or "ORDER_SCOPE_MISMATCH" or "PASS_ORDER_MISMATCH" => 422,
+            "QUOTE_PRICING_UNAVAILABLE" or "IDENTITY_UNAVAILABLE" or "FACILITY_UNAVAILABLE" or
+            "AUTHENTICATION_KEYS_UNAVAILABLE" => 503,
             "GATEWAY_TIMEOUT" => 504,
             _ => 400
         };

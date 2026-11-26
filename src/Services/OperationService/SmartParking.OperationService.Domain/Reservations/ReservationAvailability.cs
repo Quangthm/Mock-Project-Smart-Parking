@@ -34,11 +34,16 @@ public static class ReservationAvailability
         return new(null);
     }
 
-    private static AvailabilityDecision EvaluateAt(Guid selected, Guid proposedId, DateTimeOffset at, DateTimeOffset horizon,
-        CapacityDemand[] bookings, IReadOnlyList<CapacityVisit> visits,
+    public static AvailabilityDecision EvaluatePhysicalOccupancy(Guid slotId, DateTimeOffset at,
+        IReadOnlyList<CapacityDemand> commitments, IReadOnlyList<CapacityVisit> visits,
+        IReadOnlyList<CapacityAllocation> unresolvedAllocations) =>
+        EvaluateAt(slotId, null, at, null, commitments, visits, unresolvedAllocations, null);
+
+    private static AvailabilityDecision EvaluateAt(Guid selected, Guid? proposedId, DateTimeOffset at, DateTimeOffset? horizon,
+        IReadOnlyList<CapacityDemand> bookings, IReadOnlyList<CapacityVisit> visits,
         IReadOnlyList<CapacityAllocation>? unresolvedAllocations, int? quota)
     {
-        var observations = visits.Where(v => v.Entry <= at)
+        var observations = visits.Where(v => horizon is null || v.Entry <= at)
             .Select(v => v.LocateAt(at, horizon)).Where(v => v.HasValue).Select(v => v.GetValueOrDefault()).ToArray();
         var linked = observations.ToLookup(v => v.Visit.ReservationId);
         var linkedClaims = new HashSet<Guid>();

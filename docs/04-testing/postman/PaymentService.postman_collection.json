@@ -4264,7 +4264,7 @@
                 "exec": [
                   "pm.test(\"Status is 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is YEARLY_POLICY_BLOCKED_Q05\", () => pm.expect(json.errorCode).to.eql(\"YEARLY_POLICY_BLOCKED_Q05\"));"
+                  "pm.test(\"Error code is YEARLY_POLICY_BLOCKED_Q05\", () => pm.expect(json.code).to.eql(\"YEARLY_POLICY_BLOCKED_Q05\"));"
                 ]
               }
             }
@@ -4330,7 +4330,7 @@
                 "exec": [
                   "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is INVALID_FINANCIAL_TERMS\", () => pm.expect(json.errorCode).to.eql(\"INVALID_FINANCIAL_TERMS\"));"
+                  "pm.test(\"Error code is INVALID_FINANCIAL_TERMS\", () => pm.expect(json.code).to.eql(\"INVALID_FINANCIAL_TERMS\"));"
                 ]
               }
             }
@@ -4396,7 +4396,7 @@
                 "exec": [
                   "pm.test(\"Status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.errorCode).to.eql(\"UNAUTHENTICATED\"));"
+                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.code).to.eql(\"UNAUTHENTICATED\"));"
                 ]
               }
             }
@@ -4578,7 +4578,7 @@
                 "exec": [
                   "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is INVALID_PRODUCT_TYPE\", () => pm.expect(json.errorCode).to.eql(\"INVALID_PRODUCT_TYPE\"));"
+                  "pm.test(\"Error code is INVALID_PRODUCT_TYPE\", () => pm.expect(json.code).to.eql(\"INVALID_PRODUCT_TYPE\"));"
                 ]
               }
             }
@@ -4636,7 +4636,7 @@
                 "exec": [
                   "pm.test(\"Status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.errorCode).to.eql(\"UNAUTHENTICATED\"));"
+                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.code).to.eql(\"UNAUTHENTICATED\"));"
                 ]
               }
             }
@@ -4811,7 +4811,7 @@
                 "exec": [
                   "pm.test(\"Status is 409 Conflict (requires valid passServiceQuoteToken)\", () => pm.response.to.have.status(409));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is FINANCIAL_TERMS_CHANGED\", () => pm.expect(json.errorCode).to.eql(\"FINANCIAL_TERMS_CHANGED\"));"
+                  "pm.test(\"Error code is FINANCIAL_TERMS_CHANGED\", () => pm.expect(json.code).to.eql(\"FINANCIAL_TERMS_CHANGED\"));"
                 ]
               }
             }
@@ -4872,7 +4872,7 @@
                 "exec": [
                   "pm.test(\"Status is 400 Bad Request (requires valid passServiceCompensateToken)\", () => pm.response.to.have.status(400));",
                   "const json = pm.response.json();",
-                  "pm.test(\"Error code is INVALID_CLOSURE_INTERVALS\", () => pm.expect(json.errorCode).to.eql(\"INVALID_CLOSURE_INTERVALS\"));"
+                  "pm.test(\"Error code is INVALID_CLOSURE_INTERVALS\", () => pm.expect(json.code).to.eql(\"INVALID_CLOSURE_INTERVALS\"));"
                 ]
               }
             }

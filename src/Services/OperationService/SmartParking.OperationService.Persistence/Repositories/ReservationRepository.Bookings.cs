@@ -28,10 +28,12 @@ public sealed partial class ReservationRepository
     }
 
     internal static IQueryable<ReservationRow> EffectiveCommitments(ReservationDbContext db, Guid siteId,
-        DateTimeOffset start, DateTimeOffset end, DateTimeOffset now, Guid[]? allocationOwners = null)
+        DateTimeOffset start, DateTimeOffset? end, DateTimeOffset now, Guid[]? allocationOwners = null)
     {
+        var upperBound = end ?? start;
         return db.Reservations.AsNoTracking().Where(r => r.SiteId == siteId &&
-            (r.ExpectedStartTime < end && (r.ClaimEndTime ?? r.ExpectedEndTime) > start ||
+            ((end.HasValue ? r.ExpectedStartTime < upperBound : r.ExpectedStartTime <= upperBound) &&
+                (r.ClaimEndTime ?? r.ExpectedEndTime) > start ||
              allocationOwners != null && allocationOwners.Contains(r.Id)) &&
             (r.Status == "CONFIRMED" || r.Status == "ALLOCATED" || r.Status == "PARKING" ||
              r.Status == "PENDING_PAYMENT" && (r.HoldExpiresAt == null || r.HoldExpiresAt > now)));

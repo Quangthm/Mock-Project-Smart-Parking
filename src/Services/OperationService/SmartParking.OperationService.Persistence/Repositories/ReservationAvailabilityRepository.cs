@@ -25,25 +25,35 @@ public sealed class ReservationAvailabilityRepository(ReservationDbContext db, O
 
     public async Task<ReservationAvailabilityFacts> ReadAsync(ReservationRow proposed, DateTimeOffset at, CancellationToken ct)
     {
-        if (!guards.HoldsSite(proposed.SiteId) || !guards.HoldsPlate(proposed.NormalizedPlate))
-            throw new InvalidOperationException("Availability reads require plate and site guards.");
-        var start = proposed.ExpectedStartTime;
-        var end = proposed.ClaimEndTime ?? proposed.ExpectedEndTime;
-        var sessions = await db.ParkingSessions.AsNoTracking().Where(s => s.TenantId == proposed.TenantId &&
-            s.SiteId == proposed.SiteId && s.ExitTime == null).ToArrayAsync(ct);
-        var allocations = await db.SlotAllocations.AsNoTracking().Where(a => a.TenantId == proposed.TenantId &&
-            a.SiteId == proposed.SiteId && a.AllocatedStartTime < end && a.AllocatedEndTime > start &&
-            (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED")).ToArrayAsync(ct);
-        // An effective assignment can outlast its booking. Include its owner even when the booking window has ended.
-        var owners = allocations.Where(a => a.ReservationId.HasValue).Select(a => a.ReservationId!.Value).Distinct().ToArray();
-        var rows = await ReservationRepository.EffectiveCommitments(db, proposed.SiteId, start, end, at, owners)
-            .Where(r => r.TenantId == proposed.TenantId).ToArrayAsync(ct);
+        var facts = await ReadCommitmentsAsync(proposed.TenantId, proposed.SiteId, proposed.NormalizedPlate,
+            proposed.ExpectedStartTime, proposed.ClaimEndTime ?? proposed.ExpectedEndTime, at, ct);
         var quotas = await db.Set<ReservationQuotaConfig>().AsNoTracking().Where(q =>
             q.TenantId == proposed.TenantId && q.SiteId == proposed.SiteId && q.VehicleType == proposed.VehicleType && q.IsActive)
             .Select(q => q.MaxReservationQuota).Take(2).ToArrayAsync(ct);
         if (quotas.Length > 1)
             throw new ReservationGateException(503, "RESERVATION_QUOTA_CONFIGURATION_INVALID",
                 "Multiple active reservation quotas apply to this site and vehicle category.");
-        return new(rows, sessions, allocations, quotas.Length == 0 ? null : quotas[0]);
+        return facts with { MaxReservationQuota = quotas.Length == 0 ? null : quotas[0] };
+    }
+
+    public Task<ReservationAvailabilityFacts> ReadPhysicalAsync(ParkingSessionRow session, DateTimeOffset at, CancellationToken ct) =>
+        ReadCommitmentsAsync(session.TenantId, session.SiteId, session.NormalizedPlate, at, null, at, ct);
+
+    private async Task<ReservationAvailabilityFacts> ReadCommitmentsAsync(Guid tenantId, Guid siteId, string? plate,
+        DateTimeOffset start, DateTimeOffset? end, DateTimeOffset at, CancellationToken ct)
+    {
+        if (!guards.HoldsSite(siteId) || !guards.HoldsPlate(plate))
+            throw new InvalidOperationException("Availability reads require plate and site guards.");
+        var sessions = await db.ParkingSessions.AsNoTracking().Where(s => s.TenantId == tenantId &&
+            s.SiteId == siteId && s.ExitTime == null).ToArrayAsync(ct);
+        var upperBound = end ?? start;
+        var allocations = await db.SlotAllocations.AsNoTracking().Where(a => a.TenantId == tenantId &&
+            a.SiteId == siteId && (end.HasValue ? a.AllocatedStartTime < upperBound : a.AllocatedStartTime <= upperBound) &&
+            a.AllocatedEndTime > start && (a.AllocationStatus == "RESERVED" || a.AllocationStatus == "OCCUPIED")).ToArrayAsync(ct);
+        // An effective assignment can outlast its booking. Include its owner even when the booking window has ended.
+        var owners = allocations.Where(a => a.ReservationId.HasValue).Select(a => a.ReservationId!.Value).Distinct().ToArray();
+        var rows = await ReservationRepository.EffectiveCommitments(db, siteId, start, end, at, owners)
+            .Where(r => r.TenantId == tenantId).ToArrayAsync(ct);
+        return new(rows, sessions, allocations, null);
     }
 }

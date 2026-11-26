@@ -3,12 +3,17 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using System.Reflection;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.Reservations;
+using SmartParking.OperationService.Application.Usecase.ReservationGate;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Domain.Reservations;
 using SmartParking.OperationService.Persistence;
+using ClaimedParkingSlot = SmartParking.OperationService.Application.Common.Interfaces.Services.ClaimedParkingSlot;
+using IOperatorGateSlotClaims = SmartParking.OperationService.Application.Common.Interfaces.Services.IOperatorGateSlotClaims;
+using IOperatorGateSlotLease = SmartParking.OperationService.Application.Common.Interfaces.Services.IOperatorGateSlotLease;
 
 namespace SmartParking.OperationService.Tests;
 
@@ -139,6 +144,79 @@ public sealed partial class QuoteBookingDatabaseTests
 
     [QuoteDatabaseFact]
     public Task SiteCommercialQuotaStillSerializesIndependentSlots() => RaceCapacityAsync(quota: 1);
+
+    [QuoteDatabaseFact]
+    public async Task CompetingPhysicalClaimsUseTheCommittedSessionEvenWhenFacilityWouldAllowBoth()
+    {
+        await using var services = Services();
+        using var firstScope = services.CreateScope();
+        using var secondScope = services.CreateScope();
+        var first = firstScope.ServiceProvider;
+        var second = secondScope.ServiceProvider;
+        var firstDb = first.GetRequiredService<ReservationDbContext>();
+        var secondDb = second.GetRequiredService<ReservationDbContext>();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var ct = timeout.Token;
+        firstDb.Add(NewQuota(0));
+        await firstDb.SaveChangesAsync(ct);
+
+        var claimCount = 0;
+        var lease = DispatchProxy.Create<IOperatorGateSlotLease, CheckoutRealtimeTests.PortStub>();
+        ((CheckoutRealtimeTests.PortStub)lease).Call = method => method switch
+        {
+            "get_Slot" => new ClaimedParkingSlot(slot, "A01", "CAR"),
+            "Commit" => null,
+            "DisposeAsync" => ValueTask.CompletedTask,
+            _ => throw new InvalidOperationException(method)
+        };
+        var facility = DispatchProxy.Create<IOperatorGateSlotClaims, CheckoutRealtimeTests.PortStub>();
+        ((CheckoutRealtimeTests.PortStub)facility).Call = method =>
+        {
+            Assert.Equal("ClaimAvailableAsync", method);
+            Interlocked.Increment(ref claimCount);
+            return Task.FromResult(lease);
+        };
+
+        async Task<Guid> RecordAsync(IServiceProvider provider, string vehiclePlate)
+        {
+            var guards = provider.GetRequiredService<IOperationsConcurrency>();
+            await guards.LockVehicleAsync(vehiclePlate, ct);
+            await guards.LockSiteAsync(site, ct);
+            var now = DateTimeOffset.UtcNow;
+            var session = new ParkingSessionRow
+            {
+                Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, NormalizedPlate = vehiclePlate, VehicleType = "CAR",
+                EntryTime = now, CreatedAt = now, SessionStatus = "ACTIVE", Version = 1
+            };
+            var occupancy = new GateSlotOccupancy(provider.GetRequiredService<IReservationAvailabilityRepository>(), facility);
+            await using var claim = await occupancy.ClaimAsync(session, slot, now, ct);
+            session.RecordSlotScan(claim.Slot.Id, now);
+            await provider.GetRequiredService<IParkingSessionRepository>().AddAsync(session, ct);
+            await provider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(ct);
+            claim.Commit();
+            return session.Id;
+        }
+
+        await using var firstTransaction = await firstDb.Database.BeginTransactionAsync(ct);
+        var winningSession = await RecordAsync(first, "51A10001");
+        await using var secondTransaction = await secondDb.Database.BeginTransactionAsync(ct);
+        var pid = ((NpgsqlConnection)secondDb.Database.GetDbConnection()).ProcessID;
+        var competingClaim = RecordAsync(second, "51B10002");
+        while (!await firstDb.Database.SqlQuery<bool>(
+            $"SELECT pg_backend_pid() = ANY(pg_blocking_pids({pid})) AS \"Value\"").SingleAsync(ct))
+        {
+            Assert.False(competingClaim.IsCompleted, "The competing writer bypassed the site guard.");
+            await Task.Delay(10, ct);
+        }
+        await firstTransaction.CommitAsync(ct);
+
+        var rejection = await Assert.ThrowsAsync<ReservationGateException>(async () => await competingClaim);
+        Assert.Equal("CAPACITY_UNAVAILABLE", rejection.Code);
+        Assert.Equal(1, claimCount);
+        Assert.Equal(winningSession, await secondDb.ParkingSessions.Where(s => s.SiteId == site && s.CurrentSlotId == slot)
+            .Select(s => s.Id).SingleAsync(ct));
+        Assert.False(await secondDb.SlotAllocations.AnyAsync(a => a.SiteId == site, ct));
+    }
 
     private async Task RaceCapacityAsync(bool sharedSlot = false, bool rollBackFirst = false,
         bool sharedPlate = false, bool adjacent = false, int? quota = null)
