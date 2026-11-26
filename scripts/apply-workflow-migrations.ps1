@@ -72,7 +72,7 @@ $container = @{ User='user-db'; Parking='facility-db'; Reservation='operations-d
 $required = @{
     User = @('users','accounts','roles','vehicles')
     Parking = @('parking_sites','tenants','structure_synchronizations','support_tickets','operator_audit_logs','owner_onboarding_provisions','structure_maintenance_windows','processed_events','slot_sequence_watermarks','occupancy_release_ledger','structure_emergency_restrictions')
-    Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts','outbox_events','structure_maintenance_closures','structure_emergency_closures','facility_event_receipts')
+    Reservation = @('reservations','structure_edit_holds','site_capacity_pools','structure_release_receipts','outbox_events')
     Payment = @()
     Notification = @()
     Iot = @()
@@ -189,7 +189,6 @@ if ($Service -eq 'Parking') {
 }
 if ($Service -eq 'Reservation') {
     Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/03b-reservation-operations-service-db.sql' -StartMarker '-- SPARK-393 masstransit-outbox additive' -EndMarker '-- END SPARK-393 masstransit-outbox' -Label 'Operation masstransit-outbox'
-    Invoke-CanonicalSqlSection -ScriptRelativePath 'scripts/database/microservices/03b-reservation-operations-service-db.sql' -StartMarker '-- SPARK-238 closures-and-receipts additive' -EndMarker '-- END SPARK-238 closures-and-receipts' -Label 'Operation closures-and-receipts'
     $columnExists = & docker compose --project-name $ProjectName --env-file $EnvPath -f $composeFile exec -T $container psql -U $database -d $database -v ON_ERROR_STOP=1 -At -c "SELECT COUNT(*) = 3 FROM information_schema.columns WHERE table_schema='public' AND table_name='parking_sessions' AND column_name IN ('location_scanned_at', 'checkout_payment_order_id', 'checkout_paid_at')"
     if ($LASTEXITCODE -ne 0 -or ($columnExists -join '').Trim() -ne 't') {
         throw 'Operation schema is missing parking session scan or checkout settlement columns. Use a separately reviewed migration or an explicitly authorized clean database rebuild.'
