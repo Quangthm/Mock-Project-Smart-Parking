@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
 using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Usecase.ParkingSessions.Queries.GetCurrentVehicleLocation;
+using SmartParking.OperationService.Application.Usecase.ParkingSessions.Queries.GetDriverParkingHistory;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 namespace SmartParking.OperationService.API.Controllers;
@@ -13,6 +14,23 @@ namespace SmartParking.OperationService.API.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class ParkingSessionsController(IMediator mediator) : ApiControllerBase(mediator)
 {
+    [Authorize]
+    [HttpGet("my-history")]
+    public async Task<IActionResult> MyHistory(
+        [FromQuery] string? status,
+        [FromQuery] int limit = 50,
+        CancellationToken ct = default)
+    {
+        var raw = User.FindFirst("account_id")?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(raw, out var accountId) || accountId == Guid.Empty)
+            return Unauthorized(new { success = false, code = "UNAUTHENTICATED", message = "Authentication is required." });
+
+        var sessions = await Mediator.Send(new GetDriverParkingHistoryQuery(accountId, status, limit), ct);
+        return Ok(new { success = true, data = sessions });
+    }
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] Guid siteId, CancellationToken ct)
     {
