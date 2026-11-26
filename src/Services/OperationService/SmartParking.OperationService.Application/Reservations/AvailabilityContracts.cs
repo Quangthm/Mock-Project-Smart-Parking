@@ -6,9 +6,7 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed record ReservationAvailabilityFacts(IReadOnlyList<ReservationRow> Reservations,
     IReadOnlyList<ParkingSessionRow> Sessions, IReadOnlyList<SlotAllocationRow> Allocations,
-    IReadOnlyList<OperationalCapacityConfig> Quotas,
-    IReadOnlyList<StructureMaintenanceClosureRow>? MaintenanceClosures = null,
-    IReadOnlyList<StructureEmergencyClosureRow>? EmergencyClosures = null);
+    IReadOnlyList<OperationalCapacityConfig> Quotas);
 public interface IReservationAvailabilityRepository
 {
     Task<ReservationAvailabilityFacts> ReadAsync(ReservationRow proposed, DateTimeOffset evaluatedAt, CancellationToken ct);

@@ -136,14 +136,6 @@ public static class ReservationMessaging
             {
                 registration.AddConsumer<LayoutInvalidatedConsumer>();
             }
-            // Emergency capacity restrictions come from Facility on the same broker as layout
-            // relays, so the local closure mirror is maintained whenever either topology is on.
-            if (layoutRelayEnabled || admissionEnabled)
-            {
-                registration.AddConsumer<FacilityCapacityRestrictedConsumer>();
-                registration.AddConsumer<FacilityCapacityRestrictionReleasedConsumer>();
-                registration.AddConsumer<FacilityMaintenanceChangedConsumer>();
-            }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
                 outbox.UsePostgres();
@@ -171,12 +163,6 @@ public static class ReservationMessaging
                 }
                 bus.Message<PaymentSucceededV1>(message => message.SetEntityName("smartpark.payment.payment-succeeded.v1"));
                 bus.Message<FacilityLayoutInvalidatedMessage>(message => message.SetEntityName(FacilityLayoutInvalidationTopology.ExchangeName));
-                bus.Message<FacilityCapacityRestrictedMessage>(message =>
-                    message.SetEntityName(FacilityCapacityRestrictionConsumerTopology.RestrictedExchangeName));
-                bus.Message<FacilityCapacityRestrictionReleasedMessage>(message =>
-                    message.SetEntityName(FacilityCapacityRestrictionConsumerTopology.ReleasedExchangeName));
-                bus.Message<FacilityMaintenanceChangedMessage>(message =>
-                    message.SetEntityName(FacilityMaintenanceConsumerTopology.ChangedExchangeName));
                 if (gateCheckoutEnabled)
                 {
                     bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
@@ -193,27 +179,6 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<LayoutInvalidatedConsumer>(context);
-                    });
-                }
-                if (layoutRelayEnabled || admissionEnabled)
-                {
-                    bus.ReceiveEndpoint(FacilityCapacityRestrictionConsumerTopology.RestrictedQueueName, endpoint =>
-                    {
-                        endpoint.UseMessageRetry(retry => retry.Intervals(
-                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<FacilityCapacityRestrictedConsumer>(context);
-                    });
-                    bus.ReceiveEndpoint(FacilityCapacityRestrictionConsumerTopology.ReleasedQueueName, endpoint =>
-                    {
-                        endpoint.UseMessageRetry(retry => retry.Intervals(
-                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<FacilityCapacityRestrictionReleasedConsumer>(context);
-                    });
-                    bus.ReceiveEndpoint(FacilityMaintenanceConsumerTopology.ChangedQueueName, endpoint =>
-                    {
-                        endpoint.UseMessageRetry(retry => retry.Intervals(
-                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
-                        endpoint.ConfigureConsumer<FacilityMaintenanceChangedConsumer>(context);
                     });
                 }
                 if (admissionEnabled)

@@ -90,10 +90,6 @@ public static class InfrastructureDependencyInjection
 
         services.AddScoped<Application.Policies.Ports.ISiteOwnershipValidator, Policies.SiteOwnershipValidator>();
 
-        // Emergency reallocation catalogue. Returned empty until Facility publishes a
-        // service-to-service slot list; the handler then cancels instead of guessing a bay.
-        services.AddScoped<IEmergencyReallocationSlotProvider, FacilityEmergencySlotCandidateProvider>();
-
         AddOutboxPublisher(services, configuration);
 
         return services;

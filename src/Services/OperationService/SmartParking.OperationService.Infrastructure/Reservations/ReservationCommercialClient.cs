@@ -145,35 +145,9 @@ public sealed class ReservationCommercialClient(
         return new(data.State, collections);
     }
 
-    public async Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason,
-        CancellationToken ct)
-    {
-        if (reservationId == Guid.Empty)
-            throw new ArgumentException("ReservationId must not be empty.", nameof(reservationId));
-        ArgumentNullException.ThrowIfNull(collection);
-        if (collection.CollectionId == Guid.Empty)
-            throw new ArgumentException("CollectionId must not be empty.", nameof(collection));
-        if (collection.Amount <= 0)
-            throw new ArgumentException("Amount must be positive.", nameof(collection));
-        if (string.IsNullOrWhiteSpace(reason))
-            throw new ArgumentException("Reason is required.", nameof(reason));
-
-        var data = await SendAsync<ReconcileResponse>(
-            HttpMethod.Post,
-            "/internal/reservation-reconciliations",
-            new { reservationId, collectionId = collection.CollectionId, amount = collection.Amount, reason },
-            ct,
-            accountId: collection.AccountId,
-            tenantId: collection.TenantId,
-            siteId: collection.SiteId,
-            useServiceToken: true);
-
-        // The refund request identity proves PaymentService recorded the same collection we asked
-        // about; anything else is a contract violation and must not be treated as reconciled.
-        if (data.RefundRequestId == Guid.Empty || data.ReservationId != reservationId ||
-            data.CollectionId != collection.CollectionId || string.IsNullOrWhiteSpace(data.Status))
-            throw InvalidOwner();
-    }
+    public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct) =>
+        throw new ReservationGateException(503, "OWNER_UNAVAILABLE",
+            "Reservation reconciliation is not enabled.");
 
     private async Task<T> SendAsync<T>(
         HttpMethod method,
@@ -337,7 +311,4 @@ public sealed class ReservationCommercialClient(
     private sealed record CollectionItem(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
         Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
     private sealed record CollectionResponse(string State, IReadOnlyList<CollectionItem>? Collections);
-
-    private sealed record ReconcileResponse(Guid RefundRequestId, Guid ReservationId, Guid CollectionId,
-        string Status, string Reason, DateTimeOffset CreatedAt);
 }
