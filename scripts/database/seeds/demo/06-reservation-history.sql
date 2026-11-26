@@ -40,8 +40,7 @@ CROSS JOIN LATERAL (
 
 INSERT INTO reservation_requests (
     id, user_id, account_id, idempotency_key, operation, intent_json, fingerprint,
-    state, admitted_at, overall_deadline, attempt_id, attempt_number,
-    attempt_started_at, attempt_deadline, next_action_at, awaiting_reply,
+    state, admitted_at, overall_deadline, attempt_id,
     reservation_id, vehicle_binding_state, vehicle_binding_revision,
     vehicle_binding_checked_at, vehicle_plate
 )
@@ -49,7 +48,7 @@ SELECT
     request_id, :'driver_user_id'::uuid, :'driver_account_id'::uuid, request_id,
     'CREATE_RESERVATION', jsonb_build_object('fixture', 'SPARK-286', 'reservationId', reservation_id),
     request_id::text, 'HOLD_CREATED', created_at, created_at + INTERVAL '2 minutes',
-    attempt_id, 1, created_at, created_at + INTERVAL '1 minute', created_at, false,
+    attempt_id,
     reservation_id, 'ACTIVE', 1, created_at, replace(plate, '-', '')
 FROM demo_history_cases
 ON CONFLICT (id) DO NOTHING;

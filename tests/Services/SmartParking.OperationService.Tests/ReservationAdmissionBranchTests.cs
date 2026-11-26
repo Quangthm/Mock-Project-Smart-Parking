@@ -7,7 +7,7 @@ public sealed class ReservationAdmissionBranchTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
     private static ReservationRequest NewRequest() => ReservationRequest.AdmitQuote(
-        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "{}", "fingerprint", Now);
+        Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "{}", "fingerprint", Now, TimeSpan.FromSeconds(15));
 
     [Theory]
     [InlineData("account")]
@@ -36,12 +36,10 @@ public sealed class ReservationAdmissionBranchTests
         var request = NewRequest();
         var originalAttempt = request.AttemptId;
         request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());
-        request.Advance(Now.AddSeconds(5));
-        Assert.True(request.Advance(Now.AddSeconds(15)));
-        Assert.False(request.AcceptDecision(originalAttempt, 1, Guid.NewGuid(), Now, true, Now.AddSeconds(16)));
-        Assert.True(request.AcceptDecision(request.AttemptId, 2, Guid.NewGuid(), Now, true, Now.AddSeconds(16)));
+        Assert.False(request.AcceptDecision(originalAttempt, 2, Guid.NewGuid(), Now, true, Now.AddSeconds(6)));
+        Assert.True(request.AcceptDecision(originalAttempt, 1, Guid.NewGuid(), Now, true, Now.AddSeconds(6)));
         Assert.Equal("CHECKING", request.State);
-        request.RecordPlate(true, "51A12345", 3, Now.AddSeconds(17));
+        request.RecordPlate(true, "51A12345", 3, Now.AddSeconds(7));
         Assert.Equal("EVALUATING", request.State);
         Assert.Null(request.ReservationId);
         Assert.Throws<InvalidOperationException>(() => request.CompleteAdmission(Guid.NewGuid(), false));

@@ -15,8 +15,8 @@ public sealed class ReservationCreationLifecycleTests
     {
         var now = DateTimeOffset.UtcNow;
         var request = ReservationRequest.AdmitQuote(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            "{}", "fingerprint", now);
-        Assert.True(request.AcceptDecision(request.AttemptId, request.AttemptNumber, Guid.NewGuid(),
+            "{}", "fingerprint", now, TimeSpan.FromSeconds(15));
+        Assert.True(request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(),
             now.AddSeconds(1), true, now.AddSeconds(1)));
         request.RecordPlate(true, "51A12345", 1, now.AddSeconds(2));
         request.RecordSlot(true, Guid.NewGuid(), Guid.NewGuid());

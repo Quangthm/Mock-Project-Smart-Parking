@@ -13,7 +13,6 @@ public interface IReservationBookingRepository : IReservationRepository
     Task<string?> FindZeroDispositionReasonAsync(Guid reservationId, Guid accountId, CancellationToken ct);
     Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct);
     Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct);
     Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct);
     Task RequireDurableConfirmationAsync(CancellationToken ct);
     Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct);

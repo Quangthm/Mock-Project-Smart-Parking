@@ -169,7 +169,7 @@ public sealed partial class QuoteBookingDatabaseTests
             await guards.LockSiteAsync(site, ct);
             var bookings = provider.GetRequiredService<IReservationBookingRepository>();
             var at = await bookings.DatabaseNowAsync(ct);
-            var request = ReservationRequest.AdmitQuote(Guid.NewGuid(), account, Guid.NewGuid(), "{}", "test", at);
+            var request = ReservationRequest.AdmitQuote(Guid.NewGuid(), account, Guid.NewGuid(), "{}", "test", at, TimeSpan.FromSeconds(15));
             var row = ReservationRow.PrepareQuote(request.Id, account, canonicalPlate, tenant, site, selected,
                 "PAYOS", from, until, until, at, at.AddMinutes(5), 100, 0, 100, "VND",
                 """{"Values":{"OCCUPANCY_VALIDITY_TIMESPAN":240}}""", Guid.NewGuid(), start, "tariff", "none", false);

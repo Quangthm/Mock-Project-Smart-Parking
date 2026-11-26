@@ -22,8 +22,15 @@ using SmartParking.OperationService.Persistence.Entities;
 
 namespace SmartParking.OperationService.Tests;
 
-public sealed class ReservationSagaTransportTests
+[Collection("Reservation transport")]
+public sealed class ReservationSagaTransportTests : IReservationQuoteOwner
 {
+    private int proofReads;
+    public Task<PaymentReservationQuote> ReadProofAsync(Guid accountId, Guid quoteId, CancellationToken ct)
+    {
+        if (Interlocked.Increment(ref proofReads) == 1) throw new IOException("Transient quote read failure.");
+        return new UnavailableReservationQuoteOwner().ReadProofAsync(accountId, quoteId, ct);
+    }
     private readonly Guid account = Guid.NewGuid();
     private readonly Guid key = Guid.NewGuid();
     private readonly AdmissionTestClock clock = new(DateTimeOffset.UtcNow);
@@ -108,24 +115,6 @@ public sealed class ReservationSagaTransportTests
         Assert.Equal("RESERVATION_ADMISSION_DISABLED", failure.GetProperty("code").GetString());
         using var retired = await http.PostAsJsonAsync("/api/reservation-terms", new { });
         Assert.Equal(HttpStatusCode.NotFound, retired.StatusCode);
-    }
-
-    private sealed class AdmissionHttpDispatch : IRequestHandler<AdmitQuoteReservation, ReservationReceipt>,
-        IRequestHandler<PreviewReservationPriceQuery, PricePreview>
-    {
-        public Guid RequestId { get; } = Guid.NewGuid();
-        public int CreationCalls { get; private set; }
-        public AdmitQuoteReservation? LastCommand { get; private set; }
-
-        public Task<ReservationReceipt> Handle(AdmitQuoteReservation command, CancellationToken ct)
-        {
-            CreationCalls++;
-            LastCommand = command;
-            return Task.FromResult(new ReservationReceipt(RequestId, "CHECKING", null, null, 3));
-        }
-
-        public Task<PricePreview> Handle(PreviewReservationPriceQuery query, CancellationToken ct) =>
-            Task.FromResult(new PricePreview(10_000, 10_000, "VND", "test-pricing", false));
     }
 
     private static async Task AssertInvalid(HttpResponseMessage response)
@@ -214,7 +203,7 @@ public sealed class ReservationSagaTransportTests
             Assert.Equal(new SlotCheckV1(first, first, account, receipt.Fingerprint, slot, intent.Start, intent.End), facility);
             Assert.Equal(receipt.AttemptId, (await accountCheck.Task).AttemptId);
             var allowed = new AccountAccessDecisionV1(Guid.NewGuid(), first, receipt.AttemptId, 1,
-                account, account, "driver", "CREATE_RESERVATION", clock.Now, true, "ALLOWED");
+                account, account, "driver", "CREATE_RESERVATION", receipt.AdmittedAt, true, "ALLOWED");
             await Send(bus, "operations-reservation-plate-results-v1",
                 new PlateDecisionV1(plate with { AccountId = Guid.NewGuid() }, true, "CAR", 7), first);
             await Send(bus, "operations-reservation-slot-results-v1",
@@ -226,6 +215,7 @@ public sealed class ReservationSagaTransportTests
             var delivered = await subscription.UntilTerminalAsync(first);
             Assert.Equal(outcome, delivered);
             Assert.Equal("PAYMENT_QUOTE_PROOF_UNAVAILABLE", outcome.OutcomeCode);
+            Assert.Equal(2, proofReads);
             Assert.Equal(new ReservationChecks("SUCCEEDED", "SUCCEEDED", "SUCCEEDED", "FAILED_DEPENDENCY"), outcome.Checks);
             Assert.Null(outcome.ReservationId);
             await Send(bus, "operations-reservation-plate-results-v1", new PlateDecisionV1(plate, false, null, null), first);
@@ -253,7 +243,6 @@ public sealed class ReservationSagaTransportTests
             subscription.Dispose();
             await host.StopAsync();
         }
-        clock.Now = clock.Now.AddMinutes(2);
         // A new process has no ambient MassTransit logging scope from the stopped host.
         LogContext.Current = null;
         await using var recovered = Build(enableTestCapture: false);
@@ -327,6 +316,7 @@ public sealed class ReservationSagaTransportTests
         builder.Host.ConfigureContainer<IServiceCollection>((_, services) =>
         {
             services.AddSingleton<TimeProvider>(clock);
+            services.AddSingleton<IReservationQuoteOwner>(this);
             if (enableTestCapture) services.AddScoped<IQuoteAdmissionStarter, AdmissionMessages>();
             services.AddAuthentication(options => options.DefaultScheme = "test")
                 .AddScheme<AuthenticationSchemeOptions, AdmissionTestAuthentication>("test", _ => { });

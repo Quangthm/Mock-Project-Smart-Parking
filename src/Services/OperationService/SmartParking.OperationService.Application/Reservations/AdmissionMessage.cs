@@ -14,6 +14,6 @@ namespace SmartParking.OperationService.Application.Reservations;
 internal static class AdmissionMessage
 {
     public static AccountAccessRequestV1 For(ReservationRequest request) => new(request.Id, request.AttemptId,
-        request.AttemptNumber, request.UserId, request.AccountId, "driver", request.Operation,
-        request.AdmittedAt, request.AttemptDeadline, request.OverallDeadline);
+        1, request.UserId, request.AccountId, "driver", request.Operation,
+        request.AdmittedAt, request.OverallDeadline, request.OverallDeadline);
 }

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.OperationService.Application;
+using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Domain.Reservations;
@@ -198,6 +199,10 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         Assert.Null(booked.AcceptedPricingSnapshot);
         Assert.Equal("tariff-1", booked.TariffVersion);
         Assert.Single(await holds.ToListAsync());
+        // Two admissions register D. Only the committed positive booking registers H.
+        var deadlines = db.Set<OutboxMessage>().Where(m => m.MessageType.Contains("RegisterReservationDeadline"));
+        Assert.Equal(2, await deadlines.CountAsync(m => m.CorrelationId == booked.Id));
+        Assert.Equal(1, await deadlines.CountAsync(m => m.CorrelationId == (booked.Id == first ? second : first)));
         var loser = first == booked.Id ? second : first;
         Assert.Equal("QUOTE_ALREADY_BOUND", await db.ReservationRequests.Where(r => r.Id == loser).Select(r => r.Code).SingleAsync());
         expired = true;
@@ -315,7 +320,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
 
     [QuoteDatabaseFact]
-    public async Task LocalStructureEditDefersHoldUntilReleased()
+    public async Task LocalStructureEditRejectsAdmissionAndReleaseRequiresFreshRequest()
     {
         await using var services = Services();
         var id = await Prepare(services, Guid.NewGuid());
@@ -326,14 +331,138 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         db.AddRange(hold, state);
         await db.SaveChangesAsync();
         await Send(services, new CommitQuoteHoldCommand(id));
-        var deferred = await db.ReservationRequests.AsNoTracking().SingleAsync(x => x.Id == id);
-        Assert.Equal(("EVALUATING", "STRUCTURE_BUSY"), (deferred.State, deferred.Code));
+        var rejected = await db.ReservationRequests.AsNoTracking().SingleAsync(x => x.Id == id);
+        Assert.Equal(("REJECTED", "STRUCTURE_BUSY"), (rejected.State, rejected.Code));
         Assert.False(await db.Reservations.AnyAsync(r => r.QuoteId == quoteId));
         db.Remove(hold);
         state.Active = true;
         await db.SaveChangesAsync();
         await Send(services, new CommitQuoteHoldCommand(id));
-        Assert.Equal("HOLD_CREATED", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.State).SingleAsync());
+        Assert.Equal("REJECTED", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.State).SingleAsync());
+        var fresh = await Prepare(services, Guid.NewGuid());
+        await Send(services, new CommitQuoteHoldCommand(fresh));
+        Assert.True(await db.Reservations.AnyAsync(r => r.Id == fresh));
+    }
+
+    [QuoteDatabaseFact]
+    public async Task StructureHoldOnlyPermitsElapsedClaimReleaseAndRejectsMixedWrites()
+    {
+        await using var services = Services();
+        var id = await SeedTimedHold(services, true, false);
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        db.Add(new StructureEditHoldRow { SiteId = site, TenantId = tenant, Token = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var h = (await db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id)).HoldExpiresAt!.Value;
+        foreach (var mutation in new[] { "occupancy", "alteredH", "early", "confirmation" })
+        {
+            using var attempt = services.CreateScope();
+            var provider = attempt.ServiceProvider;
+            var work = provider.GetRequiredService<SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork>();
+            var changed = provider.GetRequiredService<ReservationDbContext>();
+            await using var transaction = await work.BeginTransactionAsync(default);
+            var originalH = mutation == "early" ? h.AddDays(1) : h;
+            if (mutation == "early")
+                await changed.Reservations.Where(r => r.Id == id).ExecuteUpdateAsync(set => set.SetProperty(r => r.HoldExpiresAt, originalH));
+            var row = (await provider.GetRequiredService<IMediator>().Send(new LockReservationBooking(id)))!;
+            row.ReleaseExpiredHold(originalH); // Deliberately present a future decision time to the persistence guard.
+            if (mutation == "occupancy")
+                changed.Add(new ParkingSessionRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, VehicleType = "CAR",
+                    EntryTime = h, SessionStatus = "ACTIVE", CreatedAt = h });
+            if (mutation == "alteredH") changed.Entry(row).Property("HoldExpiresAt").CurrentValue = h.AddSeconds(-1);
+            if (mutation == "confirmation") row.Status = "CONFIRMED";
+            await Assert.ThrowsAsync<SmartParking.OperationService.Domain.HoldConflictException>(() => work.SaveChangesAsync());
+        }
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        Assert.Equal(ReservationDeadlineResult.Obsolete, await mediator.Send(new ExpireReservationHoldCommand(id, h.AddSeconds(1))));
+        Assert.Equal(ReservationDeadlineResult.Completed, await mediator.Send(new ExpireReservationHoldCommand(id, h)));
+        Assert.Equal(ReservationDeadlineResult.Obsolete, await mediator.Send(new ExpireReservationHoldCommand(id, h)));
+        var result = await db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
+        Assert.Equal("EXPIRED", result.Status);
+        Assert.Null(result.ActiveClaimSlotId);
+        Assert.False(await db.ParkingSessions.AnyAsync(s => s.SiteId == site));
+    }
+
+    [QuoteDatabaseFact]
+    public async Task DeadlineBeforeSagaStartCommitsWithoutOwnerDispatchAndFencesLateStart()
+    {
+        await using var services = Services();
+        var id = await Capture(services, Guid.NewGuid());
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var request = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == id);
+        Assert.True((await mediator.Send(new CheckAdmissionDeadline(id, request.OverallDeadline))).Remaining > TimeSpan.Zero);
+        var d = request.AdmittedAt.AddSeconds(-1);
+        await db.ReservationRequests.Where(r => r.Id == id).ExecuteUpdateAsync(set => set
+            .SetProperty(r => r.AdmittedAt, d.AddSeconds(-15)).SetProperty(r => r.OverallDeadline, d));
+        Assert.Equal(ReservationDeadlineResult.Completed, await mediator.Send(new CheckAdmissionDeadline(id, d)));
+        Assert.Equal("TERMINAL", await mediator.Send(new ProcessAdmissionSignal(id, new StartQuoteAdmission(id))));
+        Assert.Equal(ReservationDeadlineResult.Obsolete, await mediator.Send(new CheckAdmissionDeadline(id, d)));
+        Assert.False(await db.Set<OutboxMessage>().AnyAsync(m => m.CorrelationId == id &&
+            (m.MessageType.Contains("AccountAccessRequestV1") || m.MessageType.Contains("PlateCheckV1") || m.MessageType.Contains("SlotCheckV1"))));
+    }
+
+    [QuoteDatabaseFact]
+    public async Task GuardWaitCrossesDeadlineAndFencesJoinedAdmission()
+    {
+        await using var services = Services();
+        var id = await Prepare(services, Guid.NewGuid());
+        using var scope = services.CreateScope();
+        var provider = scope.ServiceProvider;
+        var db = provider.GetRequiredService<ReservationDbContext>();
+        var guard = provider.GetRequiredService<IOperationsConcurrency>();
+        var bookings = provider.GetRequiredService<IReservationBookingRepository>();
+        var now = await bookings.DatabaseNowAsync(default);
+        var deadline = now.AddSeconds(2);
+        await db.ReservationRequests.Where(r => r.Id == id).ExecuteUpdateAsync(set => set.SetProperty(r => r.OverallDeadline, deadline));
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await guard.LockSiteAsync(site, default);
+        var evaluation = Send(services, new CommitQuoteHoldCommand(id));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        while (Volatile.Read(ref proofReads) == 0 || await bookings.DatabaseNowAsync(timeout.Token) < deadline)
+            await Task.Delay(25, timeout.Token);
+        await transaction.CommitAsync();
+        await evaluation.WaitAsync(timeout.Token);
+        var row = await db.ReservationRequests.AsNoTracking().SingleAsync(r => r.Id == id);
+        Assert.Equal(("REJECTED", "BOOKING_PREPARATION_EXPIRED"), (row.State, row.Code));
+        Assert.False(await db.Reservations.AnyAsync(r => r.Id == id));
+    }
+
+    [QuoteDatabaseFact]
+    public async Task ElapsedHoldRacingSettlementCannotUndoConfirmedEntitlement()
+    {
+        await using var services = Services();
+        var id = await SeedTimedHold(services, true, false);
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var h = await db.Reservations.Where(r => r.Id == id).Select(r => r.HoldExpiresAt!.Value).SingleAsync();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var expiry = new ExpireReservationHoldCommand(id, h);
+        await Task.WhenAll(mediator.Send(expiry), Send(services, new RecordReservationPaymentCommand(Evidence(id))));
+        Assert.Equal(ReservationDeadlineResult.Obsolete, await mediator.Send(expiry));
+        var final = await db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
+        Assert.Equal(("CONFIRMED", slot), (final.Status, final.ActiveClaimSlotId));
+    }
+
+    [QuoteDatabaseFact]
+    public async Task EarlyHoldExpiryAndCancellationLeaveNoExpiryEffects()
+    {
+        await using var services = Services();
+        var id = await SeedTimedHold(services, false, false);
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var h = await db.Reservations.Where(r => r.Id == id).Select(r => r.HoldExpiresAt!.Value).SingleAsync();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var command = new ExpireReservationHoldCommand(id, h);
+        Assert.True((await mediator.Send(command)).Remaining > TimeSpan.Zero);
+        var live = await db.Reservations.AsNoTracking().SingleAsync(r => r.Id == id);
+        Assert.Equal(("PENDING_PAYMENT", slot), (live.Status, live.ActiveClaimSlotId));
+        // Model cancellation winning the lock before a delayed trigger.
+        await db.Reservations.Where(r => r.Id == id).ExecuteUpdateAsync(set =>
+            set.SetProperty(r => r.Status, "CANCELLED").SetProperty(r => r.ActiveClaimSlotId, (Guid?)null));
+        Assert.Equal(ReservationDeadlineResult.Obsolete, await mediator.Send(command));
+        Assert.False(await db.Set<OutboxMessage>().AnyAsync(m => m.CorrelationId == id && m.MessageType.Contains("ReservationHoldChangedV1")));
     }
 
     private async Task<Guid> SeedTimedHold(ServiceProvider services, bool late, bool zero)
@@ -346,7 +475,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var request = ReservationRequest.AdmitQuote(UserId!.Value, AccountId!.Value, key, JsonSerializer.Serialize(Intent),
-            "seeded-timed-hold", created);
+            "seeded-timed-hold", created, TimeSpan.FromSeconds(15));
         request.AcceptDecision(request.AttemptId, 1, Guid.NewGuid(), created, true, created);
         request.RecordPlate(true, plate, 1, created);
         request.RecordSlot(true, site, tenant);
@@ -392,7 +521,12 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     {
         await using var services = Services();
         var id = await SeedTimedHold(services, true, false);
-        await Send(services, new ExpireReservationHoldCommand(id));
+        using (var expiry = services.CreateScope())
+        {
+            var h = await expiry.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations
+                .Where(r => r.Id == id).Select(r => r.HoldExpiresAt!.Value).SingleAsync();
+            await expiry.ServiceProvider.GetRequiredService<IMediator>().Send(new ExpireReservationHoldCommand(id, h));
+        }
         await Send(services, new RecordReservationPaymentCommand(Evidence(id)));
         using var scope = services.CreateScope();
         var row = await scope.ServiceProvider.GetRequiredService<ReservationDbContext>().Reservations.SingleAsync(r => r.Id == id);
@@ -434,6 +568,9 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         await Send(services, new RecordReservationPaymentCommand(evidence));
         var row = await db.Reservations.SingleAsync(r => r.Id == id);
         Assert.Equal(("INVALIDATED", "NO_ENTITLEMENT", evidence.PaymentTransactionId), (row.Status, row.ConfirmationState, row.CollectionId));
+        var expiry = new ExpireReservationHoldCommand(id, row.HoldExpiresAt!.Value);
+        Assert.Equal(ReservationDeadlineResult.Obsolete, await scope.ServiceProvider.GetRequiredService<IMediator>().Send(expiry));
+        Assert.True(await db.Reservations.AnyAsync(r => r.Id != id && r.SiteId == site && r.NormalizedPlate == plate && r.Status == "CONFIRMED"));
         Assert.Null(row.ActiveClaimSlotId);
         Assert.Single(await db.Set<OutboxMessage>().Where(m => m.MessageType.Contains("RequestReservationDispositionV1") && m.Body.Contains(id.ToString())).ToListAsync());
     }
@@ -457,6 +594,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var admitted = await Read();
         Assert.Equal(("CONFIRMED", slot), (admitted.Status, admitted.ActiveClaimSlotId));
         Assert.Equal("CONFIRMED", await db.ReservationRequests.Where(r => r.Id == id).Select(r => r.State).SingleAsync());
+        Assert.Single(await effects.Where(m => m.MessageType.Contains("RegisterReservationDeadline")).ToListAsync()); // D only
         Assert.Null(admitted.HoldExpiresAt);
         Assert.Null(admitted.PaymentOrderId);
         Assert.Null(admitted.ZeroReceiptId);

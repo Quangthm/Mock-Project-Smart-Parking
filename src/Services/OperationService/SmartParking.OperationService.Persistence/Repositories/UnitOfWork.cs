@@ -45,7 +45,22 @@ public sealed class UnitOfWork(
                     PaymentOrderId: not null, ZeroReceiptId: not null } &&
                 entry.Property("PaymentOrderId").OriginalValue is null && entry.Property("ZeroReceiptId").OriginalValue is null &&
                 entry.Properties.Where(p => p.IsModified).All(p => p.Metadata.Name is "PaymentOrderId" or "ZeroReceiptId");
-            if (!zeroLinkOnly && await db.StructureEditHolds.AsNoTracking().AnyAsync(h => h.SiteId == site, cancellationToken)) throw new HoldConflictException();
+            if (!zeroLinkOnly && await db.StructureEditHolds.AsNoTracking().AnyAsync(h => h.SiteId == site, cancellationToken))
+            {
+                // ReleaseExpiredHold changes exactly these two properties. Version advances below.
+                var expiredClaim = entry.State == EntityState.Modified &&
+                    entry.Entity is ReservationRow { RequestId: not null, QuoteId: not null, DepositAmount: > 0,
+                        Status: "EXPIRED", ActiveClaimSlotId: null, TargetSlotId: Guid target, HoldExpiresAt: DateTimeOffset h,
+                        ConfirmationState: "AWAITING_COLLECTION", ConfirmationCode: null, ConfirmedAt: null,
+                        ConfirmationEffectId: null, ConfirmationEvaluatedAt: null, CollectionId: null,
+                        CollectionFingerprint: null, ZeroReceiptId: null, PaymentOrderId: null } &&
+                    Equals(entry.Property("Status").OriginalValue, "PENDING_PAYMENT") &&
+                    Equals(entry.Property("ActiveClaimSlotId").OriginalValue, target) &&
+                    Equals(entry.Property("HoldExpiresAt").OriginalValue, h) &&
+                    entry.Properties.Where(p => p.IsModified).All(p => p.Metadata.Name is "Status" or "ActiveClaimSlotId") &&
+                    h <= await db.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").SingleAsync(cancellationToken);
+                if (!expiredClaim) throw new HoldConflictException();
+            }
             var live = entry.Entity switch
             {
                 ReservationRow r => r.Status is "PENDING_PAYMENT" or "CONFIRMED" or "ALLOCATED" or "PARKING",

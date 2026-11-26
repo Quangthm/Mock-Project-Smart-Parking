@@ -6,6 +6,6 @@ namespace SmartParking.OperationService.Infrastructure.Reservations;
 public sealed class UnavailableQuoteAdmissionStarter : IQuoteAdmissionStarter
 {
     // The reviewed workflow stays closed when its Saga or commercial integration is disabled.
-    public Task StartAsync(Guid requestId, CancellationToken ct) =>
+    public Task StartAsync(Guid requestId, DateTimeOffset deadline, CancellationToken ct) =>
         throw new ReservationGateException(503, "PAYMENT_QUOTE_PROOF_UNAVAILABLE", "Plate-based booking is unavailable.");
 }

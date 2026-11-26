@@ -9,7 +9,8 @@ using SmartParking.OperationService.Domain.Reservations;
 namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class AdmitQuoteReservationHandler(ICurrentActor actor, IReservationRequestRepository requests,
-    IUnitOfWork work, IQuoteAdmissionStarter starter, TimeProvider clock)
+    IUnitOfWork work, IQuoteAdmissionStarter starter, IReservationBookingRepository bookings,
+    Microsoft.Extensions.Options.IOptions<ReservationAdmissionOptions> options)
     : IRequestHandler<AdmitQuoteReservation, ReservationReceipt>
 {
     public async Task<ReservationReceipt> Handle(AdmitQuoteReservation command, CancellationToken ct)
@@ -31,11 +32,12 @@ public sealed class AdmitQuoteReservationHandler(ICurrentActor actor, IReservati
                 throw new ReservationGateException(409, "IDEMPOTENCY_KEY_REUSED", "The key is bound to another request.");
             return new(prior.Id, prior.State, prior.ReservationId, prior.Code, 3);
         }
-        var now = clock.GetUtcNow();
+        var now = await bookings.DatabaseNowAsync(ct);
         if (intent.Start <= now) throw new ReservationGateException(400, "INVALID_REQUEST", "Start must be in the future.");
-        var request = ReservationRequest.AdmitQuote(user, account, command.IdempotencyKey, json, fingerprint, now);
+        var request = ReservationRequest.AdmitQuote(user, account, command.IdempotencyKey, json, fingerprint, now,
+            TimeSpan.FromSeconds(options.Value.OverallTimeoutSeconds));
         requests.Add(request);
-        await starter.StartAsync(request.Id, ct);
+        await starter.StartAsync(request.Id, request.OverallDeadline, ct);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return new(request.Id, request.State, null, null, 3);

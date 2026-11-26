@@ -112,12 +112,6 @@ public sealed partial class ReservationRepository
     public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) =>
         db.Reservations.AsNoTracking().AnyAsync(r => r.PaymentOrderId == orderId && r.Id != reservationId, ct);
 
-    public async Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) =>
-        await db.Reservations.AsNoTracking().Where(r =>
-                r.Status == "PENDING_PAYMENT" && r.HoldExpiresAt <= now)
-            .OrderBy(r => r.HoldExpiresAt).ThenBy(r => r.Id)
-            .Select(r => r.Id).Take(take).ToListAsync(ct);
-
     public async Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct)
     {
         var value = await ScalarAsync("SELECT clock_timestamp()", ct);

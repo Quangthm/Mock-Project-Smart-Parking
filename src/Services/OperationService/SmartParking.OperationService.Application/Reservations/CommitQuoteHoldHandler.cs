@@ -52,11 +52,15 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         }
         catch (ReservationPolicyUnavailableException)
         {
-            request.FailQuoteAdmission("RESERVATION_POLICY_UNAVAILABLE");
+            var decisionTime = await bookings.DatabaseNowAsync(ct);
+            if (decisionTime >= request.OverallDeadline || decisionTime >= intent.Start) request.Reject("BOOKING_PREPARATION_EXPIRED");
+            else request.FailQuoteAdmission("RESERVATION_POLICY_UNAVAILABLE");
         }
         catch (ReservationGateException error) when (error.StatusCode is 400 or 404 or 409 or 503)
         {
-            if (error.StatusCode == 503) request.FailQuoteAdmission(error.Code);
+            var decisionTime = await bookings.DatabaseNowAsync(ct);
+            if (decisionTime >= request.OverallDeadline || decisionTime >= intent.Start) request.Reject("BOOKING_PREPARATION_EXPIRED");
+            else if (error.StatusCode == 503) request.FailQuoteAdmission(error.Code);
             else request.Reject(error.Code);
         }
 
@@ -78,7 +82,8 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         proof.ValidateFor(binding, now);
         if (await structure.HoldAsync(binding.SiteId, ct) is not null)
         {
-            request.Defer(now.AddSeconds(1), "STRUCTURE_BUSY");
+            RequireTimely(request, intent, await bookings.DatabaseNowAsync(ct));
+            request.Reject("STRUCTURE_BUSY");
             return;
         }
         var site = await structure.StateAsync(binding.SiteId, ct);
@@ -93,9 +98,11 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         await mediator.Send(new RequireBookingPermissionCommand(request.AccountId, policy, now), ct);
         if (await bookings.HasQuoteBindingAsync(proof.QuoteId, ct))
             throw new ReservationGateException(409, "QUOTE_ALREADY_BOUND", "The quote already has a reservation.");
+        var holdUntil = proof.DepositAmount == 0 ? (DateTimeOffset?)null : policy.DeadlinesFor(interval, now).PaymentDueAt;
+        if (holdUntil is DateTimeOffset h) holdUntil = h.AddTicks(-(h.UtcTicks % 10));
         var row = ReservationRow.PrepareQuote(request.Id, request.AccountId, intent.LicensePlate, binding.TenantId,
             binding.SiteId, intent.RequestedSlotId, intent.PaymentMethod, intent.Start, intent.End,
-            intent.End.AddMinutes(policy.Values["INTER_BOOKING_BUFFER"]), now, proof.DepositAmount == 0 ? null : policy.DeadlinesFor(interval, now).PaymentDueAt,
+            intent.End.AddMinutes(policy.Values["INTER_BOOKING_BUFFER"]), now, holdUntil,
             proof.BookedAmount, proof.CoveredAmount, proof.DepositAmount, proof.Currency, JsonSerializer.Serialize(policy),
             proof.QuoteId, proof.ValidUntil, proof.TariffVersion, binding.Coverage.Version, binding.Coverage.IsCovered);
         await bookings.RequirePlateAvailableAsync(row, now, ct);
@@ -105,13 +112,14 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
         if (checkpoint >= row.HoldExpiresAt || checkpoint >= proof.ValidUntil) throw Stale();
 
         var finalPolicy = await mediator.Send(new ResolveReservationPoliciesQuery(binding.TenantId, binding.SiteId, checkpoint), ct);
-        if (finalPolicy.Platform != policy.Platform || finalPolicy.Site != policy.Site ||
-            !finalPolicy.AllowsWindow(interval, checkpoint)) throw Stale();
-
         var confirmed = proof.DepositAmount == 0;
+        if (confirmed) await bookings.RequireDurableConfirmationAsync(ct);
+        checkpoint = await bookings.DatabaseNowAsync(ct);
+        RequireTimely(request, intent, checkpoint);
+        if (checkpoint >= row.HoldExpiresAt || checkpoint >= proof.ValidUntil ||
+            finalPolicy.Platform != policy.Platform || finalPolicy.Site != policy.Site || !finalPolicy.AllowsWindow(interval, checkpoint)) throw Stale();
         if (confirmed)
         {
-            await bookings.RequireDurableConfirmationAsync(ct);
             row.ConfirmZeroAdmission(checkpoint);
         }
         await bookings.AddAsync(row, ct);
@@ -127,6 +135,8 @@ public sealed class CommitQuoteHoldHandler(IReservationRequestRepository request
                 binding.RequestedSlotId, binding.Start, row.ClaimEndTime!.Value, row.Status), ct);
             return;
         }
+        await (saga ?? throw new InvalidOperationException("Admission messaging unavailable."))
+            .RegisterDeadlineAsync(new(ReservationDeadlineKind.UnpaidHold, row.Id, row.HoldExpiresAt!.Value), ct);
         await facts.HoldChangedAsync(new(Guid.NewGuid(), checkpoint, request.Id, row.Id, request.AccountId,
             binding.TenantId, binding.SiteId, intent.RequestedSlotId, intent.Start, row.ClaimEndTime!.Value,
             row.HoldExpiresAt!.Value, row.Status, row.Version), ct);

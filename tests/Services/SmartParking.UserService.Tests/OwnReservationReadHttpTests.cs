@@ -29,7 +29,7 @@ public sealed class OwnReservationReadHttpTests
     [Fact]
     public async Task RealHostEnforcesJwtAccountOwnershipAndFreshDetail()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await OwnReservationReadFixture.Create();
         var account = Guid.NewGuid(); var user = Guid.NewGuid(); var other = Guid.NewGuid();
         f.Store.Rows.Add((account, Row(f.Clock.Now.AddHours(-1), f.Clock.Now.AddHours(1))));
         f.Store.Rows.Add((other, Row(f.Clock.Now, f.Clock.Now.AddHours(1))));
@@ -55,7 +55,7 @@ public sealed class OwnReservationReadHttpTests
     [Fact]
     public async Task PagingOverlapValidationEmptyAndOutageAreDistinct()
     {
-        await using var f = await Fixture.Create(); var account = Guid.NewGuid(); var user = Guid.NewGuid();
+        await using var f = await OwnReservationReadFixture.Create(); var account = Guid.NewGuid(); var user = Guid.NewGuid();
         var from = f.Clock.Now; var to = from.AddDays(1);
         f.Store.Rows.AddRange(new[] {
             (account, Row(from.AddHours(-2), from.AddHours(1))),
@@ -83,7 +83,7 @@ public sealed class OwnReservationReadHttpTests
     [Fact]
     public async Task DisabledAdmissionRemainsFailClosed()
     {
-        await using var f = await Fixture.Create(false);
+        await using var f = await OwnReservationReadFixture.Create(false);
         using var response = await f.Get("/api/me/reservations", f.Token(Guid.NewGuid(), Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal("RESERVATION_ADMISSION_DISABLED", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
@@ -94,78 +94,5 @@ public sealed class OwnReservationReadHttpTests
     {
         Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync()); Assert.True(response.Headers.CacheControl?.NoStore);
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").Clone();
-    }
-    private sealed class Clock : TimeProvider { public DateTimeOffset Now = DateTimeOffset.UtcNow; public override DateTimeOffset GetUtcNow() => Now; }
-    private sealed class Store : IReservationBookingRepository
-    {
-        public List<(Guid, ReservationRow)> Rows = []; public bool Fail;
-        public Task<BookingReadResult?> FindOwnBookingAsync(Guid account, Guid id, CancellationToken ct) => Task.FromResult(Rows.Where(r => r.Item1 == account && r.Item2.Id == id).Select(r => new BookingReadResult(r.Item2, null, null, null)).SingleOrDefault());
-        public Task<IReadOnlyList<BookingReadResult>> ListOwnBookingsAsync(Guid account, int take, DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null)
-        {
-            if (Fail) throw new ReservationGateException(503, "DEPENDENCY_UNAVAILABLE", "Synthetic outage");
-            IReadOnlyList<ReservationRow> rows = Rows.Where(r => r.Item1 == account).Select(r => r.Item2)
-                .Where(r => from is null || r.ExpectedStartTime < to && r.ExpectedEndTime > from)
-                .Where(r => before is null || r.CreatedAt < before || r.CreatedAt == before && r.Id.CompareTo(beforeId!.Value) < 0)
-                .OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(take).ToArray();
-            return Task.FromResult<IReadOnlyList<BookingReadResult>>(rows.Select(r => new BookingReadResult(r, null, null, null)).ToArray());
-        }
-        public Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> DueZeroPriceAcceptanceAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct) => throw new NotSupportedException();
-        public Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task RequireDurableConfirmationAsync(CancellationToken ct) => throw new NotSupportedException();
-        public Task RequirePlateAvailableAsync(ReservationRow row, DateTimeOffset now, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ReservationRow?> FindForUpdateAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<ReservationGateEntry>> ListAsync(Guid tenant, Guid site, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ReservationGateEntry?> FindAsync(Guid tenant, Guid site, string query, CancellationToken ct) => throw new NotSupportedException();
-        public Task<ReservationGateEntry?> FindByIdAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => throw new NotSupportedException();
-        public Task AddAsync(ReservationRow row, CancellationToken ct) => throw new NotSupportedException();
-        public void Remove(ReservationRow row) => throw new NotSupportedException();
-    }
-    private sealed class Fixture : IAsyncDisposable
-    {
-        public Clock Clock = new(); public Store Store = new(); public HttpClient Client = null!;
-        private WebApplication app = null!; private readonly RSA key = RSA.Create(2048);
-        public static async Task<Fixture> Create(bool enabled = true)
-        {
-            var f = new Fixture();
-            f.app = OperationHost.Build(["--environment", "Testing"], b => {
-                b.Configuration.Sources.Clear(); b.WebHost.UseTestServer();
-                b.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
-                    ["Services:Key"] = new('x', 32), ["ConnectionStrings:Reservation"] = "Host=synthetic.invalid;Database=synthetic",
-                    ["ReservationAdmission:Enabled"] = enabled.ToString(), ["ReservationAdmission:BrokerPassword"] = "synthetic-only",
-                    ["JwtValidation:Issuer"] = "synthetic-user", ["JwtValidation:Audience"] = "synthetic-business",
-                    ["JwtValidation:JwksUri"] = "https://synthetic.invalid/jwks"
-                });
-                // Replace external I/O only; exercise real routes, JWT middleware, actor, validators and handlers.
-                b.Host.ConfigureContainer<IServiceCollection>((_, services) => {
-                    foreach (var hosted in services.Where(x => x.ServiceType == typeof(IHostedService) &&
-                        x.ImplementationType?.FullName != "Microsoft.AspNetCore.Hosting.GenericWebHostService").ToArray()) services.Remove(hosted);
-                    services.RemoveAll<IReservationBookingRepository>();
-                    services.AddSingleton<IReservationBookingRepository>(f.Store);
-                    if (enabled) services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options => {
-                        var config = new OpenIdConnectConfiguration { Issuer = "synthetic-user" };
-                        config.SigningKeys.Add(new RsaSecurityKey(f.key.ExportParameters(false)));
-                        options.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(config);
-                    });
-                });
-
-            });
-            await f.app.StartAsync(); f.Client = f.app.GetTestClient(); return f;
-        }
-        public string Token(Guid account, Guid user, string role = "driver", bool expired = false, string audience = "synthetic-business")
-        {
-            var header = Base64UrlEncoder.Encode("{\"alg\":\"RS256\",\"typ\":\"JWT\"}");
-            var payload = Base64UrlEncoder.Encode(JsonSerializer.Serialize(new { iss = "synthetic-user", aud = audience, sub = user, account_id = account, jti = Guid.NewGuid().ToString("N"), role, nbf = Clock.Now.AddMinutes(-10).ToUnixTimeSeconds(), exp = Clock.Now.AddMinutes(expired ? -5 : 15).ToUnixTimeSeconds() }));
-            var body = header + "." + payload; return body + "." + Base64UrlEncoder.Encode(key.SignData(Encoding.ASCII.GetBytes(body), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
-        }
-        public Task<HttpResponseMessage> Get(string path, string token)
-        { var request = new HttpRequestMessage(HttpMethod.Get, path); if (token != "") request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token); return Client.SendAsync(request); }
-        public async ValueTask DisposeAsync() { Client.Dispose(); await app.StopAsync(); await app.DisposeAsync(); key.Dispose(); }
     }
 }

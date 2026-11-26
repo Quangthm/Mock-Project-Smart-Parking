@@ -256,3 +256,26 @@ WHERE purpose = 'ADMISSION' AND state IN ('PREPARING', 'HELD');
 ```
 
 Facility's structure guard considers `HELD` tokens even after their deadline. Once old writers are stopped, the owner can resolve only a matched, abandoned development token after confirming there is no related committed booking or pending financial/confirmation obligation. Releasing such a Facility row removes its structure fence. Preserve any token tied to a committed or unresolved effect until its owner reconciles that effect. A fresh, separately initialized development database has no historical token fence and starts without the original database's history. B4 applies no migration or data reset. The Operations terms table, FK and accepted booking evidence stay in the initializer for existing rows and fixtures.
+
+## Checkpoint D coordinated cutover and recovery
+
+1. Quiesce new admissions for the cutover. With a read-only Operations connection, run the two queries below. Record any IDs, deadlines and state for the deployment owner before retiring the old workers. A new binary cannot discover pre-D obligations by scanning.
+2. Prepare a schema matching the original Operations initializer, including its twelve Quartz 4.5.0 tables, keys and indexes plus the revised reservation request columns. Existing pre-D tables retain obsolete NOT NULL constraints when merely rerunning CREATE IF NOT EXISTS. The initializer provisions a compatible database; an existing database needs an owner-reviewed schema deployment. Never run the destructive upstream Quartz sample.
+3. Stage D1–D4 together. Configure the existing restricted Operations broker credentials/vhost, `ReservationAdmission:Enabled`, Saga consumers, reviewed settlement integration and `Messaging:OutboxDeliveryEnabled` for full ingress. The scheduler and registration consumer run with admission enabled even on a host where Saga consumers are off. Set `SMARTPARK_RESERVATION_ADMISSION_TIMEOUT_SECONDS` only for a whole-second override (1–90). Blank selects the application default of 15. All Operations instances sharing a database must run the same scheduler version, scheduler name and synchronized clocks.
+4. Verify Operations liveness and owner reachability, then check Quartz startup logs, a fresh, advancing cluster check-in under `OperationsReservationDeadlines`, the durable `operations-reservation-deadlines-v1` queue with an active consumer, and working inbox/outbox delivery on the intended vhost. HTTP 200 alone cannot establish deadline readiness. A tiny successful registration during isolated acceptance should produce a matching job and trigger. Verify effective D/H from the business row.
+5. After release, monitor MassTransit endpoint errors, outbox backlog, and Quartz log event 1057 / meter `quartz.trigger.retries_exhausted`. Technical job retries run after 1, 5, and 15 seconds. An exhausted one-shot can have zero triggers. The durable job detail retains its kind, subject ID and original instant. A broker outage delays unregistered obligations and Driver notifications. A registered overdue job uses database time and a guarded local decision. Keep the previous binary/schema pair available until acceptance. Review open obligations before disabling deadline processing or changing versions.
+
+```sql
+SELECT id, state, overall_deadline FROM reservation_requests
+WHERE state IN ('CHECKING','EVALUATING','PENDING_AUTHORIZATION','PREPARING');
+SELECT id, hold_expires_at FROM reservations
+WHERE status='PENDING_PAYMENT' AND deposit_amount>0 AND hold_expires_at IS NOT NULL;
+SELECT sched_name, instance_name, last_checkin_time, checkin_interval FROM qrtz_scheduler_state;
+SELECT j.job_name, t.trigger_name, t.trigger_state, t.next_fire_time FROM qrtz_job_details j
+LEFT JOIN qrtz_triggers t USING (sched_name, job_group, job_name)
+WHERE j.sched_name='OperationsReservationDeadlines' AND j.job_group='reservation-deadlines';
+```
+
+**Execution redrive.** An authorized Operations operator correlates the exact job name in the failure log with the request/reservation and stored D/H. Confirm exhaustion, repair the cause, and verify a healthy live scheduler. In the deployed Operations environment run `dotnet SmartParking.OperationService.API.dll redrive-reservation-deadline "<exact job name>"`. The command uses existing service configuration, checks the retained job type and absence of a trigger, and queues one immediate firing for the running cluster. Verify the business state, outbox effects and job cleanup. A crash after the business commit can leave a job needing only guarded cleanup.
+
+**Registration redrive.** Inspect `operations-reservation-deadlines-v1_error` using existing authorized RabbitMQ management access on the same vhost. Identify the failed MassTransit message by MessageId, subject and expected time and fix the reported error. With management **Get messages / requeue**, retain the exact envelope, AMQP properties, content type, headers, message ID and correlation. Republish that one envelope as a persistent message to the default exchange with routing key `operations-reservation-deadlines-v1`. Confirm it was routed and verify the matching Quartz obligation or terminal business state. Preserve the error copy until verification. Do not purge the queue or replay unrelated messages. An already-exhausted Quartz job requires the execution redrive above.

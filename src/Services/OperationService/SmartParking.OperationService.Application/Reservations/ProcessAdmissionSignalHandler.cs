@@ -7,7 +7,7 @@ using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository requests, IUnitOfWork work,
-    IAccountAccessRequester accounts, TimeProvider clock, IAdmissionMessages? messages = null)
+    IAccountAccessRequester accounts, IReservationBookingRepository bookings, IAdmissionMessages? messages = null)
     : IRequestHandler<ProcessAdmissionSignal, string>
 {
     public async Task<string> Handle(ProcessAdmissionSignal command, CancellationToken ct)
@@ -16,15 +16,10 @@ public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository 
         var request = await requests.LockAsync(command.RequestId, ct);
         if (request?.AccountCheck is null || request.State is not ("CHECKING" or "EVALUATING")) return "TERMINAL";
         if (messages is null) throw new InvalidOperationException("Reservation Saga messaging is disabled.");
-        var now = clock.GetUtcNow();
+        var now = await bookings.DatabaseNowAsync(ct);
         if (now >= request.OverallDeadline)
-            request.FailQuoteAdmission("ADMISSION_TIMED_OUT");
-        else if (request.State == "EVALUATING")
-        {
-            if (command.Signal is EvaluateQuoteBooking)
-                await messages.RequestEvaluationAsync(request.Id, ct);
-        }
-        else
+            request.ExpireAdmission();
+        else if (request.State == "CHECKING")
         {
             var intent = JsonSerializer.Deserialize<QuoteReservationIntent>(request.IntentJson)
                 ?? throw new InvalidOperationException("Missing persisted admission intent.");
@@ -41,14 +36,11 @@ public sealed class ProcessAdmissionSignalHandler(IReservationRequestRepository 
                     await messages.CheckPlateAsync(plate, ct);
                     await messages.CheckSlotAsync(slot, ct);
                     break;
-                case CheckAdmissionDeadline:
-                    if (request.Advance(now)) await accounts.RequestAsync(AdmissionMessage.For(request), ct);
-                    break;
                 case AccountAccessDecisionV1 decision when decision.WorkflowId == request.Id &&
                     decision.UserId == request.UserId && decision.AccountId == request.AccountId &&
                     decision.Role == "driver" && decision.Operation == request.Operation:
-                    if (request.AccountCheck == "PENDING" && request.AwaitingReply && now < request.AttemptDeadline &&
-                        decision.AttemptId == request.AttemptId && decision.AttemptNumber == request.AttemptNumber &&
+                    if (request.AccountCheck == "PENDING" &&
+                        decision.AttemptId == request.AttemptId && decision.AttemptNumber == 1 &&
                         decision.Code != (decision.Allowed ? "ALLOWED" : "CURRENT_ACCESS_DENIED"))
                         request.FailQuoteAdmission("ACCOUNT_RESPONSE_INVALID");
                     else request.AcceptDecision(decision.AttemptId, decision.AttemptNumber, decision.DecisionId,

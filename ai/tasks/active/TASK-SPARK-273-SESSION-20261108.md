@@ -1139,3 +1139,108 @@ Exact unstaged C paths grouped by review unit (123 modified, 41 added and 47 del
 - M `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-09-reservation-frontend-handoff.md`
 - M `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-18-SPARK-273-reservation-owner-handoffs.md`
 - M `docs/05-project-management/handoffs/SPARK-273 — Reservation/2026-11-19-SPARK-273-payment-authority.md`
+
+
+## Checkpoint D implementation and verification, 26 November 2026
+
+The user approved the revised D1-D5 inventory, Option C, bounded native retries, retained exhausted jobs, the expiry-only structure exception and isolated durability verification. The branch and tracked upstream both resolved to `6edc3ea35514787901529457f17d8128d8414ec5`. All D changes are local and unstaged. Manual acceptance and deployment are pending.
+
+| Slice | Implementation and evidence |
+|---|---|
+| D1 | Three existing Saga branches send one logical command each. Account retains AttemptId, wire attempt 1 and D as its reply cutoff. Database admission time plus the configured validity produces one D. The joined evaluation and local deadline handler enforce distinct outcomes. Structure busy ends admission on the existing progress path. |
+| D2 | Quartz 4.5.0 restored for .NET 10. The registration consumer persists the one-shot and durable job before acknowledgment. Registration uses the scoped Operations outbox. A Quartz DI scope runs the local MediatR handler. It commits business state and outgoing effects before job cleanup. The native 1/5/15-second retry sequence, retained job and exact-key redrive passed with the real Quartz library and an in-memory scheduler store. A separate clock-skew regression verified a future wake when the scheduler clock already passed the original deadline. PostgreSQL/RabbitMQ crash recovery remains unverified. |
+| D3 | Exact-H handling checks original subject, status, deposit, expected timestamp and database time. ReleaseExpiredHold changes only Status and ActiveClaimSlotId. The per-entry persistence exception retains the site/plate guards and checks database time independently. EF version increment follows validation. Database-backed early, late, duplicate, settlement, cancellation and mixed-mutation tests are present; execution requires an isolated initialized Operations database. |
+| D4 | Both polling workers, registrations, worker-only commands/handlers, due-work queries, backoff state, constraints and due index retired. FindForWorkerAsync still serves evaluation and Account result routing. Related static source search found no remaining worker/due-work path. |
+| D5 | Collection folder 09 and the existing guide and deployment checklist cover negative admission, SignalR expiry, order state, capacity release, readiness and recovery. The environment example already provides the Postman values. Customer acceptance belongs to the user. |
+
+### Verification ledger
+
+* Prior accepted evidence: A-C's 635 tests and the user's C Postman check. No suite-wide rerun.
+* Operations: `dotnet test tests/Services/SmartParking.OperationService.Tests --no-restore --filter "FullyQualifiedName~ReservationQuartz|FullyQualifiedName~ReservationAdmissionBranchTests|FullyQualifiedName~ReservationSagaTransportTests|FullyQualifiedName~QuoteBookingDatabaseTests"` produced 14 passes, 30 fixture skips and zero failures. Skips refer to this run's discovery. Later additions to those opt-in fixtures compiled.
+* New skew case only: `dotnet test tests/Services/SmartParking.OperationService.Tests --no-restore --filter "FullyQualifiedName~SchedulerClockAlreadyPastDeadlineUsesRemainingDatabaseInterval"` produced one additional pass. Earlier verified tests were carried forward.
+* Facility test project: `dotnet test tests/Services/SmartParking.FacilityService.Tests --no-restore --filter "FullyQualifiedName~ReservationAdmissionRuleTests|FullyQualifiedName~ReservationCreationLifecycleTests"` produced six passes. Its structure harness still uses the existing UnitOfWork constructor.
+* User test project: the normal filtered build encountered unrelated Checkpoint C contract drift in `StructureHttpContractTests.NoopReservationFacts` (EnsureOrderAsync and RequestDispositionAsync). The affected own-read store stub was updated. A temporary copy of the User test project definition compiled only the own-read fixtures and AccountCurrentWorkflowTests against the repository's actual project references. `dotnet test <temp>/spark273-d-user-fixture/FocusedUserTests.csproj` produced eight passes. No UserService production change or repository build exclusion.
+* Final builds: `dotnet build tests/Services/SmartParking.OperationService.Tests --no-restore` (including the Operations API) and `dotnet build <temp>/spark273-d-user-fixture/FocusedUserTests.csproj --no-restore` both succeeded with zero errors, 16 and 20 warnings respectively. Warnings included NuGet advisory lookup failures and existing AutoMapper, MessagePack and SignalR dependency advisories. No unrelated packages were upgraded.
+* Static verification compared the twelve Quartz table definitions and eight mandatory indexes with upstream v4.5.0, confirmed the absence of destructive DDL in the Quartz section, parsed all four new Postman scripts and compared the rest of the collection to HEAD. The scoped Git whitespace check passed.
+* The running deployment initially had zero CHECKING/EVALUATING requests and zero positive unpaid holds. Only the development Operations database and RabbitMQ vhost were available. The isolated transport/quote fixture settings were absent. At the final readiness check the Operations DB and broker containers were stopped. Current live readiness and historical unfinished rows require the checklist queries at cutover. No schema, broker state, deployment, job or customer data was changed by this task.
+* Real database transaction isolation, actual interrupted registration/firing, process/cluster failover, broker-down local commit, post-restart redelivery and a database interruption around firing remain unverified. The isolated durability test models the residual-job window; it does not perform a process kill. The exhausted-job redrive and error-queue procedure were not run on development data.
+
+### Operational and manual handoff
+
+Use the existing SPARK-273 deployment checklist, manual test guide and Reservation Flow Postman collection. Before coordinated activation, apply an owner-reviewed compatible Operations schema, verify cluster check-in, registration queue and outbox delivery, and inspect outstanding obligations with admission quiesced. The checklist includes exact-key CLI invocation and error-envelope replay. Ordinary post-H lifecycle progress can lag effective capacity. Exhausted execution needs operator recovery. The CLI lives in the existing Operations API executable and opens no new HTTP endpoint. The extracted User test helpers and HTTP dispatch fixture follow the repository's one-type-per-file rule.
+
+### Exact proposed staging inventory for Checkpoint D
+
+
+#### Added (14)
+
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/CheckAdmissionDeadlineHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RegisterReservationDeadline.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationAdmissionOptions.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationDeadlineKind.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationDeadlineResult.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/RegisterReservationDeadlineConsumer.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationDeadlineJob.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationQuartzConfiguration.cs`
+- `tests/Services/SmartParking.OperationService.Tests/AdmissionHttpDispatch.cs`
+- `tests/Services/SmartParking.OperationService.Tests/ReservationQuartzDeadlineTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/ReservationQuartzDurabilityTests.cs`
+- `tests/Services/SmartParking.UserService.Tests/OwnReservationReadClock.cs`
+- `tests/Services/SmartParking.UserService.Tests/OwnReservationReadFixture.cs`
+- `tests/Services/SmartParking.UserService.Tests/OwnReservationReadStore.cs`
+
+#### Modified (40)
+
+- `.env.example`
+- `ai/tasks/active/TASK-SPARK-273-SESSION-20261108.md`
+- `compose.app.yml`
+- `docs/02-architecture/architecture-decisions/authorization-freshness-and-current-access.md`
+- `docs/02-architecture/architecture-decisions/reservation-workflow-target.md`
+- `docs/03-design/api/reservation-first-slice-api-design.md`
+- `docs/04-testing/postman/SPARK-273-Reservation-Flow.postman_collection.json`
+- `docs/04-testing/postman/SPARK-273-manual-test-guide.md`
+- `docs/04-testing/reports/SPARK-273-deployment-checklist.md`
+- `scripts/database/microservices/03b-reservation-operations-service-db.sql`
+- `scripts/database/seeds/demo/06-reservation-history.sql`
+- `scripts/run-schema-service.ps1`
+- `src/Services/OperationService/SmartParking.OperationService.API/Program.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdmissionMessage.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdmitQuoteReservationHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/CheckAdmissionDeadline.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/CommitQuoteHoldHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ExpireReservationHoldCommand.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ExpireReservationHoldHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IAdmissionMessages.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IQuoteAdmissionStarter.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationBookingRepository.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/IReservationRequestRepository.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ProcessAdmissionSignalHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Domain/Reservations/ReservationRequest.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/AdmissionMessages.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationAdmissionMachine.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationMessaging.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/UnavailableQuoteAdmissionStarter.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/SmartParking.OperationService.Infrastructure.csproj`
+- `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationRepository.Bookings.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/ReservationRequestRepository.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/UnitOfWork.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/ReservationAdmissionRuleTests.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/ReservationCreationLifecycleTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.CapacityConcurrency.cs`
+- `tests/Services/SmartParking.OperationService.Tests/QuoteBookingDatabaseTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/ReservationAdmissionBranchTests.cs`
+- `tests/Services/SmartParking.OperationService.Tests/ReservationSagaTransportTests.cs`
+- `tests/Services/SmartParking.UserService.Tests/OwnReservationReadHttpTests.cs`
+
+#### Deleted (6)
+
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdvanceReservationAuthorizationCommand.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/AdvanceReservationAuthorizationHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/RecordReservationWorkFailureCommand.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationWorkFailureHandler.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationAuthorizationWorker.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationHoldExpiryWorker.cs`
+
+Excluded user files: `ai/AGENTS.md`, `ai/context/user-coding-instructions.md`, `ai/tasks/active/TASK-SPARK-243-SESSION-20261107.md`, `scripts/seed-site-car-tariff.ps1`.
+
+Suggested commit: `feat(operations): schedule reservation deadlines with Quartz (SPARK-273)`.

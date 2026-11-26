@@ -180,6 +180,7 @@ if ($Service -in @('User', 'Parking', 'Reservation')) {
     if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerUser)) { $env:ReservationAdmission__BrokerUser = ' ' }
     if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerPassword)) { $env:ReservationAdmission__BrokerPassword = ' ' }
     if ($Service -eq 'Reservation') {
+        $env:ReservationAdmission__OverallTimeoutSeconds = $env:SMARTPARK_RESERVATION_ADMISSION_TIMEOUT_SECONDS
         $env:SMARTPARK_RABBITMQ_HOST = '127.0.0.1'
         $env:JwtValidation__AllowInsecureTransport = if ($env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS) { $env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS } else { 'false' }
         $env:Cors__AllowedOrigins = $env:SMARTPARK_OPERATION_CORS_ORIGINS

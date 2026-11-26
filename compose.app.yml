@@ -137,6 +137,7 @@ services:
       Messaging__AuditEnabled: ${SMARTPARK_OPERATION_AUDIT_ENABLED:-false}
       JwtValidation__AllowInsecureTransport: ${SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS:-false}
       ReservationAdmission__Enabled: ${SMARTPARK_RESERVATION_ADMISSION_ENABLED:-false}
+      ReservationAdmission__OverallTimeoutSeconds: ${SMARTPARK_RESERVATION_ADMISSION_TIMEOUT_SECONDS:-}
       ReservationAdmission__SagaConsumersEnabled: ${SMARTPARK_RESERVATION_SAGA_ENABLED:-false}
       ReservationAdmission__BrokerUser: ${SMARTPARK_RESERVATION_OPERATION_BROKER_USER:-}
       ReservationAdmission__BrokerPassword: ${SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD:-}

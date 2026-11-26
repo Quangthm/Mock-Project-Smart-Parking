@@ -23,14 +23,26 @@ public static class ReservationMessaging
         services.TryAddScoped<IReservationQuoteOwner, UnavailableReservationQuoteOwner>();
         var admissionEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var sagaEnabled = admissionEnabled && configuration.GetValue<bool>("ReservationAdmission:SagaConsumersEnabled");
+        services.AddOptions<ReservationAdmissionOptions>()
+            .Configure(options =>
+            {
+                var value = configuration["ReservationAdmission:OverallTimeoutSeconds"];
+                if (!string.IsNullOrEmpty(value)) options.OverallTimeoutSeconds = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+            })
+            .Validate(o => o.OverallTimeoutSeconds is >= 1 and <= 90, "Admission timeout must be 1 through 90 seconds.")
+            .ValidateOnStart();
+        if (admissionEnabled)
+        {
+            services.AddReservationScheduler(configuration);
+            services.AddScoped<AdmissionMessages>();
+            services.AddScoped<IAdmissionMessages>(provider => provider.GetRequiredService<AdmissionMessages>());
+        }
         if (sagaEnabled)
         {
             if (string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerUser"]) ||
                 string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerPassword"]) ||
                 !configuration.GetValue<bool>("Messaging:OutboxDeliveryEnabled"))
                 throw new InvalidOperationException("Saga endpoints require restricted credentials and durable outbox delivery.");
-            services.AddScoped<AdmissionMessages>();
-            services.AddScoped<IAdmissionMessages>(provider => provider.GetRequiredService<AdmissionMessages>());
             if (configuration.GetValue<bool>("ReservationIntegration:Enabled") &&
                 configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
                 services.TryAddScoped<IQuoteAdmissionStarter>(provider => provider.GetRequiredService<AdmissionMessages>());
@@ -80,6 +92,7 @@ public static class ReservationMessaging
             }
             if (admissionEnabled)
             {
+                registration.AddConsumer<RegisterReservationDeadlineConsumer>();
                 registration.AddConsumer<ReservationProgressConsumer>();
                 registration.AddConsumer<ReservationZeroReceiptIssuedConsumer>();
                 registration.AddConsumer<ReservationCheckoutChangedConsumer>();
@@ -132,6 +145,13 @@ public static class ReservationMessaging
                 bus.Message<ReservationHoldChangedV1>(message => message.SetEntityName("smartpark.operations.reservation-hold-changed.v1"));
                 if (admissionEnabled)
                 {
+                    bus.ReceiveEndpoint(AdmissionMessages.DeadlineQueue, endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseMessageRetry(r => r.Intervals(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
+                        endpoint.ConfigureConsumer<RegisterReservationDeadlineConsumer>(context);
+                    });
                     bus.ReceiveEndpoint(ReservationProgressPublisher.Queue, endpoint =>
                     {
                         endpoint.ConfigureConsumeTopology = false;
@@ -210,11 +230,9 @@ public static class ReservationMessaging
             });
         });
         services.Configure<MassTransitHostOptions>(options => options.WaitUntilStarted = false);
-        if (sagaEnabled) services.AddHostedService<ReservationAuthorizationWorker>();
         if (admissionEnabled)
         {
             services.AddScoped<IReservationProgressPublisher, ReservationProgressPublisher>();
-            services.AddHostedService<ReservationHoldExpiryWorker>();
         }
         return services;
     }

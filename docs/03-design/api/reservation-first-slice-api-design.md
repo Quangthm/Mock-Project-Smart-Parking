@@ -205,3 +205,7 @@ Assistant maps `reservationId/state/start/end` into its existing card fields. Ca
 ### Review and rollout
 
 Deploy Operations' additive filter/vehicle extension together with the Assistant adapter. Keep admission and JWT trust requirements; do not enable legacy endpoints or alter production configuration to satisfy tests. Tests exercise the production controller/JWT/actor/handler path with synthetic external dependencies, plus consumer pagination, protected cursor, malformed payload, detail and observation-time regressions. Live PostgreSQL/broker acceptance is separate from these offline CI checks.
+
+## Reviewed admission timing (SPARK-273 D)
+
+A new QuoteId-only admission captures one absolute Operations database deadline (default 15 seconds). One logical request per Account, plate and Facility branch flows through the existing Saga. Missing evidence at D gives FAILED_DEPENDENCY / ADMISSION_TIMED_OUT. Joined work reaching D or reservation start gives REJECTED / BOOKING_PREPARATION_EXPIRED. A stale authoritative quote while both cutoffs remain open gives QUOTE_STALE. A timely blocked site gives REJECTED / STRUCTURE_BUSY, including on same-key replay. Retry a fresh attempt through normal quote review and idempotency rules. The positive unpaid hold has its independent policy-derived H. The Driver receives committed lifecycle changes through the existing progress subscription.

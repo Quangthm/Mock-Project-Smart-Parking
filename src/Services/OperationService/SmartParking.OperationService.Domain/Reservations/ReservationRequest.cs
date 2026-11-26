@@ -16,13 +16,8 @@ public sealed class ReservationRequest
     public DateTimeOffset AdmittedAt { get; private set; }
     public DateTimeOffset OverallDeadline { get; private set; }
     public Guid AttemptId { get; private set; }
-    public int AttemptNumber { get; private set; }
-    public DateTimeOffset AttemptStartedAt { get; private set; }
-    public DateTimeOffset AttemptDeadline { get; private set; }
-    public DateTimeOffset NextActionAt { get; private set; }
     public Guid? DecisionId { get; private set; }
     public DateTimeOffset? DecidedAt { get; private set; }
-    public bool AwaitingReply { get; private set; }
     public Guid? ReservationId { get; private set; }
     public long ProgressVersion { get; private set; } = 1;
     public void AdvanceProgressVersion() => ProgressVersion = checked(ProgressVersion + 1);
@@ -37,7 +32,7 @@ public sealed class ReservationRequest
     public string? VehiclePlate { get; private set; }
 
     public static ReservationRequest AdmitQuote(Guid userId, Guid accountId, Guid key, string intentJson,
-        string fingerprint, DateTimeOffset now)
+        string fingerprint, DateTimeOffset now, TimeSpan validity)
     {
         if (userId == Guid.Empty || accountId == Guid.Empty || key == Guid.Empty ||
             string.IsNullOrWhiteSpace(intentJson) || string.IsNullOrWhiteSpace(fingerprint))
@@ -46,10 +41,10 @@ public sealed class ReservationRequest
         {
             Id = Guid.NewGuid(), UserId = userId, AccountId = accountId, IdempotencyKey = key,
             IntentJson = intentJson, Fingerprint = fingerprint, AdmittedAt = now,
-            OverallDeadline = now.AddSeconds(90),
+            OverallDeadline = now.Add(validity),
             AccountCheck = "PENDING", PlateCheck = "PENDING", SlotCheck = "PENDING"
         };
-        request.StartAttempt(now);
+        request.AttemptId = Guid.NewGuid();
         return request;
     }
 
@@ -105,12 +100,6 @@ public sealed class ReservationRequest
         Code = null;
     }
 
-    public void Defer(DateTimeOffset nextActionAt, string code)
-    {
-        NextActionAt = nextActionAt;
-        Code = code;
-    }
-
     public void Reject(string code)
     {
         State = "REJECTED";
@@ -125,60 +114,25 @@ public sealed class ReservationRequest
         if (SlotCheck == "PENDING") SlotCheck = "SKIPPED";
     }
 
-    /// <returns>True only when one new authorization request must be recorded in the outbox.</returns>
-    public bool Advance(DateTimeOffset now)
+    public void ExpireAdmission()
     {
-        if (State == "CHECKING" && now >= OverallDeadline)
-        {
-            FailDependency("ADMISSION_TIMED_OUT");
-            return false;
-        }
-        if (State != "CHECKING" || AccountCheck != "PENDING" || now < NextActionAt) return false;
-        if (AwaitingReply)
-        {
-            AwaitingReply = false; // fence the timed-out attempt even before the next attempt starts
-            if (AttemptNumber == 3)
-            {
-                AccountCheck = "FAILED_DEPENDENCY";
-                FailDependency("ACCOUNT_TIMED_OUT");
-            }
-            else NextActionAt = now.AddSeconds(AttemptNumber == 1 ? 10 : 30);
-            return false;
-        }
-        StartAttempt(now);
-        return true;
+        if (State == "CHECKING") FailQuoteAdmission("ADMISSION_TIMED_OUT");
+        else if (State == "EVALUATING") Reject("BOOKING_PREPARATION_EXPIRED");
     }
 
-    // The approved reservation exception replays one workflow decision in a NEW delivery envelope.
-    // Original DecidedAt may precede this attempt; envelope ID and receipt deadline still fence delivery.
     public bool AcceptDecision(Guid attemptId, int attemptNumber, Guid decisionId,
         DateTimeOffset decidedAt, bool allowed, DateTimeOffset receivedAt)
     {
-        if (State != "CHECKING" || AccountCheck != "PENDING" || !AwaitingReply || attemptId != AttemptId ||
-            attemptNumber != AttemptNumber || decisionId == Guid.Empty || decidedAt < AdmittedAt ||
-            decidedAt > receivedAt || decidedAt >= AttemptDeadline || receivedAt >= AttemptDeadline ||
+        if (State != "CHECKING" || AccountCheck != "PENDING" || attemptId != AttemptId ||
+            attemptNumber != 1 || decisionId == Guid.Empty || decidedAt < AdmittedAt ||
+            decidedAt > receivedAt ||
             receivedAt >= OverallDeadline) return false;
         DecisionId = decisionId;
         DecidedAt = decidedAt;
-        AwaitingReply = false;
         AccountCheck = allowed ? "SUCCEEDED" : "REJECTED";
-        if (allowed)
-        {
-            NextActionAt = OverallDeadline;
-            CheckJoin();
-        }
+        if (allowed) CheckJoin();
         else Reject("CURRENT_ACCESS_DENIED");
         return true;
-    }
-
-    private void StartAttempt(DateTimeOffset now)
-    {
-        AttemptId = Guid.NewGuid();
-        AttemptNumber++;
-        AttemptStartedAt = now;
-        AttemptDeadline = now.AddSeconds(5) < OverallDeadline ? now.AddSeconds(5) : OverallDeadline;
-        NextActionAt = AttemptDeadline;
-        AwaitingReply = true;
     }
 
     private void FailDependency(string code)
@@ -186,6 +140,5 @@ public sealed class ReservationRequest
         SkipPendingChecks();
         State = "FAILED_DEPENDENCY";
         Code = code;
-        AwaitingReply = false;
     }
 }

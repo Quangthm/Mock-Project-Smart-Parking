@@ -908,6 +908,117 @@
           ]
         }
       ]
+    },
+    {
+      "name": "09 - Checkpoint D deadline outcomes",
+      "item": [
+        {
+          "name": "09.1 Missing owner at D",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}/progress",
+            "description": "Submit a fresh reviewed request with one isolated owner consumer paused. Read once after the terminal progress notification."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected scoped deadline outcome', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.requestId).to.equal(pm.environment.get('requestId'));",
+                  "    pm.expect(data.admissionState).to.equal('FAILED_DEPENDENCY');",
+                  "    pm.expect(data.outcomeCode).to.equal('ADMISSION_TIMED_OUT');",
+                  "    pm.expect(data.reservationId).to.equal(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09.2 Structure edit blocks admission",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}/progress",
+            "description": "Use a reviewed quote and a controlled edit on its site. Submit while the edit is active."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected scoped deadline outcome', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.requestId).to.equal(pm.environment.get('requestId'));",
+                  "    pm.expect(data.admissionState).to.equal('REJECTED');",
+                  "    pm.expect(data.outcomeCode).to.equal('STRUCTURE_BUSY');",
+                  "    pm.expect(data.reservationId).to.equal(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09.3 Unpaid hold expired",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/reservation-requests/{{requestId}}/progress",
+            "description": "Leave the eligible positive booking unpaid. Subscribe before H and read once after the EXPIRED notification."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected scoped deadline outcome', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.requestId).to.equal(pm.environment.get('requestId'));",
+                  "    pm.expect(data.reservationId).to.equal(pm.environment.get('reservationId'));",
+                  "    pm.expect(data.reservationState).to.equal('EXPIRED');",
+                  "    pm.expect(Date.parse(data.holdExpiresAt)).to.equal(Date.parse(pm.environment.get('holdExpiresAt')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09.4 Unpaid checkout after H",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{paymentBaseUrl}}/api/v1/payments/reservations/{{reservationId}}/checkout-state",
+            "description": "Use the same unpaid order previously verified as PAYABLE."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Expected scoped deadline outcome', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.reservationId).to.equal(pm.environment.get('reservationId'));",
+                  "    pm.expect(data.state).to.equal('CLOSED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
