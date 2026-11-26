@@ -27,7 +27,7 @@ public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRe
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Request {RequestName} failed with error", requestName);
+            _logger.LogWarning("Request {RequestName} ended with {ExceptionType}.", requestName, ex.GetType().FullName);
             throw;
         }
     }

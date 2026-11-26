@@ -117,18 +117,19 @@ public class NotificationDispatcher : INotificationDispatcher
                 return NotificationDeliveryResult.Failed(notification.Id, notification.Attempts, error);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
-                ex,
-                "Exception thrown during adapter delivery for notification {NotificationId}.",
-                notification.Id);
+                "Adapter delivery failed for notification {NotificationId}: {ExceptionType}.",
+                notification.Id,
+                ex.GetType().FullName);
 
-            notification.RecordFailure(ex.Message);
+            const string sanitizedError = "Delivery provider failed to send the notification.";
+            notification.RecordFailure(sanitizedError);
             await _notificationRepository.UpdateAsync(notification, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return NotificationDeliveryResult.Failed(notification.Id, notification.Attempts, ex.Message);
+            return NotificationDeliveryResult.Failed(notification.Id, notification.Attempts, sanitizedError);
         }
     }
 
