@@ -200,6 +200,7 @@ services:
       RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       RabbitMQ__Username: ${SMARTPARK_RABBITMQ_USER:-smartpark}
       RabbitMQ__Password: ${SMARTPARK_RABBITMQ_PASSWORD}
+      Cors__AllowedOrigins: ${SMARTPARK_NOTIFICATION_CORS_ORIGINS:-http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443}
     ports:
       - "127.0.0.1:5068:8080"
     networks:
