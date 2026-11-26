@@ -41,7 +41,7 @@ public sealed class RequireReservationAvailabilityHandler(IReservationAvailabili
             !(a.ParkingSessionId is Guid id && sessions.ContainsKey(id))).Select(Interval).ToArray();
 
         var result = ReservationAvailability.Evaluate(Demand(proposed), claims, visits,
-            facts.Quotas, command.EvaluatedAt, projection, unresolved, ct);
+            facts.MaxReservationQuota, command.EvaluatedAt, projection, unresolved, ct);
         if (!result.Allowed)
             throw new ReservationGateException(result.Indeterminate ? 503 : 409,
                 result.Rejection!, "The requested capacity is unavailable or requires reconciliation.");

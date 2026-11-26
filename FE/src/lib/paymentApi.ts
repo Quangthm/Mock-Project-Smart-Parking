@@ -30,7 +30,7 @@ export interface PaymentStatusResponse {
   isAuthoritative: boolean
 }
 
-type Envelope<T> = { success: boolean; data?: T; errorCode?: string; traceId?: string }
+type Envelope<T> = { success: boolean; data?: T; code?: string; traceId?: string }
 
 const paymentErrorMessages = new Map<string, string>([
   ["ORDER_NOT_FOUND", "This payment order was not found. Check the order ID."],
@@ -98,8 +98,8 @@ async function paymentRequest<T>(path: string, init: RequestInit): Promise<T> {
   }
   const payload = await response.json().catch(() => null) as Envelope<T> | null
   if (!response.ok || !payload?.success || !payload.data) {
-    const code = typeof payload?.errorCode === "string" && /^[A-Z0-9_]{1,64}$/i.test(payload.errorCode)
-      ? payload.errorCode.toUpperCase() : ""
+    const code = typeof payload?.code === "string" && /^[A-Z0-9_]{1,64}$/i.test(payload.code)
+      ? payload.code.toUpperCase() : ""
     const trace = typeof payload?.traceId === "string" && /^[a-zA-Z0-9:_-]{1,96}$/.test(payload.traceId)
       ? payload.traceId : ""
     const message = paymentErrorMessages.get(code) ??

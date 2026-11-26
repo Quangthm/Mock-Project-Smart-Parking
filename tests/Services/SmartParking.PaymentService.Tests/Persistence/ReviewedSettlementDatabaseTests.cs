@@ -97,6 +97,7 @@ public sealed class ReviewedSettlementDatabaseTests
         Assert.All(results, result => Assert.True(result.Result.Success));
         var settlement = Assert.Single(results.SelectMany(result => result.Events));
         Assert.Equal(checkout.Id, settlement.EventId);
+        Assert.Equal("REVIEWED_RESERVATION_ORDER_PAID", settlement.SettlementClassification);
         Assert.Equal(checkout.Id, settlement.PaymentTransactionId);
         var stored = await db.PaymentOrders.AsNoTracking().Include(row => row.Transactions).SingleAsync(row => row.Id == order.Id);
         Assert.Equal(PaymentOrderStatus.PAID, stored.Status);

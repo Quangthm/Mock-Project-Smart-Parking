@@ -65,8 +65,10 @@ public sealed partial class QuoteBookingDatabaseTests
         builder.Services.AddDbContext<PaymentDbContext>(o => o.AddInterceptors(paymentFault));
         SmartParking.PaymentService.Infrastructure.InfrastructureDependencyInjection.AddInfrastructureServices(
             builder.Services, settings, x => x.AddPaymentOutbox(settings));
+        builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
+        builder.Services.AddProblemDetails();
         await using var host = builder.Build();
-        host.UseMiddleware<ExceptionHandlingMiddleware>();
+        host.UseExceptionHandler();
         host.UseAuthentication();
         host.UseAuthorization();
         host.MapControllers();

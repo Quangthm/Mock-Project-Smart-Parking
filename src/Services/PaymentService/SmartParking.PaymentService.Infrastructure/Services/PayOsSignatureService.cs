@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -61,5 +62,30 @@ public static class PayOsSignatureService
         };
 
         return CreateSignatureFromDictionary(dict, checksumKey);
+    }
+
+    public static string? CreatePaymentWebhookSignature(JsonElement data, string checksumKey)
+    {
+        if (data.ValueKind != JsonValueKind.Object || string.IsNullOrWhiteSpace(checksumKey))
+            return null;
+
+        var fields = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var field in data.EnumerateObject())
+        {
+            // Payment-request callbacks use integers for order codes and VND values.
+            // Reject shapes whose signature representation is outside this contract.
+            var value = field.Value.ValueKind switch
+            {
+                JsonValueKind.Null => "",
+                JsonValueKind.String => field.Value.GetString() is "null" or "undefined" ? "" : field.Value.GetString(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                JsonValueKind.Number when field.Value.TryGetInt64(out var number) => number.ToString(CultureInfo.InvariantCulture),
+                _ => null
+            };
+            if (value is null || !fields.TryAdd(field.Name, value)) return null;
+        }
+
+        return ComputeHmacSha256(string.Join("&", fields.Select(field => $"{field.Key}={field.Value}")), checksumKey);
     }
 }

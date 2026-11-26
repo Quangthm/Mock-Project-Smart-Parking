@@ -1,4 +1,5 @@
 using SmartParking.PaymentService.Application.Reservations;
+using System.Diagnostics;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -95,7 +96,7 @@ public class PaymentsController : ControllerBase
         if (request.DevelopmentTestAmount.HasValue && !_environment.IsDevelopment())
             return NotFound();
         if (request.DevelopmentTestAmount.HasValue && request.DevelopmentTestAmount.Value != 2000m)
-            return BadRequest(new { success = false, errorCode = "INVALID_TEST_AMOUNT", message = "The development PayOS test amount is fixed at 2,000 VND." });
+            return BadRequest(new { success = false, code = "INVALID_TEST_AMOUNT", message = "The development PayOS test amount is fixed at 2,000 VND." });
 
         var command = new PrepareParkingFeeOrderCommand(
             TenantId: request.TenantId,
@@ -223,6 +224,19 @@ public class PaymentsController : ControllerBase
     [ProducesResponseType(typeof(object), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> ProcessPayOsWebhook(CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
+        var traceId = Activity.Current?.Id ?? HttpContext.TraceIdentifier;
+        HttpContext.Items[typeof(ProcessPayOsWebhookCommand)] = started;
+        using var scope = _logger.BeginScope(new Dictionary<string, object?> { ["TraceId"] = traceId });
+        _logger.LogInformation("PayOS webhook arrived. TraceId {TraceId}", traceId);
+
+        IActionResult Complete(int status, string? code, object body)
+        {
+            _logger.LogInformation("PayOS webhook completed. TraceId {TraceId}, HTTP {StatusCode}, code {ErrorCode}, elapsed {ElapsedMs} ms",
+                traceId, status, code, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return StatusCode(status, body);
+        }
+
         using var reader = new StreamReader(Request.Body);
         var rawBody = await reader.ReadToEndAsync(cancellationToken);
 
@@ -230,14 +244,15 @@ public class PaymentsController : ControllerBase
         try
         {
             using var doc = JsonDocument.Parse(rawBody);
-            if (doc.RootElement.TryGetProperty("signature", out var sigProp))
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("signature", out var sigProp) && sigProp.ValueKind == JsonValueKind.String)
             {
                 signature = sigProp.GetString() ?? string.Empty;
             }
         }
         catch (JsonException)
         {
-            return BadRequest(new
+            return Complete(400, "INVALID_JSON_PAYLOAD", new
             {
                 success = false,
                 errorCode = "INVALID_JSON_PAYLOAD",
@@ -256,10 +271,10 @@ public class PaymentsController : ControllerBase
                 errorCode = result.ErrorCode ?? "WEBHOOK_PROCESSING_FAILED",
                 message = result.Message
             };
-            return result.Retryable ? StatusCode(StatusCodes.Status503ServiceUnavailable, failure) : BadRequest(failure);
+            return Complete(result.Retryable ? 503 : 400, failure.errorCode, failure);
         }
 
-        return Ok(new
+        return Complete(200, null, new
         {
             success = true,
             message = result.Message

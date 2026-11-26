@@ -136,7 +136,7 @@ test('checkout rejects a non-payOS redirect and the backend demo gateway', async
 
 test('checkout provides safe error references and keeps the same retry key for an unresolved payment', async () => {
   const f = fixture({}, { ok: false, status: 409, json: async () => ({
-    success: false, errorCode: 'PAYMENT_TRANSACTION_AMBIGUOUS', traceId: 'checkout:42', message: 'Internal provider details',
+    success: false, code: 'PAYMENT_TRANSACTION_AMBIGUOUS', traceId: 'checkout:42', message: 'Internal provider details',
   }) });
   for (let attempt = 0; attempt < 2; attempt++) {
     await assert.rejects(f.api.paymentApi.checkout(orderId), error => {

@@ -17,6 +17,7 @@ using SmartParking.OperationService.API.Middleware;
 using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
+using SmartParking.OperationService.Infrastructure.Messaging;
 using SmartParking.OperationService.Persistence;
 using SmartParking.OperationService.Persistence.Entities;
 
@@ -188,6 +189,24 @@ public sealed class ReservationSagaTransportTests : IReservationQuoteOwner
             await relay.CheckoutChangedAsync(Guid.NewGuid(), first, default);
             await relay.CheckoutChangedAsync(account, first, default);
             Assert.Equal(first, await subscription.ReadCheckoutHintAsync());
+            var payment = new PaymentSucceededV1
+            {
+                EventId = Guid.NewGuid(), ReferenceType = "RESERVATION", ReferenceId = first, AccountId = account,
+                PaymentOrderId = Guid.NewGuid(), PaymentTransactionId = Guid.NewGuid(), PaymentMethod = "PAYOS",
+                Currency = "VND", Amount = 30_000, OccurredAt = DateTimeOffset.UtcNow
+            };
+            await Send(bus, ReservationPaymentSucceededNotificationConsumer.Queue, payment, first);
+            await Send(bus, ReservationPaymentSucceededNotificationConsumer.Queue,
+                payment with { SettlementClassification = "UNKNOWN" }, first);
+            var classified = payment with
+            {
+                EventId = Guid.NewGuid(), SettlementClassification = PaymentSucceededV1.ReviewedReservationOrderPaid
+            };
+            await Send(bus, ReservationPaymentSucceededNotificationConsumer.Queue, classified, first);
+            var financialNotice = await subscription.ReadPaymentSucceededAsync();
+            Assert.Equal(new ReservationPaymentSucceededNotification(classified.EventId, first, payment.PaymentOrderId,
+                payment.PaymentTransactionId, 30_000, "VND", payment.OccurredAt), financialNotice);
+            Assert.Equal("SUCCEEDED", financialNotice.Outcome);
             using var reconnected = new ReservationTestSubscription();
             Assert.True(await reconnected.SubscribeAsync(http.BaseAddress!, account, first));
             Assert.Equal(first, (await Snapshot(http, first)).RequestId);

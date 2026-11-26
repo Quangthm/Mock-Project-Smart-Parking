@@ -38,6 +38,7 @@ public sealed class ReviewedPaymentSettlementTests
         Assert.True(checkout.HasVerifiedProviderCollection());
         Assert.Equal(occurredAt, checkout.PaidAt);
         var payment = Assert.IsType<PaymentSucceededV1>(Assert.Single(_events.PublishedEvents));
+        Assert.Equal("REVIEWED_RESERVATION_ORDER_PAID", payment.SettlementClassification);
         Assert.Equal((checkout.Id, checkout.Id, order.Id, occurredAt),
             (payment.EventId, payment.PaymentTransactionId, payment.PaymentOrderId, payment.OccurredAt));
         Assert.Equal(1, _work.SaveCount);

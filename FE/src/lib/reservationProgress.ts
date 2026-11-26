@@ -1,8 +1,19 @@
-import { paymentApi, type ReservationCheckoutState } from "./paymentApi"
+import { isPaymentOrderId, paymentApi, type ReservationCheckoutState } from "./paymentApi"
 import { HttpTransportType, HubConnectionBuilder, LogLevel } from "@microsoft/signalr"
 import { useEffect, useState } from "react"
 import { ensureAccessToken, getSessionGeneration } from "./authApi"
 import { reservationServer, reservationsApi, type ReservationProgress } from "./reservationsApi"
+
+type ReservationPaymentSucceeded = {
+  eventId: string
+  reservationId: string
+  paymentOrderId: string
+  paymentTransactionId: string
+  amount: number
+  currency: string
+  outcome: string
+  occurredAt: string
+}
 
 export function watchReservationProgress(
   requestId: string,
@@ -40,6 +51,28 @@ export function watchReservationProgress(
     return true
   }
   let checkoutRead = 0
+  let boundCheckout: ReservationCheckoutState | null = null
+  let committedEventId: string | null = null
+  let pendingPayment: ReservationPaymentSucceeded | null = null
+  function applyPayment(payment: ReservationPaymentSucceeded) {
+    if (!boundCheckout?.orderId) {
+      pendingPayment = payment
+      return
+    }
+    if (payment.paymentOrderId.toLowerCase() !== boundCheckout.orderId.toLowerCase() ||
+        committedEventId || boundCheckout.state === "PAID") return
+    committedEventId = payment.eventId
+    boundCheckout = { ...boundCheckout, state: "PAID" }
+    onCheckout?.(boundCheckout)
+  }
+  function receivePayment(payment: ReservationPaymentSucceeded) {
+    if (!onCheckout || !active() || !payment || payment.outcome !== "SUCCEEDED" ||
+        payment.reservationId !== requestId || !isPaymentOrderId(payment.eventId) ||
+        !isPaymentOrderId(payment.paymentOrderId) || !isPaymentOrderId(payment.paymentTransactionId) ||
+        payment.currency !== "VND" || !Number.isSafeInteger(payment.amount) || payment.amount <= 0 ||
+        typeof payment.occurredAt !== "string" || !Number.isFinite(Date.parse(payment.occurredAt))) return
+    applyPayment(payment)
+  }
   async function refreshCheckout() {
     if (!onCheckout || !active()) return
     const read = ++checkoutRead
@@ -48,10 +81,19 @@ export function watchReservationProgress(
       const value = await paymentApi.reservationCheckout(requestId)
       if (active() && read === checkoutRead && epoch === connectionEpoch) {
         if (value.reservationId && value.reservationId !== requestId) throw new Error("Mismatched order.")
+        if (boundCheckout?.state === "PAID") return
+        boundCheckout = value
+        if (pendingPayment && value.orderId) {
+          const payment = pendingPayment
+          pendingPayment = null
+          applyPayment(payment)
+          if (committedEventId) return
+        }
         onCheckout(value)
       }
     } catch {
-      if (active() && read === checkoutRead && epoch === connectionEpoch) onCheckout("UNAVAILABLE")
+      if (active() && read === checkoutRead && epoch === connectionEpoch && boundCheckout?.state !== "PAID")
+        onCheckout("UNAVAILABLE")
     }
   }
   const hint = (reservationId: string) => {
@@ -75,9 +117,13 @@ export function watchReservationProgress(
   }
   function disconnected() {
     ++epoch
-    if (active()) { onAvailable(false); onCheckout?.(null) }
+    if (active()) {
+      onAvailable(false)
+      if (boundCheckout?.state !== "PAID") onCheckout?.(null)
+    }
   }
   connection.on("ReservationCheckoutChanged", hint)
+  connection.on("ReservationPaymentSucceeded", receivePayment)
   connection.on("ReservationProgress", receive)
   connection.onreconnecting(disconnected)
   connection.onreconnected(recover)
@@ -86,6 +132,7 @@ export function watchReservationProgress(
   return () => {
     stopped = true
     connection.off("ReservationCheckoutChanged", hint)
+    connection.off("ReservationPaymentSucceeded", receivePayment)
     connection.off("ReservationProgress", receive)
     void connection.stop()
   }
@@ -101,12 +148,14 @@ export function useReservationProgress(requestId?: string | null, checkoutEnable
   const [connected, setConnected] = useState(false)
   useEffect(() => {
     setConnected(false)
-    setFinancial(null)
     if (!requestId) return
     const stop = watchReservationProgress(requestId, snapshot => {
       setState(prior => prior?.generation === generation && prior.requestId === requestId &&
         prior.snapshot.version >= snapshot.version ? prior : { generation, requestId, snapshot })
-    }, setConnected, checkoutEnabled ? value => setFinancial({ requestId, generation, value }) : undefined)
+    }, setConnected, checkoutEnabled ? value => setFinancial(prior =>
+      prior?.generation === generation && prior.requestId === requestId &&
+      prior.value !== "UNAVAILABLE" && prior.value?.state === "PAID"
+        ? prior : { requestId, generation, value }) : undefined)
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setAttempt(value => value + 1)
     }
@@ -117,7 +166,7 @@ export function useReservationProgress(requestId?: string | null, checkoutEnable
     }
   }, [requestId, generation, attempt, checkoutEnabled])
   return {
-    checkout: financial?.generation === generation && financial.requestId === requestId ? financial.value : null,
+    checkout: checkoutEnabled && financial?.generation === generation && financial.requestId === requestId ? financial.value : null,
     snapshot: state?.generation === generation && state.requestId === requestId ? state.snapshot : null,
     connected,
     reconnect: () => setAttempt(value => value + 1),

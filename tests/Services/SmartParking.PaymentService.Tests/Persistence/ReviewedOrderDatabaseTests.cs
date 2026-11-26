@@ -60,8 +60,10 @@ public sealed class ReviewedOrderDatabaseTests
         builder.Services.AddControllers().AddApplicationPart(typeof(ReviewedReservationQuotesController).Assembly);
         builder.Services.AddApplicationServices();
         builder.Services.AddPersistenceServices(builder.Configuration);
+        builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
+        builder.Services.AddProblemDetails();
         await using var host = builder.Build();
-        host.UseMiddleware<ExceptionHandlingMiddleware>();
+        host.UseExceptionHandler();
         host.UseAuthentication();
         host.UseAuthorization();
         host.MapControllers();
@@ -107,7 +109,7 @@ public sealed class ReviewedOrderDatabaseTests
         {
             using var missing = await http.GetAsync(invalidProof);
             Assert.False(missing.IsSuccessStatusCode);
-            Assert.Equal("QUOTE_NOT_FOUND", (await missing.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+            Assert.Equal("QUOTE_NOT_FOUND", (await missing.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         }
         Assert.Null(quote.TermsVersion);
         Assert.False(data.TryGetProperty("quoteVersion", out _));

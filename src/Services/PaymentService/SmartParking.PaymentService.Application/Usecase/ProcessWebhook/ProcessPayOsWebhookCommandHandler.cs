@@ -49,21 +49,33 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         var parseResult = await _gatewayPort.VerifyAndParseWebhookAsync(request.RawPayload, request.Signature, cancellationToken);
         if (!parseResult.IsValidSignature)
         {
-            _logger.LogWarning("Webhook signature verification failed for payOS callback.");
+            _logger.LogWarning("PayOS webhook rejected. Code {ErrorCode}, trace {TraceId}",
+                "INVALID_WEBHOOK_SIGNATURE", System.Diagnostics.Activity.Current?.Id);
             return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
+        _logger.LogInformation("PayOS webhook signature verified. OrderCode {OrderCode}, trace {TraceId}",
+            parseResult.OrderCode, System.Diagnostics.Activity.Current?.Id);
         var reviewedId = await _orderRepository.FindReviewedOrderIdAsync(parseResult.OrderCode.ToString(), cancellationToken);
         if (reviewedId is Guid orderId)
-            return await _unitOfWork.WithLocksAsync([orderId], () => RecordTransferAsync(orderId, parseResult, cancellationToken), cancellationToken);
+        {
+            _logger.LogInformation("PayOS webhook selected reviewed settlement. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}",
+                parseResult.OrderCode, orderId);
+            var result = await _unitOfWork.WithLocksAsync([orderId], () => RecordTransferAsync(orderId, parseResult, cancellationToken), cancellationToken);
+            if (result.RecordedTransactionId is { } transactionId)
+                _logger.LogInformation("Reviewed PayOS transaction committed. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}, settled order {SettledOrder}",
+                    parseResult.OrderCode, orderId, transactionId, result.SettledOrder);
+            return result;
+        }
 
+        _logger.LogInformation("PayOS webhook selected legacy settlement. OrderCode {OrderCode}", parseResult.OrderCode);
         var eventId = parseResult.BankReference ?? parseResult.GatewayTransactionId ?? parseResult.OrderCode.ToString();
 
         // 2. Check duplicate webhook idempotency
         var existingWebhook = await _webhookRepository.GetByProviderAndEventIdAsync("PAYOS", eventId, cancellationToken);
         if (existingWebhook != null && existingWebhook.ProcessingState == WebhookProcessingState.PROCESSED)
         {
-            _logger.LogInformation("PayOS webhook event {EventId} was already processed. Replaying success response.", eventId);
+            _logger.LogInformation("Legacy PayOS webhook replay. OrderCode {OrderCode}", parseResult.OrderCode);
             return new ProcessPayOsWebhookResult(true, "The webhook was already processed successfully (Idempotent replay).");
         }
 
@@ -84,18 +96,19 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         var order = await _orderRepository.GetByOrderCodeAsync(parseResult.OrderCode.ToString(), cancellationToken);
         if (order == null)
         {
-            _logger.LogWarning("PaymentOrder with OrderCode {OrderCode} not found for webhook event {EventId}.", parseResult.OrderCode, eventId);
+            _logger.LogWarning("Legacy PayOS webhook rejected. OrderCode {OrderCode}, code {ErrorCode}", parseResult.OrderCode, "ORDER_NOT_FOUND");
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             return new ProcessPayOsWebhookResult(false, $"No payment order was found for order code {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
         }
 
+        _logger.LogInformation("Legacy PayOS order matched. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}", order.OrderCode, order.Id);
         // 4. Validate amount
         if ((long)order.FinalAmount != parseResult.AmountVnd)
         {
-            _logger.LogError("Payment amount mismatch for OrderCode {OrderCode}: expected {Expected}, received {Received}.",
-                order.OrderCode, order.FinalAmount, parseResult.AmountVnd);
+            _logger.LogWarning("Legacy PayOS webhook rejected. OrderCode {OrderCode}, code {ErrorCode}, expected VND {ExpectedAmount}, received VND {TransferredAmount}",
+                order.OrderCode, "AMOUNT_MISMATCH", order.FinalAmount, parseResult.AmountVnd);
 
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -114,8 +127,8 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
 
             if (isAlreadySettled)
             {
-                _logger.LogInformation("GatewayTransactionId {GatewayTransactionId} for OrderCode {OrderCode} is already settled. Replaying success response without duplicate processing.",
-                    parseResult.GatewayTransactionId, order.OrderCode);
+                _logger.LogInformation("Legacy PayOS checkout already settled. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}",
+                    order.OrderCode, order.Id);
                 existingWebhook.MarkProcessed();
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return new ProcessPayOsWebhookResult(true, "Transaction already settled successfully (Idempotent replay).");
@@ -201,11 +214,13 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             };
 
             await _eventPublisher.PublishAsync(outboxEvent, cancellationToken);
+            _logger.LogInformation("Legacy PaymentSucceededV1 staged. EventId {EventId}, PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}",
+                outboxEvent.EventId, order.Id, tx.Id);
 
             // Atomic DB Commit: order + transaction + invoice + outboxMessage in one transaction
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Successfully processed payOS payment webhook for OrderCode {OrderCode}, TxId {TxId}, staged PaymentSucceededV1 into outbox.", order.OrderCode, tx.Id);
+            _logger.LogInformation("Legacy PayOS transaction saved. OrderCode {OrderCode}, PaymentTransactionId {PaymentTransactionId}", order.OrderCode, tx.Id);
         }
 
         return new ProcessPayOsWebhookResult(true, "Webhook processed successfully.");
@@ -213,14 +228,27 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
 
     private async Task<ProcessPayOsWebhookResult> RecordTransferAsync(Guid orderId, PaymentCallbackResult callback, CancellationToken ct)
     {
-        if (callback.VerifiedTransferTime is not { } transferTime || transferTime == default || callback.AmountVnd <= 0 ||
-            string.IsNullOrWhiteSpace(callback.BankReference) || callback.BankReference.Length > 255 ||
-            string.IsNullOrWhiteSpace(callback.GatewayTransactionId) || callback.GatewayTransactionId.Length > 255)
-            return new(false, "Missing verified transfer evidence.", "INVALID_PROVIDER_EVIDENCE");
+        ProcessPayOsWebhookResult Reject(string code, string reason, string message, bool retryable = false)
+        {
+            _logger.LogWarning("Reviewed PayOS webhook rejected. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}, code {ErrorCode}, reason {Reason}",
+                callback.OrderCode, orderId, code, reason);
+            return new(false, message, code, retryable);
+        }
 
-        var order = await _orderRepository.GetByIdAsync(orderId, ct) ?? throw new InvalidOperationException("Missing order.");
+        const string invalidEvidence = "INVALID_PROVIDER_EVIDENCE";
+        const string evidenceMessage = "Missing verified transfer evidence.";
+        if (callback.VerifiedTransferTime is not { } transferTime || transferTime == default)
+            return Reject(invalidEvidence, callback.EvidenceFailure ?? "TRANSFER_TIMESTAMP", evidenceMessage);
+        if (callback.AmountVnd <= 0)
+            return Reject(invalidEvidence, "TRANSFER_AMOUNT", evidenceMessage);
+        if (string.IsNullOrWhiteSpace(callback.BankReference) || callback.BankReference.Length > 255)
+            return Reject(invalidEvidence, "TRANSFER_REFERENCE", evidenceMessage);
+        if (string.IsNullOrWhiteSpace(callback.GatewayTransactionId) || callback.GatewayTransactionId.Length > 255)
+            return Reject(invalidEvidence, "PAYMENT_LINK_ID", evidenceMessage);
+
+        var order = await _orderRepository.GetByIdAsync(orderId, ct) ?? throw new InvalidOperationException("Missing reviewed order.");
         if (order.ReviewedMethod != nameof(PaymentMethod.PAYOS) || order.ReviewedCurrency != "VND")
-            return new(false, "The reviewed method or currency does not match this PayOS transfer.", "COLLECTION_BINDING_CONFLICT");
+            return Reject("COLLECTION_BINDING_CONFLICT", "REVIEWED_METHOD_OR_CURRENCY", "The reviewed method or currency does not match this PayOS transfer.");
 
         var checkouts = order.Transactions.Where(t => t.TransactionType == TransactionType.PAYMENT &&
             t.PaymentMethod == PaymentMethod.PAYOS && t.TenantId == order.TenantId).ToList();
@@ -229,21 +257,27 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         if (linked.Count != 1 || linked[0].GatewayTransactionId != callback.GatewayTransactionId)
         {
             if (linked.Count == 0 && checkouts.Any(t => t.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN))
-                return new(false, "The PayOS checkout link has not been recorded yet.", "PAYOS_CHECKOUT_LINK_UNAVAILABLE", Retryable: true);
+                return Reject("PAYOS_CHECKOUT_LINK_UNAVAILABLE", "CHECKOUT_LINK_PENDING", "The PayOS checkout link has not been recorded yet.", retryable: true);
 
-            return new(false, "The transfer does not match the recorded PayOS checkout.", "COLLECTION_BINDING_CONFLICT");
+            return Reject("COLLECTION_BINDING_CONFLICT", "CHECKOUT_LINK_MISMATCH", "The transfer does not match the recorded PayOS checkout.");
         }
 
         var prior = await _transactionRepository.GetByProviderCollectionReferenceAsync(PaymentMethod.PAYOS, callback.BankReference, ct);
         if (prior != null)
-            return prior.HasVerifiedProviderCollection() && prior.PaymentOrderId == order.Id && prior.TenantId == order.TenantId &&
-                prior.Amount == callback.AmountVnd && prior.PaidAt == transferTime
-                ? new(true, "Transfer already recorded.")
-                : new(false, "Conflicting transfer evidence.", "COLLECTION_BINDING_CONFLICT");
+        {
+            if (!prior.HasVerifiedProviderCollection() || prior.PaymentOrderId != order.Id || prior.TenantId != order.TenantId ||
+                prior.Amount != callback.AmountVnd || prior.PaidAt != transferTime)
+                return Reject("COLLECTION_BINDING_CONFLICT", "TRANSFER_REFERENCE_CONFLICT", "Conflicting transfer evidence.");
+            _logger.LogInformation("Reviewed PayOS transfer replay. PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}",
+                order.Id, prior.Id);
+            return new(true, "Transfer already recorded.");
+        }
 
         var verifiedAt = await _unitOfWork.DatabaseNowAsync(ct);
         var settlesOrder = order.CanSettleReviewedPayment(callback.AmountVnd);
         var checkout = linked[0];
+        _logger.LogInformation("Reviewed PayOS transfer validated. PaymentOrderId {PaymentOrderId}, CheckoutTransactionId {CheckoutTransactionId}, expected VND {ExpectedAmount}, received VND {TransferredAmount}, settles order {SettlesOrder}",
+            order.Id, checkout.Id, order.FinalAmount, callback.AmountVnd, settlesOrder);
         var reuseCheckout = settlesOrder && checkout.ProviderCollectionReference is null &&
             checkout.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN;
         var tx = reuseCheckout ? checkout : new PaymentTransaction
@@ -261,11 +295,14 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             await _eventPublisher.PublishAsync(new PaymentSucceededV1
             {
                 EventId = tx.Id, OccurredAt = transferTime, CorrelationId = order.OrderCode,
+                SettlementClassification = PaymentSucceededV1.ReviewedReservationOrderPaid,
                 PaymentOrderId = order.Id, PaymentTransactionId = tx.Id, PaymentMethod = order.ReviewedMethod!,
                 GatewayReference = callback.GatewayTransactionId, TenantId = order.TenantId, SiteId = order.SiteId,
                 ReferenceType = order.ReferenceType.ToString(), ReferenceId = order.ReferenceId, PlateNumber = order.PlateNumber,
                 AccountId = order.AccountId, Amount = tx.Amount, ParkingFee = order.FinalAmount, Currency = order.ReviewedCurrency!
             }, ct);
+            _logger.LogInformation("Reviewed PaymentSucceededV1 staged. EventId {EventId}, PaymentOrderId {PaymentOrderId}, ReservationId {ReservationId}",
+                tx.Id, order.Id, order.ReferenceId);
         }
         else
         {
@@ -278,10 +315,10 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             if (dispositionReason is not null)
                 await _refundRepository.AddAsync(RefundRequest.ForVerifiedCollection(tx, dispositionReason), ct);
 
-            _logger.LogWarning("Recorded verified transfer {TransactionId} without settling reviewed order {OrderId} in status {OrderStatus}.",
-                tx.Id, order.Id, order.Status);
+            _logger.LogWarning("Reviewed PayOS non-settling collection staged. PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}, order status {OrderStatus}, disposition {Disposition}",
+                order.Id, tx.Id, order.Status, dispositionReason);
         }
         await _unitOfWork.SaveChangesAsync(ct);
-        return new(true, "Verified transfer recorded.");
+        return new(true, "Verified transfer recorded.") { RecordedTransactionId = tx.Id, SettledOrder = settlesOrder };
     }
 }

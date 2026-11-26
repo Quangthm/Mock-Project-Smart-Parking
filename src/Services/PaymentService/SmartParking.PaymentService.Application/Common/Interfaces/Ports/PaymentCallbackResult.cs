@@ -9,5 +9,6 @@ public record PaymentCallbackResult(
     string PaymentStatus, // "SUCCESS", "FAILED", "PENDING"
     DateTimeOffset TransactionTime,
     string? RawPayload,
-    DateTimeOffset? VerifiedTransferTime = null
+    DateTimeOffset? VerifiedTransferTime = null,
+    string? EvidenceFailure = null
 );

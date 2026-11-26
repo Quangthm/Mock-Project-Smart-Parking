@@ -264,6 +264,7 @@ public class ProcessPayOsWebhookCommandHandlerTests
 
         Assert.Single(_eventPublisher.PublishedEvents);
         var evt = Assert.IsType<SmartParking.PaymentService.Domain.Events.PaymentSucceededV1>(_eventPublisher.PublishedEvents[0]);
+        Assert.Null(evt.SettlementClassification);
         Assert.Equal(orderId, evt.PaymentOrderId);
         Assert.Equal("PAYOS", evt.PaymentMethod);
         Assert.Equal(50000, evt.Amount);

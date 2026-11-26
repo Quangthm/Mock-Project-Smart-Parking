@@ -33,10 +33,16 @@ export function PaymentCheckout({
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
   const submitting = useRef(false)
+  const mounted = useRef(false)
   const [error, setError] = useState("")
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null)
   const [status, setStatus] = useState<"pending" | "success" | "failed">("pending")
   const [now, setNow] = useState(Date.now)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => {
     if ((!checkout && !holdExpiresAt) || status !== "pending") return
@@ -77,6 +83,7 @@ export function PaymentCheckout({
       const previous = paymentApi.rememberedCheckout(normalized)
       if (previous) {
         const result = await paymentApi.status(previous.paymentTransactionId)
+        if (providedOrderId && !mounted.current) return
         if (result.orderId.toLowerCase() !== normalized) throw new Error("Payment Service returned a different order.")
         if (classifyPaymentStatus(result) === "success") throw new Error("This payment order has already been paid.")
         if (result.status === "PENDING" && new Date(previous.expiresAt).getTime() > Date.now()) {

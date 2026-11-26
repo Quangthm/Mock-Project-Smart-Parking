@@ -70,6 +70,15 @@ Malformed input returns 400. An owner-confirmed missing slot returns 404. A stal
 
 **Reviewed hold.** The Driver submits the reviewed `quoteId` with the same selection. Operations retrieves Payment’s immutable proof before taking its transaction guards, then checks the exact proof, joined Account/Vehicle/Facility results and current local facts. One Operations transaction commits the named reservation, accepted buffer, exact H, terminal `HOLD_CREATED`, progress and outbox effects. Reviewed admission uses one interval-aware Facility eligibility decision and creates zero Facility tokens. Checkpoint C retired the former separate `CONFIRMATION` token workflow; HTTP slot metadata lookup and messaging-based interval-aware Facility eligibility remain. Payment order readiness follows the committed hold independently.
 
+| Quota lookup during reviewed admission | Receipt outcome |
+| --- | --- |
+| Successful lookup with no active CAR quota for the resolved tenant/site | Continue with named-slot and other admission checks. |
+| Active quota exceeded by overlapping effective advance commitments, including the proposed booking | `REJECTED` / `RESERVATION_QUOTA_EXCEEDED`. Active zero rejects all new quota-bearing reservations. Equality is allowed. |
+| Invalid or contradictory active quota evidence | `FAILED_DEPENDENCY` / `RESERVATION_QUOTA_CONFIGURATION_INVALID`, subject to the existing admission deadline. |
+| Quota storage read fails | The evaluation faults and the existing retry/deadline flow applies. No hold or order intent commits in the failed evaluation. |
+
+Physical slot eligibility, overlap, occupancy reconciliation and same-plate/site checks apply irrespective of quota presence. [Approved quota decision](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md#optional-commercial-quota--26-november-2026)
+
 ### Submit durable admission
 
 | Item | Contract |
@@ -122,6 +131,10 @@ Request ID is required and stable for replay. The receipt carries a `contractVer
 `Version` is a required monotonic status revision per request; `EventId` is `{requestId:N}/{Version}` and may repeat for redelivery. `Checks` are required persisted states: `account`, `vehicle`, `facility`, `booking`. Reservation lifecycle, `outcomeCode`, `orderId`, `holdExpiresAt`, amounts and currency are nullable until the corresponding committed evidence exists. `orderId` is **not** checkout readiness: a positive admission records durable order-creation intent and exact H while `orderId` remains null until authoritative settlement binding; Payment is authoritative for checkout readiness. Admission may terminate as rejected, dependency unavailable/timed out, paid hold committed, or zero-deposit confirmed coverage. The snapshot carries the current booking state for reconnection.
 
 There is no recurring reservation-progress or reservation-checkout-readiness polling contract: SignalR `ReservationProgress` and `ReservationCheckoutChanged` notifications drive updates, with one authoritative read on initial join, reconnect, or explicit page restoration. Independent Payment QR/transaction status checks are Payment-scoped and are not reservation lifecycle polling.
+
+The same authenticated subscription also receives `ReservationPaymentSucceeded` for an explicitly classified, committed reviewed Payment settlement. Its payload contains `eventId`, `reservationId`, `paymentOrderId`, `paymentTransactionId`, `amount`, `currency`, `outcome` (`SUCCEEDED`) and `occurredAt` (verified provider transfer time). The client matches its reservation and Payment order before showing financial success. Reservation entitlement continues to come from committed Operations progress. `ReservationCheckoutChanged` remains the order-readiness hint.
+
+Payment application API errors use the canonical `code` field, with `message`, `errors` and `traceId` where applicable. The external payOS callback uses its provider acknowledgement contract. [Troubleshooting guide](../../04-testing/postman/SPARK-273-manual-test-guide.md#trace-reviewed-payos-settlement)
 
 ### Read own booking
 

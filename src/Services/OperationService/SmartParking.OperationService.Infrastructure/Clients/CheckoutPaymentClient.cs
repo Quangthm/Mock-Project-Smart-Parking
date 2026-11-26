@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
+using PaymentErrorEnvelope = SmartParking.OperationService.Infrastructure.Reservations.PaymentErrorEnvelope;
 
 namespace SmartParking.OperationService.Infrastructure.Clients;
 
@@ -162,7 +163,7 @@ public sealed class CheckoutPaymentClient(
 
                     throw new ReservationGateException(
                         (int)response.StatusCode,
-                        paymentError?.ErrorCode ?? "PAYMENT_REQUEST_REJECTED",
+                        paymentError?.Code ?? "PAYMENT_REQUEST_REJECTED",
                         paymentError?.Message ?? "Payment service rejected the checkout request.");
                 }
 
@@ -203,7 +204,6 @@ public sealed class CheckoutPaymentClient(
         new(status.TransactionId, status.OrderId, status.Amount, status.Status, status.PaidAt, status.IsAuthoritative);
 
     private sealed record PaymentEnvelope<T>(bool Success, T Data);
-    private sealed record PaymentErrorEnvelope(string? ErrorCode, string? Message);
     private sealed record PaymentPricing(long FinalAmountVnd, string Currency, decimal TotalParkedMinutes, bool IsFreeStay);
     private sealed record PaymentOrder(Guid OrderId, string OrderCode, decimal Amount, string Status, DateTimeOffset ExpiresAt);
     private sealed record PreparedPaymentOrder(

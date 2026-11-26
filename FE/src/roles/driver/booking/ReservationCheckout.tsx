@@ -363,9 +363,9 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
         ? formatStatus(snapshot?.outcomeCode || receipt?.code || snapshot?.reservationState || snapshot?.admissionState || receipt?.state || "Reservation failed")
         : attempt.requestId && !connected ? "Waiting for live reservation updates."
         : snapshot?.reservationState === "PENDING_PAYMENT"
-          ? holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
+          ? paymentState === "PAID" ? "Payment received. Awaiting reservation confirmation."
+            : holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
             : orderId ? "Your payment order is ready."
-            : paymentState === "PAID" ? "Payment received. Awaiting reservation confirmation."
             : paymentState === "FAILED" ? "Payment order creation failed."
             : paymentState === "CLOSED" ? "This payment order is closed."
             : paymentState === "UNAVAILABLE" ? "Payment Service is unavailable. Reconnect to check checkout."

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Domain.Reservations;
@@ -37,10 +38,12 @@ public sealed class ReservationAvailabilityRepository(ReservationDbContext db, O
         var owners = allocations.Where(a => a.ReservationId.HasValue).Select(a => a.ReservationId!.Value).Distinct().ToArray();
         var rows = await ReservationRepository.EffectiveCommitments(db, proposed.SiteId, start, end, at, owners)
             .Where(r => r.TenantId == proposed.TenantId).ToArrayAsync(ct);
-        // Do not silently sum two conflicting representations of capacity.
-        var quotas = await db.Set<OperationalCapacityConfig>().AsNoTracking().Where(q =>
-            q.TenantId == proposed.TenantId && q.SiteId == proposed.SiteId && q.VehicleType == proposed.VehicleType &&
-            q.SpatialUnitId == null).ToArrayAsync(ct);
-        return new(rows, sessions, allocations, quotas);
+        var quotas = await db.Set<ReservationQuotaConfig>().AsNoTracking().Where(q =>
+            q.TenantId == proposed.TenantId && q.SiteId == proposed.SiteId && q.VehicleType == proposed.VehicleType && q.IsActive)
+            .Select(q => q.MaxReservationQuota).Take(2).ToArrayAsync(ct);
+        if (quotas.Length > 1)
+            throw new ReservationGateException(503, "RESERVATION_QUOTA_CONFIGURATION_INVALID",
+                "Multiple active reservation quotas apply to this site and vehicle category.");
+        return new(rows, sessions, allocations, quotas.Length == 0 ? null : quotas[0]);
     }
 }

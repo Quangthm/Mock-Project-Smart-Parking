@@ -12,6 +12,8 @@
 
 ## Ownership
 
+Commercial quota is an optional Operations policy. For the current CAR named-slot workflow, Facility establishes concrete slot eligibility for the requested interval. Operations checks the local slot, plate/site, occupancy and allocation facts and applies the active tenant/site/category quota when configured. That ceiling counts overlapping effective advance commitments, including the proposed reservation. Zero blocks a new commitment. Timely paid confirmation of an intact hold uses that commitment, and late reacquisition before T runs current guarded availability. [Approved quota amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md#optional-commercial-quota--26-november-2026)
+
 | Owner | Authority and boundary |
 | --- | --- |
 | Operations | Authenticated request receipt, EF-backed MassTransit Saga StateMachine, plate/site/interval booking constraints, prospective and final entitlement checks, reservation and capacity claim, durable status projection, SignalR and guarded confirmation. |

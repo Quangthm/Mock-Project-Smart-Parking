@@ -200,6 +200,63 @@ test('SignalR joins before one recovery read, merges by request revision and fen
   assert.deepEqual(versions, [4,6]); assert.equal(calls.at(-1), 'stop');
 });
 
+test('financial SignalR success binds once to the scoped order and survives a stale checkout response', async () => {
+  const handlers = new Map(), reads = [], states = [];
+  let generation = 1;
+  const request = 'a0e97ab1-6222-4cd4-a6f7-cf960334344f';
+  const order = 'f7e1ff6b-c768-48c6-9c78-64d381aba8ba';
+  const foreign = '8b6c372a-bacb-41bf-b6d1-b911c8284b27';
+  const notice = {
+    eventId: 'c0aa19d0-95d8-4dfb-a6d9-0869d9559c10', reservationId: request, paymentOrderId: order,
+    paymentTransactionId: '77b70a74-af4e-49fc-bca0-2bd38757b196',
+    amount: 30000, currency: 'VND', outcome: 'SUCCEEDED', occurredAt: '2026-11-26T08:54:41Z',
+  };
+  const connection = {
+    on: (name, callback) => handlers.set(name, callback), off() {}, onreconnecting() {}, onreconnected() {},
+    onclose() {}, async start() {}, async invoke() {}, async stop() {},
+  };
+  class Builder {
+    withUrl() { return this; }
+    withAutomaticReconnect() { return this; }
+    configureLogging() { return this; }
+    build() { return connection; }
+  }
+  const fixture = load('lib/reservationProgress.ts', {
+    react: {}, '@microsoft/signalr': {HubConnectionBuilder: Builder, HttpTransportType: {WebSockets: 1, ServerSentEvents: 2}, LogLevel: {None: 6}},
+    './paymentApi': {isPaymentOrderId: value => typeof value === 'string' && value.length === 36,
+      paymentApi: {reservationCheckout: () => new Promise(resolve => reads.push(resolve))}},
+    './authApi': {getSessionGeneration: () => generation, ensureAccessToken: async () => 'token'},
+    './reservationsApi': {reservationServer: '/operations', reservationsApi: {
+      progress: async () => ({requestId: request, version: 1, reservationState: 'PENDING_PAYMENT', checks: {}}),
+    }},
+  });
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  const progress = [];
+  const stop = fixture.watchReservationProgress(request, value => progress.push(value.reservationState), () => {},
+    value => states.push(value?.state));
+  await flush();
+  const receive = handlers.get('ReservationPaymentSucceeded');
+  const payable = {state: 'PAYABLE', reservationId: request, orderId: order};
+  receive({...notice, reservationId: foreign});
+  receive(notice);
+  assert.deepEqual(states, []);
+  reads[0](payable);
+  await flush();
+  assert.deepEqual(states, ['PAID']);
+  handlers.get('ReservationCheckoutChanged')(request);
+  receive({...notice, paymentOrderId: foreign});
+  receive(notice);
+  reads[1](payable);
+  await flush();
+  assert.deepEqual(states, ['PAID']);
+  assert.deepEqual(progress, ['PENDING_PAYMENT']);
+  assert.equal(reads.length, 2);
+  generation++;
+  receive(notice);
+  stop();
+  assert.deepEqual(states, ['PAID']);
+});
+
 test('payment return schedules status checks only for standalone orders', async () => {
   const order = 'f7e1ff6b-c768-48c6-9c78-64d381aba8ba';
   const requestId = 'a0e97ab1-6222-4cd4-a6f7-cf960334344f';

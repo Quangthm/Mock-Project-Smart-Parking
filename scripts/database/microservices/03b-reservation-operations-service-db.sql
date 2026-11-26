@@ -126,22 +126,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX_OutboxMessage_OutboxId_SequenceNumber" ON 
 
 CREATE INDEX IF NOT EXISTS "IX_OutboxState_Created" ON "OutboxState" ("Created");
 
--- 1. BẢNG CẤU HÌNH ĐỊNH MỨC SỨC CHỨA VẬN HÀNH (OPERATIONAL CAPACITY CONFIGS)
--- Lưu trữ cấu hình hạn mức nhận đặt chỗ và sức chứa tối đa phục vụ tính toán khả dụng.
-CREATE TABLE IF NOT EXISTS operational_capacity_configs (
+-- 1. OPTIONAL SITE RESERVATION QUOTAS
+CREATE TABLE IF NOT EXISTS reservation_quota_configs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
-    spatial_unit_id UUID NULL,
     vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
-    total_physical_capacity INT NOT NULL CHECK (total_physical_capacity >= 0),
-    max_reservation_quota INT NOT NULL CHECK (max_reservation_quota >= 0 AND max_reservation_quota <= total_physical_capacity),
+    max_reservation_quota INT NOT NULL CONSTRAINT ck_reservation_quota_nonnegative CHECK (max_reservation_quota >= 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE NULLS NOT DISTINCT (site_id, spatial_unit_id, vehicle_type)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_op_capacity_site ON operational_capacity_configs(site_id, vehicle_type);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reservation_quota_scope
+    ON reservation_quota_configs(tenant_id, site_id, vehicle_type);
 
 -- 2. BẢNG CHÍNH SÁCH VẬN HÀNH (OPERATIONAL POLICIES)
 -- Quản lý các tham số cửa sổ thời gian (bounds) theo chuẩn SRS v1.0

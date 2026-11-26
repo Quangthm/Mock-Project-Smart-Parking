@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Domain.Entities;
@@ -6,7 +7,8 @@ using SmartParking.OperationService.Domain.Reservations;
 namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed class RecordReservationPaymentHandler(IReservationBookingRepository bookings, IMediator mediator,
-    IUnitOfWork work, IStructureRepository structure, IReservationPolicyRepository policies, IReservationFactsPublisher facts)
+    IUnitOfWork work, IStructureRepository structure, IReservationPolicyRepository policies, IReservationFactsPublisher facts,
+    ILogger<RecordReservationPaymentHandler> logger)
     : IRequestHandler<RecordReservationPaymentCommand>
 {
     public async Task Handle(RecordReservationPaymentCommand command, CancellationToken ct)
@@ -23,10 +25,15 @@ public sealed class RecordReservationPaymentHandler(IReservationBookingRepositor
             e.PlateNumber != null && ReservationCarPlate.Canonicalize(e.PlateNumber) != row.NormalizedPlate)
             throw new InvalidOperationException("Settlement conflicts with the accepted reservation.");
         var fingerprint = FormattableString.Invariant($"{e.PaymentTransactionId:N}/{e.PaymentOrderId:N}/{e.OccurredAt.UtcTicks}/{e.Amount:G29}/{e.Currency}/{e.PaymentMethod}");
-        if (!row.BindCollection(e.PaymentOrderId, e.PaymentTransactionId, fingerprint)) return;
+        if (!row.BindCollection(e.PaymentOrderId, e.PaymentTransactionId, fingerprint))
+        {
+            logger.LogInformation("Reservation settlement replay. EventId {EventId}, ReservationId {ReservationId}", e.EventId, e.ReservationId);
+            return;
+        }
         await bookings.RequireDurableConfirmationAsync(ct);
         var at = await bookings.DatabaseNowAsync(ct);
         var denial = await DenialAsync(row, at, ct);
+        var timely = row.Status == "PENDING_PAYMENT" && at < row.HoldExpiresAt;
         if (denial is null)
         {
             row.ConfirmPaid(at);
@@ -42,6 +49,9 @@ public sealed class RecordReservationPaymentHandler(IReservationBookingRepositor
             row.ExpectedStartTime, row.ClaimEndTime!.Value, row.Status), ct);
         await work.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+        var outcome = denial is not null ? "DENIED" : timely ? "TIMELY_CONFIRMATION" : "LATE_REACQUISITION";
+        logger.LogInformation("Reservation entitlement outcome recorded. EventId {EventId}, ReservationId {ReservationId}, outcome {Outcome}, reason {Reason}",
+            e.EventId, e.ReservationId, outcome, denial);
     }
 
     private async Task<string?> DenialAsync(ReservationRow row, DateTimeOffset at, CancellationToken ct)

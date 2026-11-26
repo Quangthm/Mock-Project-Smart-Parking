@@ -27,6 +27,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     private readonly string plate = $"51A{Random.Shared.Next(10000, 100000)}";
     private DateTimeOffset start = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds());
     private readonly QuoteCommitFault fault = new();
+    private readonly ReservationQuotaReadFault quotaReadFault = new();
     private int proofReads;
     private int policyVersion = 1;
     private int holdMinutes = 1;
@@ -45,7 +46,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddApplicationServices().AddPersistenceServices(config);
-        services.AddDbContext<ReservationDbContext>(o => o.AddInterceptors(fault));
+        services.AddDbContext<ReservationDbContext>(o => o.AddInterceptors(fault, quotaReadFault));
         services.AddSingleton<IReservationPolicyRepository>(this);
         services.AddSingleton<IReservationQuoteOwner>(this);
         services.AddSingleton<IReservationCommercialOwner>(this);
@@ -152,10 +153,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         row.AcceptDecision(row.AttemptId, 1, Guid.NewGuid(), row.AdmittedAt, true, row.AdmittedAt);
         row.RecordPlate(true, plate, 3, row.AdmittedAt);
         row.RecordSlot(true, site, tenant);
-        if (!await db.Set<OperationalCapacityConfig>().AnyAsync(q => q.SiteId == site))
-            db.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), SiteId = site, TenantId = tenant,
-                VehicleType = "CAR", TotalPhysicalCapacity = 1, MaxReservationQuota = 1, IsActive = true,
-                CreatedAt = row.AdmittedAt, UpdatedAt = row.AdmittedAt });
         await db.SaveChangesAsync();
         return id;
     }
@@ -285,7 +282,7 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
     }
 
     [QuoteDatabaseFact]
-    public async Task AcceptedSlotHoldDoesNotReadFacilityInventory()
+    public async Task EligibleSlotWithoutQuotaCommitsHoldAndOrderIntent()
     {
         await using var services = Services();
         var original = await ReadProofAsync(AccountId!.Value, quoteId, default);
@@ -293,10 +290,15 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         await Send(services, new CommitQuoteHoldCommand(id));
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        Assert.False(await db.Set<ReservationQuotaConfig>().AnyAsync(q => q.SiteId == site));
         var held = await db.Reservations.SingleAsync(r => r.Id == id);
+        Assert.Equal("PENDING_PAYMENT", held.Status);
+        Assert.NotNull(held.HoldExpiresAt);
         Assert.Equal(original.Binding.RequestedSlotId, held.ActiveClaimSlotId);
         Assert.Equal(original.QuoteId, held.QuoteId);
         Assert.Equal(original.DepositAmount, held.DepositAmount);
+        Assert.Single(await db.Set<OutboxMessage>().Where(m => m.MessageType.Contains("EnsureReservationOrderV1") &&
+            m.Body.Contains(id.ToString())).ToListAsync());
     }
 
     [QuoteDatabaseFact]
@@ -481,8 +483,6 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         request.CompleteAdmission(booking.Id, zero);
         db.Add(request);
         db.Add(booking);
-        db.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), SiteId = site, TenantId = tenant, VehicleType = "CAR",
-            TotalPhysicalCapacity = 1, MaxReservationQuota = 1, IsActive = true, CreatedAt = created, UpdatedAt = created });
         await db.SaveChangesAsync();
         return booking.Id;
     }
@@ -501,7 +501,10 @@ public sealed partial class QuoteBookingDatabaseTests : IReservationPolicyReposi
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         Task<ReservationRow> Read() => db.Reservations.AsNoTracking().SingleAsync(x => x.Id == id);
         Assert.Null((await Read()).PaymentOrderId);
+        db.Add(NewQuota(0));
+        await db.SaveChangesAsync();
         await Assert.ThrowsAsync<InvalidOperationException>(() => Send(services, new RecordReservationPaymentCommand(evidence with { PaymentMethod = "CASH" })));
+        quotaReadFault.Enabled = true;
         await Send(services, new RecordReservationPaymentCommand(evidence));
         var confirmed = await Read();
         Assert.Equal(("CONFIRMED", order, evidence.PaymentTransactionId), (confirmed.Status, confirmed.PaymentOrderId, confirmed.CollectionId));

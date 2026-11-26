@@ -155,7 +155,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("PayOS initiate failed with HTTP {StatusCode}: {ErrorBody}", response.StatusCode, errorBody);
+                _logger.LogWarning("PayOS checkout initiation failed. OrderCode {OrderCode}, HTTP {StatusCode}", request.OrderCode, response.StatusCode);
 
                 return new PaymentInitiateResult(
                     IsSuccess: false,
@@ -177,7 +177,7 @@ public class PayOsAdapter : IPaymentGatewayPort
 
             if (code != "00" || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             {
-                _logger.LogWarning("PayOS initiate returned non-zero code {Code}: {Desc}", code, desc);
+                _logger.LogWarning("PayOS checkout initiation returned an unsuccessful response. OrderCode {OrderCode}", request.OrderCode);
                 return new PaymentInitiateResult(
                     IsSuccess: false,
                     CheckoutUrl: null,
@@ -225,12 +225,14 @@ public class PayOsAdapter : IPaymentGatewayPort
         string signature,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             using var doc = JsonDocument.Parse(rawPayload);
             var root = doc.RootElement;
 
-            if (!root.TryGetProperty("data", out var dataEl))
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("data", out var dataEl) ||
+                dataEl.ValueKind != JsonValueKind.Object)
             {
                 return Task.FromResult(new PaymentCallbackResult(
                     IsValidSignature: false,
@@ -244,28 +246,8 @@ public class PayOsAdapter : IPaymentGatewayPort
                 ));
             }
 
-            var dict = new Dictionary<string, object?>();
-            foreach (var prop in dataEl.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.String)
-                {
-                    dict[prop.Name] = prop.Value.GetString();
-                }
-                else if (prop.Value.ValueKind == JsonValueKind.Number)
-                {
-                    if (prop.Value.TryGetInt64(out var lVal))
-                        dict[prop.Name] = lVal;
-                    else
-                        dict[prop.Name] = prop.Value.GetDouble();
-                }
-                else if (prop.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                {
-                    dict[prop.Name] = prop.Value.GetBoolean();
-                }
-            }
-
-            var calculatedSig = PayOsSignatureService.CreateSignatureFromDictionary(dict, _options.ChecksumKey);
-            var isValid = PayOsSignatureService.VerifySignature(calculatedSig, signature);
+            var calculatedSig = PayOsSignatureService.CreatePaymentWebhookSignature(dataEl, _options.ChecksumKey);
+            var isValid = calculatedSig is not null && PayOsSignatureService.VerifySignature(calculatedSig, signature);
 
             long orderCode = dataEl.TryGetProperty("orderCode", out var oc) ? oc.GetInt64() : 0;
             long amount = dataEl.TryGetProperty("amount", out var am) ? am.GetInt64() : 0;
@@ -275,12 +257,18 @@ public class PayOsAdapter : IPaymentGatewayPort
 
             var status = (isValid && code == "00") ? "SUCCESS" : "FAILED";
             DateTimeOffset? transferTime = null;
-            if (isValid && HasLiveCredentials() && dataEl.TryGetProperty("code", out var signedCode) &&
-                signedCode.GetString() == "00" && dataEl.TryGetProperty("currency", out var currency) &&
-                currency.GetString() == "VND" && dataEl.TryGetProperty("transactionDateTime", out var timestamp) &&
-                DateTime.TryParseExact(timestamp.GetString(), "yyyy-MM-dd HH:mm:ss",
-                    System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var local))
-                transferTime = new DateTimeOffset(local, TimeSpan.FromHours(7)).ToUniversalTime();
+            string? evidenceFailure = null;
+            if (isValid)
+            {
+                if (!HasLiveCredentials()) evidenceFailure = "LIVE_CREDENTIALS";
+                else if (ReadString(dataEl, "code") != "00") evidenceFailure = "SIGNED_SUCCESS_CODE";
+                else if (ReadString(dataEl, "currency") != "VND") evidenceFailure = "CURRENCY";
+                else if (DateTime.TryParseExact(ReadString(dataEl, "transactionDateTime"), "yyyy-MM-dd HH:mm:ss",
+                    System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var local) &&
+                    local.Ticks >= TimeSpan.FromHours(7).Ticks)
+                    transferTime = new DateTimeOffset(local, TimeSpan.FromHours(7)).ToUniversalTime();
+                else evidenceFailure = "TRANSFER_TIMESTAMP";
+            }
 
             return Task.FromResult(new PaymentCallbackResult(
                 IsValidSignature: isValid,
@@ -291,12 +279,12 @@ public class PayOsAdapter : IPaymentGatewayPort
                 VerifiedTransferTime: transferTime,
                 PaymentStatus: status,
                 TransactionTime: DateTimeOffset.UtcNow,
-                RawPayload: rawPayload
+                RawPayload: rawPayload,
+                EvidenceFailure: evidenceFailure
             ));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException)
         {
-            _logger.LogError(ex, "Failed to parse webhook JSON payload.");
             return Task.FromResult(new PaymentCallbackResult(
                 IsValidSignature: false,
                 OrderCode: 0,
@@ -309,6 +297,9 @@ public class PayOsAdapter : IPaymentGatewayPort
             ));
         }
     }
+
+    private static string? ReadString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     public async Task<PaymentVerificationResult> QueryTransactionAsync(
         long orderCode,

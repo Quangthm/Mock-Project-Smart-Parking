@@ -11,6 +11,45 @@ namespace SmartParking.PaymentService.Tests.Infrastructure;
 public class PayOsAdapterTests
 {
     [Fact]
+    public async Task VerifyAndParseWebhookAsync_AcceptsPublishedPayOsSignature()
+    {
+        // Public payOS payment-request HMAC example, independent of this implementation.
+        const string checksum = "1a54716c8f0efb2744fb28b6e38b25da7f67a925d98bc1c18bd8faaecadd7675";
+        const string signature = "412e915d2871504ed31be63c8f62a149a4410d34c4c42affc9006ef9917eaa03";
+        const string payload = """
+            {"code":"00","data":{"orderCode":123,"amount":3000,"description":"VQRIO123",
+             "accountNumber":"12345678","reference":"TF230204212323","transactionDateTime":"2023-02-04 18:25:00",
+             "currency":"VND","paymentLinkId":"124c33293c43417ab7879e14c8d9eb18","code":"00","desc":"Thành công",
+             "counterAccountBankId":"","counterAccountBankName":"","counterAccountName":"","counterAccountNumber":"",
+             "virtualAccountName":"","virtualAccountNumber":""}}
+            """;
+        using var http = new HttpClient();
+        var adapter = new PayOsAdapter(http, Options.Create(new PayOsOptions
+        {
+            ClientId = "test-client", ApiKey = "test-api", ChecksumKey = checksum
+        }), NullLogger<PayOsAdapter>.Instance);
+
+        var verified = await adapter.VerifyAndParseWebhookAsync(payload, signature);
+
+        Assert.True(verified.IsValidSignature);
+        Assert.Equal(new DateTimeOffset(2023, 2, 4, 11, 25, 0, TimeSpan.Zero), verified.VerifiedTransferTime);
+        Assert.False((await adapter.VerifyAndParseWebhookAsync(payload.Replace("3000", "3001"), signature)).IsValidSignature);
+    }
+
+    [Fact]
+    public void PaymentWebhookSignature_FormatsSupportedScalarsAndRejectsAmbiguousData()
+    {
+        using var data = System.Text.Json.JsonDocument.Parse("""{"n":123,"z":null,"b":true,"a":"","q":"undefined"}""");
+        var expected = PayOsSignatureService.ComputeHmacSha256("a=&b=true&n=123&q=&z=", "fixture");
+        Assert.Equal(expected, PayOsSignatureService.CreatePaymentWebhookSignature(data.RootElement, "fixture"));
+
+        using var structured = System.Text.Json.JsonDocument.Parse("""{"nested":{"a":1}}""");
+        using var duplicate = System.Text.Json.JsonDocument.Parse("""{"n":1,"n":2}""");
+        Assert.Null(PayOsSignatureService.CreatePaymentWebhookSignature(structured.RootElement, "fixture"));
+        Assert.Null(PayOsSignatureService.CreatePaymentWebhookSignature(duplicate.RootElement, "fixture"));
+    }
+
+    [Fact]
     public void PayOsSignatureService_ComputesAndVerifiesSignatureCorrectly()
     {
         var checksumKey = "test-checksum-key-123456";

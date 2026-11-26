@@ -37,6 +37,16 @@ internal sealed class ReservationTestSubscription : IDisposable
         }
     }
 
+    public async Task<ReservationPaymentSucceededNotification> ReadPaymentSucceededAsync()
+    {
+        while (true)
+        {
+            var message = await ReadAsync();
+            if (message.TryGetProperty("target", out var target) && target.GetString() == "ReservationPaymentSucceeded")
+                return message.GetProperty("arguments")[0].Deserialize<ReservationPaymentSucceededNotification>(JsonSerializerOptions.Web)!;
+        }
+    }
+
     public async Task<ReservationProgress> UntilTerminalAsync(Guid request)
     {
         while (true)

@@ -6,6 +6,8 @@ Use original `microservices/03b-reservation-operations-service-db.sql` and the A
 
 These CREATE declarations do not upgrade existing tables or remove deployed triggers. Do not run automatic migration/reset as a substitute for an existing-volume transition decision. [Deployment checklist](../../docs/04-testing/reports/SPARK-273-deployment-checklist.md) distinguishes offline tests, PostgreSQL/broker checks and blocked booking acceptance.
 
+The initializer now defines `reservation_quota_configs`. Normal named-slot CAR bookings require no commercial quota seed. For a populated Operations database, use the separately authorized [local adoption steps](../../docs/02-architecture/database/microservices/03-parking-operations-service-db-docs.md#local-adoption-of-the-reservation-quota-schema) before starting the matching application or running the updated demo seed.
+
 
 This directory contains **two generations** of schema scripts. Only one of them is
 current. Evaluated against the wrong one, the design docs and the running database

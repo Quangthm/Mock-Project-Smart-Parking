@@ -97,6 +97,7 @@ public static class ReservationMessaging
                 registration.AddConsumer<ReservationZeroReceiptIssuedConsumer>();
                 registration.AddConsumer<ReservationCheckoutChangedConsumer>();
                 registration.AddConsumer<ReservationPaymentSucceededConsumer>();
+                registration.AddConsumer<ReservationPaymentSucceededNotificationConsumer>();
             }
             if (gateCheckoutEnabled)
             {
@@ -138,6 +139,12 @@ public static class ReservationMessaging
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.UseEntityFrameworkOutbox<ReservationDbContext>(context);
                         endpoint.ConfigureConsumer<ReservationPaymentSucceededConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint(ReservationPaymentSucceededNotificationConsumer.Queue, endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<ReservationPaymentSucceededNotificationConsumer>(context);
                     });
                 }
                 bus.Message<OperationsGateAuditV1>(message => message.SetEntityName(OperationsAuditTopology.Exchange));

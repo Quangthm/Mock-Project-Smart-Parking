@@ -140,7 +140,7 @@ Use `-Apply` only when you explicitly intend to repair the standard local demo i
 .\scripts\seed-demo-site.ps1 -DriverEmail '<existing-driver-email>'
 ```
 
-Expect one account per role and then **Demo data ready**. The script writes demo membership and vehicle records to User, the site and slots to Facility, and capacity, a legacy site policy, and demo history to Operations. Existing demo records may be updated. The success banner establishes fixture counts. Continue with the reviewed policy and tariff checks.
+Expect **Demo data ready**. The script writes demo membership and vehicle records to User, the site and slots to Facility, and structure capacity pools, explicit demo quotas, a legacy site policy, and demo history to Operations. Existing demo records may be updated. The success banner establishes fixture counts. Continue with the reviewed policy and tariff checks. Use a normally created Owner site for the [unconfigured-site acceptance case](#owner-created-site-and-optional-quota-acceptance).
 
 | DEMO-HQ fixture | Where to verify it |
 |---|---|
@@ -173,6 +173,21 @@ Use the [pgAdmin lookup map](#pgadmin-lookup-map) to check the effective rows be
 ```
 
 Expect an `Active CAR tariff` summary and verify the matching effective revision separately. The helper can preserve an existing active tariff without repairing its absent or invalid revision. Escalate that case to the Payment owner for a supported configuration repair. Avoid reapplying a schema baseline or editing existing policy rows to make the test pass. [Tariff seed guide](../../../scripts/database/seeds/README.md#car-tariff-for-an-existing-local-site)
+
+### Owner-created site and optional quota acceptance
+
+Use the updated Operations schema and build on a disposable local stack. [Schema adoption](../../02-architecture/database/microservices/03-parking-operations-service-db-docs.md#local-adoption-of-the-reservation-quota-schema)
+
+1. Create an Owner site and its parking structure through the application. Prepare two eligible CAR slots and two eligible Drivers with distinct registered plates. Seed the effective reservation policy and CAR tariff for that site using the existing scripts above, substituting the new site ID. Confirm the tenant/site scope and the absence of an active CAR row in `reservation_quota_configs`. Perform this case without running the DEMO-HQ seed or inserting any quota or pool row by hand.
+2. As a Driver, review a positive-deposit quote for a concrete slot, submit the exact selection with a fresh key, and record the Account, plate and slot results. Expect `HOLD_CREATED`, an Operations reservation in `PENDING_PAYMENT` with H, and Payment checkout readiness after asynchronous order creation. Take the other eligible Driver through a fresh review for the same slot and overlapping interval while H is live. Expect `SLOT_TIME_CONFLICT` and no second order. The underlying booking can be checked without making a transfer.
+3. On a separate normally created disposable test site, use the same setup and explicitly configure active CAR quota `1` in the Operations database. Use the actual UUIDs and run only on the approved test fixture. The current product has no Owner quota editor or public quota configuration endpoint.
+
+   ```sql
+   INSERT INTO public.reservation_quota_configs (tenant_id, site_id, vehicle_type, max_reservation_quota)
+   VALUES ('<tenant-uuid>'::uuid, '<site-uuid>'::uuid, 'CAR', 1);
+   ```
+
+4. While the first positive hold is live, submit another eligible booking for a different slot with an overlapping effective interval. Expect `RESERVATION_QUOTA_EXCEEDED` with no competing reservation or order. Submit for a non-overlapping interval beyond any accepted booking buffer and expect admission. On a separate quota-zero fixture, even the first eligible booking must reach `RESERVATION_QUOTA_EXCEEDED`. Record the intervals, H, request codes and checkout evidence for the two sites. These cases are pending tester execution.
 
 ### pgAdmin lookup map
 
@@ -303,6 +318,24 @@ If **00.2** returns `mfaRequired=true`, finish the supported UserService login u
 - Open the Postman Console while diagnosing a send. A collection guard calls `skipRequest()` before HTTP, so Postman can show **No response / 0 tests**. A real response has an HTTP status and may include a `traceId`. A transport failure can show no response with a network error. Check only the necessary status, URL, or error and redact headers, bodies, and resolved secret values before sharing. [Postman scripting](https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-execution#pmexecutionskiprequest) · [Postman Console](https://learning.postman.com/docs/use/send-requests/response-data/troubleshooting-api-requests/)
 
 ## 5. Troubleshoot and recover
+
+### Trace reviewed payOS settlement
+
+From the repository root, replace the timestamp with the start of the test, including its UTC offset.
+
+```powershell
+docker compose --project-name smartpark-app -f compose.app.yml logs --timestamps --since '2026-11-26T15:53:00+07:00' payment-service operation-service
+```
+
+1. Find the payOS OrderCode and record the reservation, payment order and transaction IDs. Compare the merchant channel's original delivery attempts, callback destination, HTTP/TLS outcome and ingress records. A browser return and a successful legacy provider-status lookup are separate from callback delivery.
+2. Look for `PayOS webhook arrived` and retain its TraceId. Follow `PayOS webhook signature verified` or `INVALID_WEBHOOK_SIGNATURE`, then `selected reviewed settlement` or `selected legacy settlement`. The incoming verifier retains empty signed fields. Checkout request signing uses its existing rules.
+3. Look for `INVALID_PROVIDER_EVIDENCE`, `COLLECTION_BINDING_CONFLICT`, `PAYOS_CHECKOUT_LINK_UNAVAILABLE`, `ORDER_NOT_FOUND` or `AMOUNT_MISMATCH`. Reviewed evidence rejection logs the failed category, such as `TRANSFER_TIMESTAMP`, `SIGNED_SUCCESS_CODE`, `CURRENCY` or `CHECKOUT_LINK_MISMATCH`. The callback retains HTTP 400 for supported rejections, 503 for the pending-link retry, and 200 for accepted processing or exact replay. Application API errors use `code`, `message`, `errors` and `traceId` where applicable. The payOS acknowledgement retains its existing response shape.
+4. Correlate `Reviewed PaymentSucceededV1 staged` with `Reviewed PayOS transaction committed` and its settled-order flag. Staging alone does not establish commit or publication. `PayOS webhook failed with an unconfirmed outcome` requires ledger and outbox inspection before any recovery action. Distinct additional collections have their own transaction IDs.
+5. Follow `Reservation settlement event consumed`, `Reservation entitlement outcome recorded` and independently `ReservationPaymentSucceeded SignalR send attempted` / `send completed`. Match EventId across these logs. Send completion does not establish browser receipt. The browser recovers current financial state on initial load or reconnect. Keep Payment success separate from the reservation outcome.
+
+Before sharing diagnostics, redact raw payloads, signatures, credentials, tokens, bank-account details, bank transfer references and unnecessary customer information. For the original order `314423683246459`, obtain the merchant delivery history and original signed evidence for both distinct transfers. A separately authorized recovery must preserve both transfers. A second transfer or checkout attempt is unnecessary.
+
+The QR remains user-initiated after the Payment order becomes available. Automatic QR preparation is a possible future enhancement.
 
 | Symptom | Where to check and safest next action |
 |---|---|

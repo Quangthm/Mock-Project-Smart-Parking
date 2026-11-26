@@ -28,6 +28,8 @@ Record the SHA, local diff, SDK and service versions, time zone, scheduler name 
 
 Before customer cases, enable the existing independent admission, Saga, signed owner integration, reviewed settlement and outbox switches per the guide. If testing departure, also prepare the independently enabled gate/audit checkout stack and an authorized operator. Verify the Operations scheduler and consumer before submitting. Historical sections of the deployment and API materials include superseded token, order PUT and worker steps. Use the D cutover section for current deadline setup. [D deployment checklist](SPARK-273-deployment-checklist.md#checkpoint-d-coordinated-cutover-and-recovery)
 
+Post-Checkpoint-E regression remains pending. Use the updated schema and run the normally created Owner-site cases both without a quota and with an explicit active quota. Capture the hold and Payment order intent for the unconfigured site, overlapping different-slot rejection for quota `1`, and first-booking rejection for quota `0`. Earlier Checkpoint E and D results do not establish this acceptance. [Customer acceptance steps](../postman/SPARK-273-manual-test-guide.md#owner-created-site-and-optional-quota-acceptance)
+
 ## Verification record
 
 Record the actual result and an evidence reference for each case before assigning a final status. Use **Previously passed**, **Pending tester execution**, **Passed**, **Skipped** with reason, **Blocked** with prerequisite, **Failed**, or **Not applicable** with the deployment reason. P0 covers entitlement, money, durability or activation. P1 covers customer recovery and adjacent workflow regressions.

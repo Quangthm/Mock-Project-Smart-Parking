@@ -22,6 +22,7 @@ public sealed partial class QuoteBookingDatabaseTests
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var now = DateTimeOffset.UtcNow;
+        db.Add(NewQuota(1));
         db.Add(new ParkingSessionRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site, VehicleType = "CAR",
             EntryTime = now, SessionStatus = "ACTIVE", CreatedAt = now });
         db.Add(new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
@@ -70,8 +71,7 @@ public sealed partial class QuoteBookingDatabaseTests
         var request = await Prepare(services, Guid.NewGuid());
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
-        var limit = await db.Set<OperationalCapacityConfig>().SingleAsync(q => q.SiteId == site);
-        limit.TotalPhysicalCapacity = limit.MaxReservationQuota = 2;
+        db.Add(NewQuota(2));
         var now = DateTimeOffset.UtcNow;
         var otherSlot = Guid.NewGuid();
         var booking = new ReservationRow { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
@@ -135,13 +135,13 @@ public sealed partial class QuoteBookingDatabaseTests
     public Task CompetingSameSitePlateHoldsHaveOneWinnerAcrossSlots() => RaceCapacityAsync(sharedPlate: true);
 
     [QuoteDatabaseFact]
-    public Task AdjacentNamedHoldsBothCommitOnTheSameSlot() => RaceCapacityAsync(sharedSlot: true, adjacent: true);
+    public Task AdjacentNamedHoldsBothCommitOnTheSameSlot() => RaceCapacityAsync(sharedSlot: true, adjacent: true, quota: 1);
 
     [QuoteDatabaseFact]
     public Task SiteCommercialQuotaStillSerializesIndependentSlots() => RaceCapacityAsync(quota: 1);
 
     private async Task RaceCapacityAsync(bool sharedSlot = false, bool rollBackFirst = false,
-        bool sharedPlate = false, bool adjacent = false, int quota = 2)
+        bool sharedPlate = false, bool adjacent = false, int? quota = null)
     {
         await using var services = Services();
         using var first = services.CreateScope();
@@ -149,11 +149,11 @@ public sealed partial class QuoteBookingDatabaseTests
         var firstDb = first.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var secondDb = second.ServiceProvider.GetRequiredService<ReservationDbContext>();
         var otherSlot = Guid.NewGuid();
-        var now = DateTimeOffset.UtcNow;
-        firstDb.Add(new OperationalCapacityConfig { Id = Guid.NewGuid(), TenantId = tenant, SiteId = site,
-            VehicleType = "CAR", IsActive = true, TotalPhysicalCapacity = 2, MaxReservationQuota = quota,
-            CreatedAt = now, UpdatedAt = now });
-        await firstDb.SaveChangesAsync();
+        if (quota is int limit)
+        {
+            firstDb.Add(NewQuota(limit));
+            await firstDb.SaveChangesAsync();
+        }
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var ct = timeout.Token;

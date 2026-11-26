@@ -113,10 +113,10 @@ public sealed class ReservationCommercialClient(
                     }
 
                     if (servicePermission == QuotePermission && !(response.StatusCode == System.Net.HttpStatusCode.NotFound &&
-                        paymentError?.ErrorCode == "QUOTE_NOT_FOUND" && method == HttpMethod.Get)) throw Unavailable();
+                        paymentError?.Code == "QUOTE_NOT_FOUND" && method == HttpMethod.Get)) throw Unavailable();
                     throw new ReservationGateException(
                         (int)response.StatusCode,
-                        paymentError?.ErrorCode ?? "PAYMENT_REQUEST_REJECTED",
+                        paymentError?.Code ?? "PAYMENT_REQUEST_REJECTED",
                         paymentError?.Message ?? "Payment service rejected the reservation request.");
                 }
 

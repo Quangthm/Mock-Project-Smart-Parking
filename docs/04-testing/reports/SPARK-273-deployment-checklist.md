@@ -29,9 +29,9 @@ Add `FullyQualifiedName~ReservationEvaluationCheckpointTests` to the focused Ope
 
 Also include `ReservationFacilityDependencyTests`, `ReservationAvailabilityTests` and `FacilityStructureEndpointTests` in the focused filter. The Facility v1 producer and Operations adapter are in the Commit 1 draft. Use the dedicated service JWT and verify exact-token abort fencing, lost replies, concurrent deletion and recovery. See [the Facility and event handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
 
-### Manual checklist for current Operations source and Payment handoff
+### Historical Operations and Payment checklist
 
-**On the current branch**
+**At the recorded checkpoint**
 
 - [ ] Build the current checkout and run the focused tests above. Record the SHA plus working-tree diff and any skipped checks.
 - [ ] Follow [local setup sections 5.6–5.7](../../../LOCAL-SETUP.md). Use isolated aligned schemas, the existing policy seed, an explicit site late-tolerance choice, and an active CAR quota for the test site. Bind test subscriber queues before enabling the Operations outbox relay.
@@ -260,6 +260,12 @@ WHERE purpose = 'ADMISSION' AND state IN ('PREPARING', 'HELD');
 Facility's structure guard considers `HELD` tokens even after their deadline. Once old writers are stopped, the owner can resolve only a matched, abandoned development token after confirming there is no related committed booking or pending financial/confirmation obligation. Releasing such a Facility row removes its structure fence. Preserve any token tied to a committed or unresolved effect until its owner reconciles that effect. A fresh, separately initialized development database has no historical token fence and starts without the original database's history. B4 applies no migration or data reset. The Operations terms table, FK and accepted booking evidence stay in the initializer for existing rows and fixtures.
 
 ## Checkpoint D coordinated cutover and recovery
+
+For the reviewed payment correction, verify the merchant-channel callback destination and ingress and bind `smartpark-operation-reservation-payment-notification-v1` to the existing `smartpark.payment.payment-succeeded.v1` exchange before enabling the rollout. The Operations broker role needs configure/read/write permissions for that endpoint and its retry/error topology. Preserve both existing settlement queues and their permissions. The new consumer accepts only `settlementClassification: "REVIEWED_RESERVATION_ORDER_PAID"`. This additive field is emitted by Payment only for the committed reviewed order transition to PAID. Older messages and unknown values continue through existing consumers without generating the new client notification.
+
+Deploy the canonical Payment application error envelope and its Operations and frontend callers together. Check the reviewed financial notification while Operations confirmation is pending and when entitlement is denied. Verify the original H, callback retry outcome, one financial event per paid transition, the independent realtime endpoint, and the working legacy checkout status reconciliation. The original incident still needs merchant delivery history and separately authorized recovery. [Log and verification procedure](../postman/SPARK-273-manual-test-guide.md#trace-reviewed-payos-settlement)
+
+For the post-Checkpoint-E Operations build, verify `reservation_quota_configs` before deployment. An existing local Operations volume needs the separately authorized [schema adoption](../../02-architecture/database/microservices/03-parking-operations-service-db-docs.md#local-adoption-of-the-reservation-quota-schema). A fresh normally created Owner site needs effective policy, CAR tariff and an eligible slot. No additional quota or capacity seed is required. Run the [unconfigured and configured customer cases](../postman/SPARK-273-manual-test-guide.md#owner-created-site-and-optional-quota-acceptance) and record both outcomes before declaring the correction verified.
 
 1. Quiesce new admissions for the cutover. With a read-only Operations connection, run the two queries below. Record any IDs, deadlines and state for the deployment owner before retiring the old workers. A new binary cannot discover pre-D obligations by scanning.
 2. Prepare a schema matching the original Operations initializer, including its twelve Quartz 4.5.0 tables, keys and indexes plus the revised reservation request columns. Existing pre-D tables retain obsolete NOT NULL constraints when merely rerunning CREATE IF NOT EXISTS. The initializer provisions a compatible database; an existing database needs an owner-reviewed schema deployment. Never run the destructive upstream Quartz sample.

@@ -32,7 +32,9 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<OperationalPolicyDraftRow>(modelBuilder, "operational_policy_drafts");
         modelBuilder.Entity<OperationalPolicyDraftRow>().Property(x => x.DraftPayload).HasColumnType("jsonb");
         modelBuilder.Entity<OperationalPolicyDraftRow>().HasIndex(x => x.SiteId).IsUnique();
-        Map<OperationalCapacityConfig>(modelBuilder, "operational_capacity_configs");
+        Map<ReservationQuotaConfig>(modelBuilder, "reservation_quota_configs");
+        modelBuilder.Entity<ReservationQuotaConfig>().HasIndex(x => new { x.TenantId, x.SiteId, x.VehicleType })
+            .IsUnique().HasDatabaseName("uq_reservation_quota_scope");
         Map<ReservationCancellationEvidence>(modelBuilder, "reservation_cancellation_evidence");
         modelBuilder.Entity<ReservationCancellationEvidence>().Property(x => x.PolicySnapshot).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationCancellationEvidence>().HasIndex(x => x.ReservationId).IsUnique();

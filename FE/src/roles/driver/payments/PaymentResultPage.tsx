@@ -39,7 +39,7 @@ function AccountPaymentResult() {
   const transactionId = params.get("transactionId") ?? ""
   const hint = params.get("requestId")
 
-  const [result, setResult] = useState<ResultState>("checking")
+  const [lastResult, setResult] = useState<ResultState>("checking")
   const [detail, setDetail] = useState<PaymentStatusResponse | null>(null)
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
@@ -49,7 +49,11 @@ function AccountPaymentResult() {
 
   const boundOrder = orderId || detail?.orderId || ""
   const requestId = lookup?.orderId === boundOrder ? lookup.requestId : null
-  const progress = useReservationProgress(requestId)
+  const progress = useReservationProgress(requestId, Boolean(requestId && lookup?.state !== "HISTORICAL"))
+  const checkout = progress.checkout
+  const matchingCheckout = checkout && checkout !== "UNAVAILABLE" &&
+    checkout.orderId?.toLowerCase() === boundOrder.toLowerCase() ? checkout : null
+  const result = matchingCheckout?.state === "PAID" ? "success" : lastResult
   const reservation = requestId && progress.snapshot?.reservationId === requestId ? progress.snapshot : null
   const reservationState = reservation?.reservationState
   useEffect(() => {
@@ -169,7 +173,7 @@ function AccountPaymentResult() {
 
   const confirmed = reservationState === "CONFIRMED"
   const closed = reservationState && closedReservations.has(reservationState)
-  const orderClosed = requestId && lookup?.state === "CLOSED"
+  const orderClosed = requestId && (matchingCheckout?.state ?? lookup?.state) === "CLOSED"
   const title = confirmed ? "Reservation confirmed" : closed ? `Reservation ${formatStatus(reservationState).toLowerCase()}`
     : orderClosed ? "Reservation payment order closed"
     : requestId && result === "success" ? "Payment received. Awaiting reservation confirmation." : paymentTitle
@@ -221,7 +225,7 @@ function AccountPaymentResult() {
             </div>
             <div>
               <dt>Last reported payment status</dt>
-              <dd>{formatStatus(detail.status)}</dd>
+              <dd>{formatStatus(result === "success" ? "SUCCESS" : detail.status)}</dd>
             </div>
           </dl>
         )}

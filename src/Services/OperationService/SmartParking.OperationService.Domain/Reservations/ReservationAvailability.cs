@@ -3,7 +3,7 @@ namespace SmartParking.OperationService.Domain.Reservations;
 public static class ReservationAvailability
 {
     public static AvailabilityDecision Evaluate(CapacityDemand proposed, IReadOnlyList<CapacityDemand> claims,
-        IReadOnlyList<CapacityVisit> visits, IReadOnlyList<OperationalCapacityConfig> quotas,
+        IReadOnlyList<CapacityVisit> visits, int? maxReservationQuota,
         DateTimeOffset evaluatedAt, TimeSpan occupancyProjection,
         IReadOnlyList<CapacityAllocation>? unresolvedAllocations = null, CancellationToken cancellationToken = default)
     {
@@ -11,10 +11,7 @@ public static class ReservationAvailability
         if (proposed.EffectiveSlot is not Guid selected || selected == Guid.Empty)
             throw new ArgumentException("Availability requires a selected slot.", nameof(proposed));
 
-        var siteLimits = quotas.Where(q => q.SpatialUnitId == null).ToArray();
-        if (siteLimits.Length != 1 || !siteLimits[0].IsActive || siteLimits[0].MaxReservationQuota < 0 ||
-            siteLimits[0].MaxReservationQuota > siteLimits[0].TotalPhysicalCapacity)
-            return new("CAPACITY_CONFIGURATION_REQUIRED");
+        if (maxReservationQuota is < 0) return new("RESERVATION_QUOTA_CONFIGURATION_INVALID");
 
         var bookings = claims.Where(c => c.Id != proposed.Id).Append(proposed).ToArray();
         var horizon = evaluatedAt + occupancyProjection;
@@ -31,7 +28,7 @@ public static class ReservationAvailability
         {
             cancellationToken.ThrowIfCancellationRequested();
             var decision = EvaluateAt(selected, proposed.Id, at, horizon, bookings, visits, unresolvedAllocations,
-                siteLimits[0].MaxReservationQuota);
+                maxReservationQuota);
             if (!decision.Allowed) return decision;
         }
         return new(null);
@@ -39,7 +36,7 @@ public static class ReservationAvailability
 
     private static AvailabilityDecision EvaluateAt(Guid selected, Guid proposedId, DateTimeOffset at, DateTimeOffset horizon,
         CapacityDemand[] bookings, IReadOnlyList<CapacityVisit> visits,
-        IReadOnlyList<CapacityAllocation>? unresolvedAllocations, int quota)
+        IReadOnlyList<CapacityAllocation>? unresolvedAllocations, int? quota)
     {
         var observations = visits.Where(v => v.Entry <= at)
             .Select(v => v.LocateAt(at, horizon)).Where(v => v.HasValue).Select(v => v.GetValueOrDefault()).ToArray();
@@ -52,7 +49,7 @@ public static class ReservationAvailability
         foreach (var booking in bookings)
         {
             var live = booking.Start <= at && at < booking.End;
-            if (live && booking.EffectiveSlot.HasValue && booking.CountsQuota) quotaUsage++;
+            if (quota.HasValue && live && booking.EffectiveSlot.HasValue && booking.CountsQuota) quotaUsage++;
 
             var effective = (booking.Allocations ?? []).Where(a => a.ActiveAt(at)).ToArray();
             var original = live ? booking.EffectiveSlot : null;
@@ -83,7 +80,7 @@ public static class ReservationAvailability
                 return new("SLOT_TIME_CONFLICT");
         }
 
-        if (quotaUsage > quota) return new("RESERVATION_QUOTA_EXCEEDED");
+        if (quota is int limit && quotaUsage > limit) return new("RESERVATION_QUOTA_EXCEEDED");
         if (needsReconciliation) return new("OCCUPANCY_RECONCILIATION_REQUIRED");
         if (observations.Any(v => v.Slot == selected &&
             (v.Visit.ReservationId is not Guid owner || !linkedClaims.Contains(owner))))
