@@ -3,11 +3,12 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using SmartParking.NotificationAuditService.API.Middleware;
+using SmartParking.NotificationAuditService.API.Extensions;
 using SmartParking.NotificationAuditService.API.Services;
 using SmartParking.NotificationAuditService.Application;
 using SmartParking.NotificationAuditService.Application.Common.Interfaces.Services;
 using SmartParking.NotificationAuditService.Infrastructure;
+using SmartParking.NotificationAuditService.Infrastructure.Security;
 using SmartParking.NotificationAuditService.Persistence;
 using SmartParking.NotificationAuditService.Persistence.Context;
 using SmartParking.NotificationAuditService.Persistence.Seed;
@@ -31,37 +32,38 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 
-// JWT Authentication Setup (Supporting both RSA Public Key and HMAC SecretKey with dynamic configuration)
+// JWT Authentication Setup (Supports UserService JWKS RS256, static RSA Public Key, and HMAC SecretKey)
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
 
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-    .Configure<IConfiguration>((options, configuration) =>
+    .Configure<IConfiguration, IJwksSigningKeyProvider>((options, configuration, jwksProvider) =>
     {
         var jwtSection = configuration.GetSection("Jwt");
-        var issuer = jwtSection["Issuer"] ?? "SmartParking.UserService";
-        var audience = jwtSection["Audience"] ?? "SmartParking";
+        var jwtValidationSection = configuration.GetSection("JwtValidation");
+        var issuer = jwtValidationSection["Issuer"] ?? jwtSection["Issuer"] ?? "SmartParking.UserService";
+        var audience = jwtValidationSection["Audience"] ?? jwtSection["Audience"] ?? "SmartParking";
         var secretKey = jwtSection["SecretKey"] ?? jwtSection["Key"];
         var rsaPublicKeyPem = jwtSection["PublicKeyPem"] ?? jwtSection["PublicKey"];
 
-        var signingKeys = new List<SecurityKey>();
+        var staticSigningKeys = new List<SecurityKey>();
 
         if (!string.IsNullOrWhiteSpace(rsaPublicKeyPem))
         {
             var rsa = RSA.Create();
             rsa.ImportFromPem(rsaPublicKeyPem);
-            signingKeys.Add(new RsaSecurityKey(rsa));
+            staticSigningKeys.Add(new RsaSecurityKey(rsa));
         }
 
         if (!string.IsNullOrWhiteSpace(secretKey))
         {
-            signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)));
+            staticSigningKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)));
         }
 
-        if (signingKeys.Count == 0)
+        if (!jwksProvider.IsConfigured && staticSigningKeys.Count == 0)
         {
             const string defaultDevKey = "SmartParkingDevSecretKeyForLocalJwtTokenVerificationOnlyDoNotUseInProd123456!";
-            signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(defaultDevKey)));
+            staticSigningKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(defaultDevKey)));
         }
 
         options.RequireHttpsMetadata = false;
@@ -69,19 +71,67 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuers = new[] { issuer, "SmartParking.UserService", "SmartParking.UserService.Demo" },
+            ValidIssuers = new[] { issuer, jwtSection["Issuer"] ?? issuer, "SmartParking.UserService", "SmartParking.UserService.Demo" }
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.Ordinal),
             ValidateAudience = true,
-            ValidAudiences = new[] { audience, "SmartParking", "SmartParking.Postman.Demo" },
+            ValidAudiences = new[] { audience, jwtSection["Audience"] ?? audience, "SmartParking", "SmartParking.Postman.Demo" }
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.Ordinal),
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKeys = signingKeys,
+            IssuerSigningKeys = staticSigningKeys,
+            IssuerSigningKeyResolver = (_, _, kid, _) =>
+            {
+                var resolved = new List<SecurityKey>(staticSigningKeys);
+                if (jwksProvider.IsConfigured)
+                {
+                    foreach (var jwk in jwksProvider.ResolveKeys(kid))
+                    {
+                        resolved.Add(new RsaSecurityKey(jwk.Parameters) { KeyId = jwk.Kid });
+                    }
+                }
+                return resolved;
+            },
             ClockSkew = TimeSpan.FromMinutes(1),
             NameClaimType = "sub",
             RoleClaimType = "role"
         };
     });
 
-builder.Services.AddAuthorization();
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(context =>
+            context.User.Claims.Any(c =>
+                (c.Type == "role" || c.Type == System.Security.Claims.ClaimTypes.Role) &&
+                string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase)));
+    });
+});
+
+var allowedCorsOrigins = (builder.Configuration["Cors:AllowedOrigins"]
+    ?? builder.Configuration["SMARTPARK_NOTIFICATION_CORS_ORIGINS"]
+    ?? "http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443")
+    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendCors", policy =>
+    {
+        if (allowedCorsOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedCorsOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
+    });
+});
+builder.Services.AddNotificationAuditApiErrorResponses();
+
 
 // Clean Architecture DI registrations
 builder.Services.AddApplicationServices();
@@ -108,13 +158,15 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseRouting();
+app.UseNotificationAuditApiErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
+app.UseCors("FrontendCors");
 app.UseAuthentication();
 app.UseAuthorization();
 

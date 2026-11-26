@@ -85,6 +85,7 @@ else
 }
 
 builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
+builder.Services.AddUserJwtAuthentication(builder.Configuration, builder.Environment);
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();

@@ -24,6 +24,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<Application.Reservations.IReservationTermsRepository, ReservationTermsRepository>();
         services.AddScoped<Application.Reservations.IReservationFacilityDependencyRepository, ReservationFacilityDependencyRepository>();
         services.AddScoped<IParkingSessionRepository, ParkingSessionRepository>();
+        services.AddScoped<ISubscribedVehicleRepository, SubscribedVehicleRepository>();
         services.AddScoped<ISlotAllocationRepository, SlotAllocationRepository>();
         services.TryAddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<Application.Reservations.IReservationRequestRepository, ReservationRequestRepository>();
@@ -37,6 +38,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<IVehicleLocationRepository, VehicleLocationRepository>();
         services.AddScoped<IOccupancyOutboxStore, OccupancyOutboxStore>();
         services.AddScoped<Application.Policies.Ports.ILotPolicyRepository, LotPolicyRepository>();
+        services.AddScoped<Application.PassPlans.Ports.IPassPlanRepository, PassPlanRepository>();
         return services;
     }
 }

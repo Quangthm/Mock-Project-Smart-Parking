@@ -1,5 +1,5 @@
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
-import type { Site } from "../../../lib/parkingApi"
+import type { Operator, Site } from "../../../lib/parkingApi"
 import { parkingApi } from "../../../lib/parkingApi"
 import { useState } from "react"
 import { createPortal } from "react-dom"
@@ -10,12 +10,16 @@ import { SiteManagementDialogs } from "./SiteManagementDialogs"
 import { LotActionMenu } from "./LotActionMenu"
 import { OnboardingWizard } from "./CreateParkingLotForOwner"
 
-export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, created: boolean) => void }) {
-  const model = useSiteManagement(onSiteCreated)
+export function SiteManagement({ onSiteCreated, operators, rosterDenied }: {
+  onSiteCreated: (site: Site, created: boolean) => void
+  operators: Operator[]
+  rosterDenied: boolean
+}) {
+  const model = useSiteManagement(onSiteCreated, operators)
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [createError, setCreateError] = useState("")
   const {
-    sites, operators, loading, error, message, setMessage, reload, setReload,
+    sites, loading, error, message, setMessage, reload, setReload,
     editingSite, setEditingSite, showFormModal, setShowFormModal,
     inspectSite, setInspectSite, assignModal, setAssignModal,
     assignBusy, assignError, searchTerm, setSearchTerm, statusFilter, setStatusFilter,
@@ -171,7 +175,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
                     {/* Assigned Operators Relationship */}
                     <td className="px-4 py-3.5">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {siteOperators.length > 0 ? (
+                        {rosterDenied ? <span className="text-xs text-[var(--muted)]">Operator roster unavailable</span> : siteOperators.length > 0 ? (
                           <>
                             {siteOperators.slice(0, 3).map((op) => (
                               <span
@@ -200,8 +204,10 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
                     {/* Actions */}
                     <td className="px-3 py-2.5 text-center align-middle!">
                       <LotActionMenu name={site.name} actions={[
-                        { label: "Dispatch Staff", icon: "users", run: () => handleOpenAssignModal(site) },
-                        { label: "Roster", icon: "file", run: () => setInspectSite(site) },
+                        ...(!rosterDenied ? [
+                          { label: "Dispatch Staff", icon: "users" as const, run: () => handleOpenAssignModal(site) },
+                          { label: "Roster", icon: "file" as const, run: () => setInspectSite(site) },
+                        ] : []),
                         { label: "Layout", icon: "grid", run: () => handleNavigateToStructure(site.id) },
                         { label: "Edit", icon: "clipboard", run: () => { setEditingSite(site); setShowFormModal(true) } },
                       ]} />
@@ -220,7 +226,7 @@ export function SiteManagement({ onSiteCreated }: { onSiteCreated: (site: Site, 
         </div>
       )}
 
-      <SiteManagementDialogs model={model} />
+      <SiteManagementDialogs model={rosterDenied ? { ...model, assignModal: null, inspectSite: null } : model} />
       {showCreateWizard && typeof document !== "undefined" && createPortal(
         <div role="dialog" aria-modal="true" aria-label="Add parking site" className="fixed inset-0 z-[1000] flex items-start justify-center bg-black/75 p-3 sm:p-6">
           <div className="card flex max-h-full w-full max-w-[800px] flex-col overflow-hidden p-3 sm:p-5">

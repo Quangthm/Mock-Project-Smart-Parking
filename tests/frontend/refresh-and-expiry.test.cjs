@@ -27,6 +27,7 @@ function squash(source) {
 }
 
 const operatorManagement = read('roles/owner/operators/OperatorManagement.tsx');
+const ownerDashboard = read('roles/owner/dashboard/OwnerDashboard.tsx');
 const useLotStatus = read('roles/operator/parking-lot/useLotStatus.ts');
 const operatorAssignments = read('roles/operator/dashboard/OperatorAssignments.tsx');
 const operatorDashboard = read('roles/operator/dashboard/OperatorDashboard.tsx');
@@ -36,19 +37,21 @@ const emergencyPanel = read('roles/operator/emergency/EmergencyPanel.tsx');
 // Hotfix 2.1 — Owner -> Operators Refresh
 // ---------------------------------------------------------------------------
 
-test('OperatorManagement re-reads the roster on Refresh even when a live list is supplied', () => {
+test('OperatorManagement wires its Refresh button to onRefreshRoster', () => {
   assert.ok(
-    squash(operatorManagement).includes(
-      'liveOperators === undefined || reload > 0 ? operatorsApi.list() : Promise.resolve(null)',
-    ),
-    'the roster effect must fetch when reload > 0 despite liveOperators',
+    squash(operatorManagement).includes('disabled={rosterLoading} onClick={onRefreshRoster}'),
+    'OperatorManagement Refresh button must invoke onRefreshRoster',
   );
 });
 
-test('OperatorManagement Refresh button bumps reload and notifies the owner list', () => {
+test('OwnerDashboard refreshes operators via operatorsApi.list when onRefreshRoster fires', () => {
   assert.ok(
-    squash(operatorManagement).includes('setReload((v) => v + 1) onOperatorsChanged()'),
-    'Refresh must bump reload AND call onOperatorsChanged',
+    squash(ownerDashboard).includes('onRefreshRoster={() => refreshRoster.current(true)}'),
+    'OwnerDashboard must wire onRefreshRoster to refreshRoster.current(true)',
+  );
+  assert.ok(
+    ownerDashboard.includes('operatorsApi.list()'),
+    'OwnerDashboard refreshRoster must re-read operatorsApi.list()',
   );
 });
 

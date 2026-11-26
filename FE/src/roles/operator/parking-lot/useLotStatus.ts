@@ -766,7 +766,7 @@ export function useLotStatus(
   useEffect(() => {
     const handleCheckIn = (event: Event) => {
       const detail = (event as CustomEvent<{
-        siteId: string; plate: string; imageUrl?: string; session?: DemoSlotSession; vehicleType?: string
+        siteId: string; plate: string; imageUrl?: string; session?: DemoSlotSession; vehicleType?: string; slotId?: string
       }>).detail
       if (!site || detail.siteId !== site.id) return
       const imageUrl = detail.imageUrl || demoVehicleImage(Date.now())
@@ -780,7 +780,8 @@ export function useLotStatus(
       const availableSlots = site.slots.filter((slot) =>
         slot.status === "available" && !occupiedIds.has(slot.id) && !pendingIds.has(slot.id),
       )
-      const slot = availableSlots[Math.floor(Math.random() * availableSlots.length)]
+      const slot = availableSlots.find((candidate) => candidate.id === detail.slotId)
+        ?? availableSlots[Math.floor(Math.random() * availableSlots.length)]
       if (!slot) return
       setPendingDemoAssignments((current) => ({ ...current, [slot.id]: vehicle }))
       const storageKey = pendingCheckInStorageKey(site.id)

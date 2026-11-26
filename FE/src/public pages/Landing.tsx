@@ -77,6 +77,7 @@ export function Landing() {
           <div className="hero-actions">
             <Button variant="primary" trailingIcon={<UntitledIcon name="arrow-right" size={18} />} onClick={() => setView("sign-in")}>Find parking</Button>
             <Button variant="outline" onClick={() => setView("business")}>For parking partners</Button>
+            <a className="btn-outline" href="/demo">View 3D Demo</a>
           </div>
           <div className="hero-facts" aria-label="How SmartParking works">
             <div><strong>01</strong><span>Discover nearby</span></div>

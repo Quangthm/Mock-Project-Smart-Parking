@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using SmartParking.OperationService.Application;
+using SmartParking.OperationService.API.Authentication;
 using SmartParking.OperationService.API.Controllers;
 using SmartParking.OperationService.API.Hubs;
 using SmartParking.OperationService.API.Middleware;
@@ -27,12 +28,16 @@ public static class OperationHost
         builder.AddOwnReservationReadDependencies();
         var admissionEnabled = builder.Configuration.GetValue<bool>("ReservationAdmission:Enabled");
         var sharedHubEnabled = builder.Configuration.GetValue<bool>("Realtime:SharedMultiSiteHubEnabled");
-        var authEnabled = admissionEnabled || ConsumerAuthenticationRegistration.IsConfigured(builder.Configuration);
+        var allowLoopbackHttp = !admissionEnabled && builder.Environment.IsEnvironment("Testing");
+        var consumerAuthEnabled = admissionEnabled || ConsumerAuthenticationRegistration.IsConfigured(builder.Configuration, allowLoopbackHttp);
         builder.Services.AddAuthorization();
+        builder.Services.AddPassPlanOwnerPolicy();
         builder.Services.AddScoped<ICurrentActor, HttpCurrentActor>();
-        if (authEnabled)
+        if (consumerAuthEnabled)
         {
-            builder.Services.AddConsumerAuthentication(builder.Configuration);
+            builder.Services.AddConsumerAuthentication(
+                builder.Configuration,
+                allowLoopbackHttp: allowLoopbackHttp);
             builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
                 Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, options =>
                 {
@@ -53,6 +58,29 @@ public static class OperationHost
                     };
                 });
         }
+        else
+        {
+            builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                    {
+                        OnChallenge = async context =>
+                        {
+                            context.HandleResponse();
+                            context.Response.Headers.WWWAuthenticate = "Bearer";
+                            await ApiErrors.WriteAsync(context.HttpContext, 401, "UNAUTHENTICATED",
+                                "Authentication is required.", ct: context.HttpContext.RequestAborted);
+                        },
+                        OnForbidden = async context =>
+                        {
+                            await ApiErrors.WriteAsync(context.HttpContext, 403, "FORBIDDEN", "Access is denied.",
+                                ct: context.HttpContext.RequestAborted);
+                        }
+                    };
+                });
+        }
+        builder.Services.AddPassPlanServiceAuthentication(builder.Configuration);
         builder.Services.AddReservationMessaging(builder.Configuration);
         builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
         ApiErrors.Configure(builder.Services);
@@ -89,7 +117,7 @@ public static class OperationHost
         app.Use(async (context, next) =>
         {
             context.Response.Headers.CacheControl = "no-store";
-            if (!authEnabled && context.Request.Path.StartsWithSegments("/ws/parking-lots"))
+            if (!consumerAuthEnabled && context.Request.Path.StartsWithSegments("/ws/parking-lots"))
             {
                 await ApiErrors.WriteAsync(context, 503, "AUTHENTICATION_KEYS_UNAVAILABLE",
                     "Realtime authentication is not configured.", ct: context.RequestAborted);
@@ -113,7 +141,7 @@ public static class OperationHost
             await next(context);
         });
         app.UseMiddleware<InternalServiceKeyMiddleware>();
-        if (authEnabled) app.UseAuthentication();
+        app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
         app.MapParkingSearch();
@@ -121,7 +149,7 @@ public static class OperationHost
         {
             options.CloseOnAuthenticationExpiration = true;
         });
-        if (authEnabled)
+        if (consumerAuthEnabled)
         {
             singleSiteHub.RequireAuthorization();
         }
@@ -131,7 +159,7 @@ public static class OperationHost
             {
                 options.CloseOnAuthenticationExpiration = true;
             });
-            if (authEnabled)
+            if (consumerAuthEnabled)
                 sharedHub.RequireAuthorization();
         }
         return app;

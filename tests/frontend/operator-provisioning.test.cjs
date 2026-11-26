@@ -198,7 +198,7 @@ test('operator screen loads backend accounts and active sites, then displays a c
   const h = hooks();
   const api = { operatorsApi: { list: async () => [operator] }, parkingApi: { list: async () => [site, { ...site, id: 'inactive', isActive: false }] } };
   const component = operatorScreen(h, api);
-  const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() {} });
+  const render = () => h.render(component, { selectedSiteId: 'all', liveOperators: [operator], onOperatorsChanged() {}, onRefreshRoster() {} });
   render(); h.effects.splice(0).forEach(effect => effect()); await settle();
   assert.ok(nodes(render()).some(node => node.props?.children === operator.fullName));
   nodes(render()).find(node => node.type === 'button' && node.props.className?.includes('btn-primary')).props.onClick();
@@ -212,7 +212,7 @@ test('operator screen loads backend accounts and active sites, then displays a c
 test('Create Operator opens with zero backend sites and passes an empty list to its form', async () => {
   const h = hooks();
   const component = operatorScreen(h, { operatorsApi: { list: async () => [] }, parkingApi: { list: async () => [] } });
-  const render = () => h.render(component, { selectedSiteId: 'all', onOperatorsChanged() {} });
+  const render = () => h.render(component, { selectedSiteId: 'all', liveOperators: [], onOperatorsChanged() {}, onRefreshRoster() {} });
   render(); h.effects.splice(0).forEach(effect => effect()); await settle();
   const button = nodes(render()).find(node => node.type === 'button' && node.props.className?.includes('btn-primary'));
   assert.equal(button.props.disabled, false);
@@ -222,18 +222,18 @@ test('Create Operator opens with zero backend sites and passes an empty list to 
   assert.equal(form.props.sites.length, 0);
 });
 
-function siteManagementHook(h, parkingApi, operatorsApi) {
+function siteManagementHook(h, parkingApi, operators, onSiteCreated = () => {}) {
   return load('roles/owner/parking-lots/useSiteManagement.ts', {
     react: h.react,
     '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id' } }) },
-    '../../../lib/parkingApi': { parkingApi, operatorsApi },
-  }).useSiteManagement;
+    '../../../lib/parkingApi': { parkingApi },
+  }).useSiteManagement.bind(null, onSiteCreated, operators);
 }
 
 test('site management waits for backend sites and filters the committed list', async () => {
   const h = hooks(), pending = deferred(), saved = [];
-  const hook = siteManagementHook(h, { list: () => pending.promise }, { list: async () => [operator] });
-  const render = () => h.render(hook, (value, created) => saved.push([value, created]));
+  const hook = siteManagementHook(h, { list: () => pending.promise }, [operator], (value, created) => saved.push([value, created]));
+  const render = () => h.render(hook);
   assert.equal(render().loading, true);
   h.effects.splice(0).forEach(effect => effect());
   assert.equal(render().sites.length, 0);
@@ -247,7 +247,7 @@ test('site management waits for backend sites and filters the committed list', a
 
 test('site management shows a backend failure without inventing fixture sites', async () => {
   const h = hooks();
-  const hook = siteManagementHook(h, { list: async () => { throw new Error('Site service unavailable.'); } }, { list: async () => [] });
+  const hook = siteManagementHook(h, { list: async () => { throw new Error('Site service unavailable.'); } }, []);
   const render = () => h.render(hook, () => {});
   render(); h.effects.splice(0).forEach(effect => effect()); await settle();
   assert.equal(render().loading, false);
@@ -272,24 +272,30 @@ test('Sites screen displays backend site address and assigned operator, and open
     './SiteManagementDialogs': { SiteManagementDialogs: 'dialogs' },
     './CreateParkingLotForOwner': { OnboardingWizard: 'wizard' },
   }, { document: { body: {} } }).SiteManagement;
-  const render = () => h.render(component, { onSiteCreated() {} });
+  const render = () => h.render(component, { operators: [operator], rosterDenied: false, onSiteCreated() {} });
   assert.ok(nodes(render()).some(node => node.type === 'td' && node.props.children === realSite.address));
   assert.ok(nodes(render()).some(node => node.props?.title === `${operator.fullName} (${operator.email})`));
   nodes(render()).find(node => node.type === 'button' && node.props.className?.includes('btn-primary')).props.onClick();
   assert.ok(nodes(render()).some(node => node.type === 'wizard'));
 });
 
-test('Owner dashboard shares backend sites with overview and refreshes after site creation', async () => {
-  const h = hooks(); let listed = [site];
-  const api = { parkingApi: { list: async () => listed }, operatorsApi: { list: async () => [operator] } };
-  const component = load('roles/owner/dashboard/OwnerDashboard.tsx', {
+class AuthApiError extends Error {
+  constructor(status) { super('request rejected'); this.status = status; }
+}
+
+function dashboardScreen(h, api, watchOperators = () => () => {}) {
+  return load('roles/owner/dashboard/OwnerDashboard.tsx', {
     react: h.react, 'react/jsx-runtime': h.runtime,
-    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id', onboardingComplete: true } }) },
+    '../../../context/AppContext': { useApp: () => ({ user: { id: 'owner-id', role: 'owner', onboardingComplete: true } }) },
     '../../../lib/parkingApi': api,
+    '../../../lib/authApi': { AuthApiError, getSessionGeneration: () => 0 },
+    '../../../lib/operatorLive': { watchOperators },
+    '../../../components/feedback/ErrorBoundary': { ErrorBoundary: 'error-boundary' },
     '../../../lib/ownerLotSetup': { reconcileOwnerLotSetups: async () => {} },
     '../parking-lots/CreateParkingLotForOwner': { OnboardingWizard: 'onboarding' },
     './OwnerOverview': { OwnerOverview: 'overview' },
     '../operators/OperatorManagement': { OperatorManagement: 'operators' },
+    '../passes/OwnerPassPlans': { OwnerPassPlans: 'passes' },
     '../policies/PolicySettings': { PolicySettings: 'policies' },
     '../parking-lots/SiteManagement': { SiteManagement: 'sites' },
     '../parking-lots/LotManagement': { LotManagement: 'lots' },
@@ -297,6 +303,12 @@ test('Owner dashboard shares backend sites with overview and refreshes after sit
     '../structure/ParkingStructure': { ParkingStructure: 'structure' },
     '../../../components/layout/DashboardSidebar': { DashboardSidebar: 'sidebar' },
   }, { window: { addEventListener() {}, removeEventListener() {} } }).OwnerDashboard;
+}
+
+test('Owner dashboard shares backend sites with overview and refreshes after site creation', async () => {
+  const h = hooks(); let listed = [site];
+  const api = { parkingApi: { list: async () => listed }, operatorsApi: { list: async () => [operator] } };
+  const component = dashboardScreen(h, api);
   const render = () => h.render(component, {});
   render(); h.effects.splice(0).forEach(effect => effect()); await settle();
   const overview = nodes(render()).find(node => node.type === 'overview');
@@ -310,6 +322,51 @@ test('Owner dashboard shares backend sites with overview and refreshes after sit
   render().props.groups.flatMap(group => group.items).find(item => item.id === 'structure').onClick();
   const structure = nodes(render()).find(node => node.type === 'structure');
   assert.deepEqual(Array.from(structure.props.sites, value => value.id), [site.id, 'new-site']);
+});
+
+test('Owner dashboard suspends roster refresh on 403 and opens a new subscription only after explicit retry', async () => {
+  const h = hooks();
+  let requests = 0, subscriptions = 0, stops = 0, notify;
+  const component = dashboardScreen(h, {
+    parkingApi: { list: async () => [site] },
+    operatorsApi: { list: async () => {
+      if (++requests === 2) throw new AuthApiError(403);
+      return [operator];
+    } },
+  }, onChanged => {
+    subscriptions++;
+    notify = onChanged;
+    return () => { stops++; };
+  });
+  const render = () => h.render(component, {});
+  render(); h.effects.splice(0).forEach(effect => effect()); await settle();
+  assert.equal(requests, 1);
+  assert.equal(subscriptions, 1);
+  notify(); await settle();
+  assert.equal(stops, 1);
+  notify(); await settle();
+  assert.equal(requests, 2);
+  const alert = nodes(render()).find(node => node.props?.role === 'alert');
+  assert.match(alert.props.children[0], /permission/i);
+  nodes(alert).find(node => node.type === 'button').props.onClick();
+  await settle();
+  assert.equal(requests, 3);
+  assert.equal(subscriptions, 2);
+});
+
+test('initial operator 403 leaves Owner sites visible without opening a roster connection', async () => {
+  const h = hooks();
+  let requests = 0;
+  const component = dashboardScreen(h, {
+    parkingApi: { list: async () => [site] },
+    operatorsApi: { list: async () => { requests++; throw new AuthApiError(403); } },
+  }, () => assert.fail('A denied roster must not open SignalR'));
+  const render = () => h.render(component, {});
+  render(); h.effects.splice(0).forEach(effect => effect()); await settle();
+  const overview = nodes(render()).find(node => node.type === 'overview');
+  assert.equal(requests, 1);
+  assert.equal(overview.props.sites[0].id, site.id);
+  assert.equal(overview.props.rosterUnavailable, true);
 });
 
 function structureScreen(h, parkingApi = {}) {

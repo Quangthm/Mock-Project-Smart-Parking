@@ -272,6 +272,7 @@ const parking3DConfig = load('lib/3d/parking3DConfig.ts', {});
 
 const operatorApiImports = {
   './authApi': { request: async () => ({ success: true, data: null }) },
+  './operatorCheckoutReturn': { operatorCheckoutReturnUrls: () => ({}) },
   './store': { store: { getLots: () => [] } },
   './3d/ownerModelStorage': { loadOwnerModelUrl: async () => null },
   './3d/parking3DConfig': parking3DConfig,

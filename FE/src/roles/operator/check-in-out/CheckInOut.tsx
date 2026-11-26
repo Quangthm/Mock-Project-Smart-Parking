@@ -58,7 +58,7 @@ function notifyDemoSlotScan(
       plate,
       imageUrl,
       vehicleType: session?.vehicleType,
-      slotId: session?.slotId,
+      slotId: session?.slotId ?? undefined,
       session,
     })
     window.localStorage.setItem(storageKey, JSON.stringify(pending))
@@ -97,7 +97,7 @@ function notifyDemoSlotScan(
         vehicleType: session?.vehicleType,
         sessionId: session?.id,
         reservationId: session?.reservationId,
-        slotId: session?.slotId,
+        slotId: session?.slotId ?? undefined,
         session: session
           ? {
               id: session.id,
@@ -136,6 +136,7 @@ export function CheckInOut({
   // Quick lookup state
   const [quickInput, setQuickInput] = useState(initialPlateQuery)
   const [quickResult, setQuickResult] = useState<QuickGateResult | null>(null)
+  const [preferredWalkInSlotId, setPreferredWalkInSlotId] = useState("")
   const [quickError, setQuickError] = useState("")
   const [latestScanImage, setLatestScanImage] = useState("")
   const [latestImageIsUpload, setLatestImageIsUpload] = useState(false)
@@ -165,8 +166,25 @@ export function CheckInOut({
   const checkoutReference = confirmingAction?.booking.id ??
     (quickResult?.kind === "reservation" ? quickResult.booking.id : quickResult?.session?.id)
   const checkoutPrice = preparedCheckout && preparedCheckout.siteId === lot?.id && preparedCheckout.referenceId === checkoutReference
-    ? preparedCheckout.result.order.amount : null
+    ? preparedCheckout.result.isMonthlyCovered ? 0 : preparedCheckout.result.order?.amount ?? null
+    : null
   const [pricingLoading, setPricingLoading] = useState(false)
+
+  function walkInSlotCandidates(vehicleType?: string) {
+    const normalizedVehicleType = vehicleType?.toUpperCase().includes("MOTO") ||
+      vehicleType?.toUpperCase().includes("BIKE")
+      ? "MOTORCYCLE"
+      : vehicleType?.toUpperCase().includes("CAR")
+        ? "CAR"
+        : undefined
+    return (lot?.slots ?? []).filter((slot) => slot.status === "available" &&
+      slot.physicalState !== "OCCUPIED" &&
+      (!slot.reservationState || slot.reservationState === "UNRESERVED") &&
+      slot.isBookable !== false &&
+      (slot.vehicleType === "ANY" || !normalizedVehicleType || slot.vehicleType.toUpperCase() === normalizedVehicleType))
+  }
+
+  useEffect(() => setPreferredWalkInSlotId(""), [lot?.id])
 
   function slotLabel(booking: Booking) {
     return lot?.slots.find((slot) => slot.id === booking.slotId)?.number ?? booking.slotNumber
@@ -219,6 +237,30 @@ export function CheckInOut({
       unsubscribe()
     }
   }, [lot?.id])
+
+  useEffect(() => {
+    if (!lot || sessions.length === 0) return
+    try {
+      const pending = JSON.parse(localStorage.getItem("smartpark.pendingCheckout") ?? "null") as
+        { siteId?: string; referenceId?: string } | null
+      if (pending?.siteId !== lot.id || !pending.referenceId) return
+      const completed = sessions.some(session => session.status === "COMPLETED" &&
+        (session.id === pending.referenceId || session.reservationId === pending.referenceId))
+      if (!completed) return
+
+      localStorage.removeItem("smartpark.pendingCheckout")
+      setPreparedCheckout(null)
+      setPaymentMessage("Payment confirmed. Checkout is complete.")
+      setActionFeedback({ type: "success", message: "Payment confirmed and checkout completed." })
+      setQuickResult(null)
+      setQuickInput("")
+      setConfirmingAction(null)
+      showUiToast("Checkout completed", "Payment confirmation has been processed.")
+      onDataChanged?.()
+    } catch {
+      localStorage.removeItem("smartpark.pendingCheckout")
+    }
+  }, [lot?.id, sessions, realtimeRevision, onDataChanged])
 
   useEffect(() => {
     if (!lot) return
@@ -339,7 +381,7 @@ export function CheckInOut({
           vehicleType,
         }
         setQuickResult(result)
-        if (autoCheckIn) await executeWalkInAction(result, "check-in", imageData, vehicleType)
+        await executeWalkInAction(result, "check-in", imageData, vehicleType)
       }
     } finally {
       setLookupLoading(false)
@@ -357,8 +399,9 @@ export function CheckInOut({
 
     try {
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
+      let settlement: "PAID" | "PENDING" | "FREE" = "PAID"
       if (action === "check-out") {
-        const settlement = await settleCheckout(payment, {
+        settlement = await settleCheckout(payment, {
           referenceId: booking.id,
           accountId: booking.driverId,
           vehicleType: booking.vehicleType ?? "CAR",
@@ -371,7 +414,9 @@ export function CheckInOut({
       }
       const updatedBooking = action === "check-in"
         ? await reservationApi.checkIn(lot.id, booking.id, booking.licensePlate, imageData)
-        : booking
+        : settlement === "FREE"
+          ? await reservationApi.checkOut(lot.id, booking.id, booking.licensePlate, imageData)
+          : booking
 
       if (!onDataChanged) invalidateOperatorParkingSessions(lot.id, "mutation")
       setActionFeedback({
@@ -382,6 +427,7 @@ export function CheckInOut({
       setConfirmingAction(null)
       setQuickResult(null)
       setQuickInput("")
+      if (action === "check-in") setPreferredWalkInSlotId("")
       setLatestScanImage("")
       setLatestImageIsUpload(false)
       notifyDemoSlotScan(lot.id, action, updatedBooking.licensePlate, imageData, {
@@ -427,9 +473,11 @@ export function CheckInOut({
         plateNumber: result.kind === "reservation" ? result.booking.licensePlate : result.plate,
         imageData,
       })
-      if (!Number.isFinite(prepared.order.amount) || prepared.order.amount < 0) {
+      if (!prepared.isMonthlyCovered &&
+          (!prepared.order || !Number.isFinite(prepared.order.amount) || prepared.order.amount < 0)) {
         throw new Error("Payment Service returned an invalid amount.")
       }
+      if (prepared.isMonthlyCovered) setPaymentMessage("Monthly coverage applies. Amount due: 0 VND.")
       setPreparedCheckout({ siteId: lot.id, referenceId, result: prepared })
     } catch (error) {
       setPaymentMessage(error instanceof Error ? error.message : "Could not prepare checkout.")
@@ -447,7 +495,7 @@ export function CheckInOut({
     sessionId?: string
     reservationId?: string
     imageData?: string
-  }): Promise<"PAID" | "PENDING"> {
+  }): Promise<"PAID" | "PENDING" | "FREE"> {
     if (!lot) throw new Error("Select a parking site before processing payment.")
     const isTestPayOs = payment === "PAYOS_TEST"
     setPaymentMessage(isTestPayOs ? "Preparing a 2,000 VND PayOS test payment..." : "Calculating parking fee...")
@@ -476,18 +524,28 @@ export function CheckInOut({
     }
     setPaymentMessage(isTestPayOs
       ? "Test amount: 2,000 VND. The session completes only after PayOS confirms payment."
-      : `Amount due: ${prepared.order.amount.toLocaleString("vi-VN")} VND`)
+      : `Amount due: ${(prepared.isMonthlyCovered ? 0 : prepared.order?.amount ?? 0).toLocaleString("vi-VN")} VND`)
+    if (prepared.isMonthlyCovered) {
+      setPaymentMessage("Monthly coverage applies. Amount due: 0 VND.")
+      setPreparedCheckout(null)
+      return "FREE"
+    }
+    if (!prepared.order) throw new Error("Payment Service did not return a checkout order.")
     const key = `checkout:${lot.id}:${input.referenceId}${isTestPayOs ? ":development-test-2000" : ""}`
     const order = prepared.order
     localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
       orderId: order.orderId, referenceId: input.referenceId, siteId: lot.id, paymentMethod: isTestPayOs ? "PAYOS" : payment,
     }))
     if (payment === "CASH") {
-      await paymentApi.cash(order.orderId, key)
-      setPaymentMessage("Cash payment confirmed.")
+      const paid = await paymentApi.cash(order.orderId, key)
+      rememberCheckoutTransaction(order.orderId, paid.transactionId)
+      setPaymentMessage("Cash payment accepted. Waiting for checkout completion.")
+      return "PENDING"
     } else if (payment === "DEMO") {
-      await paymentApi.demoPay(order.orderId)
-      setPaymentMessage("Demo payOS payment confirmed.")
+      const paid = await paymentApi.demoPay(order.orderId)
+      rememberCheckoutTransaction(order.orderId, paid.transactionId)
+      setPaymentMessage("Demo payment accepted. Waiting for checkout completion.")
+      return "PENDING"
     } else {
       const checkout = await paymentApi.initiate(order.orderId, key, lot.id)
       localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
@@ -499,9 +557,21 @@ export function CheckInOut({
       setPaymentMessage("PayOS is pending. You can still choose Confirm to collect cash instead.")
       return "PENDING"
     }
-    localStorage.removeItem("smartpark.pendingCheckout")
-    setPreparedCheckout(null)
-    return "PAID"
+    return "PENDING"
+  }
+
+  function rememberCheckoutTransaction(orderId: string, transactionId: string) {
+    try {
+      const pending = JSON.parse(localStorage.getItem("smartpark.pendingCheckout") ?? "null") as
+        { orderId?: string } | null
+      if (pending?.orderId !== orderId) return
+      localStorage.setItem("smartpark.pendingCheckout", JSON.stringify({
+        ...pending,
+        transactionId,
+      }))
+    } catch {
+      // OperationService still completes the session from the RabbitMQ event.
+    }
   }
 
   async function executeWalkInAction(
@@ -518,11 +588,20 @@ export function CheckInOut({
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
       let session: WalkInParkingSession
       if (action === "check-in") {
+        const selectedSlotId = preferredWalkInSlotId
+        const selectedSlotType = lot.slots.find((slot) => slot.id === selectedSlotId)?.vehicleType
+        const requestedVehicleType = vehicleType ?? result.vehicleType ??
+          (selectedSlotType === "CAR" || selectedSlotType === "MOTORCYCLE" ? selectedSlotType : "CAR")
+        const candidates = walkInSlotCandidates(requestedVehicleType)
+        const slotId = selectedSlotId || (candidates.length
+          ? candidates[Math.floor(Math.random() * candidates.length)].id
+          : undefined)
         session = await reservationApi.walkInCheckIn(
           lot.id,
           result.plate,
           imageData,
-          vehicleType ?? result.vehicleType,
+          requestedVehicleType,
+          slotId,
         )
       } else {
         if (!result.session) throw new Error("The active walk-in session was not found.")
@@ -535,7 +614,9 @@ export function CheckInOut({
           imageData,
         })
         if (settlement === "PENDING") return
-        session = result.session
+        session = settlement === "FREE"
+          ? await reservationApi.walkInCheckOut(lot.id, result.session.id, result.plate, imageData)
+          : result.session
       }
       if (!onDataChanged) invalidateOperatorParkingSessions(lot.id, "mutation")
       setActionFeedback({
@@ -547,6 +628,7 @@ export function CheckInOut({
       showUiToast(action === "check-in" ? "Walk-in checked in" : "Walk-in checked out", `${session.licensePlate} · ${session.slotNumber ?? "No slot assigned"}`)
       setQuickResult(null)
       setQuickInput("")
+      if (action === "check-in") setPreferredWalkInSlotId("")
       setLatestScanImage("")
       setLatestImageIsUpload(false)
       notifyDemoSlotScan(lot.id, action, session.licensePlate, imageData, {
@@ -668,6 +750,19 @@ export function CheckInOut({
 
       {/* Manual entry follows the camera workflow in both directions. */}
       <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
+        {mode === "check-in" && (
+          <select
+            aria-label="Choose a parking slot (optional)"
+            className="mb-3 max-w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] sm:min-w-64"
+            value={preferredWalkInSlotId}
+            onChange={(event) => setPreferredWalkInSlotId(event.target.value)}
+          >
+            <option value="">Random available slot</option>
+            {walkInSlotCandidates().map((slot) => (
+              <option key={slot.id} value={slot.id}>{slot.number} · {slot.vehicleType}</option>
+            ))}
+          </select>
+        )}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="rounded-lg bg-[var(--primary)]/10 p-2 text-[var(--primary)]">
@@ -827,18 +922,18 @@ export function CheckInOut({
               >
                 Cancel
               </button>
-              {quickResult.action === "check-in" ? (
+              {quickResult.action === "check-in"
+                ? (quickResult.kind === "reservation" ? (
                 <button
                   type="button"
-                  className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                  className="btn-primary justify-center px-4 py-2 text-xs sm:shrink-0"
                   disabled={actionLoading || lookupLoading}
-                  onClick={() => quickResult.kind === "reservation"
-                    ? setConfirmingAction({ ...quickResult, imageData: latestScanImage || undefined })
-                    : void executeWalkInAction(quickResult, "check-in", latestScanImage || undefined, quickResult.vehicleType)}
+                  onClick={() => setConfirmingAction({ ...quickResult, imageData: latestScanImage || undefined })}
                 >
                   Confirm Check-In
                 </button>
-              ) : quickResult.kind === "walk-in" ? (
+                ) : null)
+                : quickResult.kind === "walk-in" ? (
                 <>
                   <button
                     type="button"

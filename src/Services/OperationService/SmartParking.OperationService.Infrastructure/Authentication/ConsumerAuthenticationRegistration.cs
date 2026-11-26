@@ -13,7 +13,7 @@ public static class ConsumerAuthenticationRegistration
     private const string DependencyFailure = "SmartParking.Authentication.KeysUnavailable";
     public static bool KeysUnavailable(HttpContext context) => context.Items.ContainsKey(DependencyFailure);
 
-    public static bool IsConfigured(IConfiguration configuration)
+    public static bool IsConfigured(IConfiguration configuration, bool allowLoopbackHttp = false)
     {
         var issuer = configuration["JwtValidation:Issuer"];
         var audience = configuration["JwtValidation:Audience"];
@@ -21,10 +21,15 @@ public static class ConsumerAuthenticationRegistration
         if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) ||
             !Uri.TryCreate(address, UriKind.Absolute, out var endpoint) || endpoint.Scheme is not ("https" or "http"))
             return false;
-        return endpoint.Scheme == "https" || configuration.GetValue<bool>("JwtValidation:AllowInsecureTransport");
+        return endpoint.Scheme == "https" ||
+            configuration.GetValue<bool>("JwtValidation:AllowInsecureTransport") ||
+            (allowLoopbackHttp && endpoint.IsLoopback);
     }
 
-    public static IServiceCollection AddConsumerAuthentication(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddConsumerAuthentication(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool allowLoopbackHttp = false)
     {
         var issuer = configuration["JwtValidation:Issuer"];
         var audience = configuration["JwtValidation:Audience"];
@@ -32,7 +37,9 @@ public static class ConsumerAuthenticationRegistration
         if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) ||
             !Uri.TryCreate(address, UriKind.Absolute, out var endpoint) || endpoint.Scheme is not ("https" or "http"))
             throw new InvalidOperationException("Configure JwtValidation issuer, audience and trusted JWKS URL.");
-        if (endpoint.Scheme != "https" && !configuration.GetValue<bool>("JwtValidation:AllowInsecureTransport"))
+        if (endpoint.Scheme != "https" &&
+            !configuration.GetValue<bool>("JwtValidation:AllowInsecureTransport") &&
+            !(allowLoopbackHttp && endpoint.IsLoopback))
             throw new InvalidOperationException("JWKS requires HTTPS unless protected/local HTTP is explicitly configured.");
 
         services.TryAddSingleton(TimeProvider.System);

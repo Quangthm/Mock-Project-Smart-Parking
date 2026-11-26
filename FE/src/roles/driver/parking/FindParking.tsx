@@ -12,8 +12,8 @@ import { ParkingDetailsPanel, type VehicleCapacityInfo } from "./ParkingDetailsP
 import { useApp } from "../../../context/AppContext"
 import { searchDiscoveryLots, type DiscoveryLotItem, type OriginSource } from "../../../lib/driverDiscoveryApi"
 import { parkingApi } from "../../../lib/parkingApi"
-import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
-import { mapOperationalLayoutSlots } from "../../../lib/driverSlotMapping"
+import { getSessionGeneration } from "../../../lib/authApi"
+import { driverParkingLayout } from "../../../lib/driverSlotMapping"
 import { distanceKm, validCoordinates, type LatLng } from "../../../lib/parkingCoordinates"
 
 type MapState = "loading" | "ready" | "missing-key" | "error"
@@ -24,10 +24,16 @@ function mapStyleUrl(style: MapStyleName, apiKey: string, theme: "light" | "dark
   return `https://api.maptiler.com/maps/${styleId}/style.json?key=${encodeURIComponent(apiKey)}`
 }
 const lotTypeLabels: Record<LotType, string> = { outdoor: "Outdoor", basement: "Underground", "multi-storey": "Indoor (Multi-storey)" }
+const serverSiteId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+const maxLayoutRequests = 3
+type DriverLayout = ReturnType<typeof driverParkingLayout>
+type DriverParkingLot = ParkingLot & { layoutUnavailable?: boolean }
 
 function availableSpaces(lot: ParkingLot) { return Array.isArray(lot.slots) ? lot.slots.filter((slot) => slot.status === "available").length : 0 }
-function hasAvailabilityData(lot: ParkingLot) { return Array.isArray(lot.slots) }
-function availabilityLevel(lot: ParkingLot) {
+function hasAvailabilityData(lot: DriverParkingLot) {
+  return !lot.layoutUnavailable && Array.isArray(lot.slots)
+}
+function availabilityLevel(lot: DriverParkingLot) {
   if (!hasAvailabilityData(lot)) return "unknown"
   const available = availableSpaces(lot)
   if (available === 0) return "full"
@@ -102,9 +108,21 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const [originSource, setOriginSource] = useState<OriginSource>("CURRENT_GPS")
   const [discoveryLots, setDiscoveryLots] = useState<ParkingLot[] | null>(null)
   // Manual-origin mode uses discovery results; every other origin keeps the store pipeline.
-  const activeSourceLots = originSource === "MANUAL" && discoveryLots ? discoveryLots : sourceLots
-  const lots = useMemo(() => activeSourceLots.filter((lot) => lot.status === "active"), [activeSourceLots])
-  const validLots = useMemo(() => lots.filter(validCoordinates), [lots])
+  const manualLots = originSource === "MANUAL" ? discoveryLots : null
+  const activeSourceLots = manualLots ?? sourceLots
+  const activeLots = useMemo(() => activeSourceLots.filter((lot) => lot.status === "active"), [activeSourceLots])
+  const validLots = useMemo(() => activeLots.filter(validCoordinates), [activeLots])
+  const generation = getSessionGeneration()
+  const layoutRequests = useMemo(() => ({ requested: new Set<string>(), inFlight: 0 }), [generation])
+  const [layoutState, setLayoutState] = useState(() => ({ generation, layouts: new Map<string, DriverLayout>() }))
+  const currentLayouts = layoutState.generation === generation ? layoutState.layouts : null
+  const lots = useMemo(() => activeLots.map<DriverParkingLot>(lot => {
+    const layout = currentLayouts?.get(lot.id)
+    if (layout) return { ...lot, slots: layout.slots, totalSlots: layout.totalSlots }
+    // Owner setup can leave local template counts or empty bays in the store.
+    if (serverSiteId.test(lot.id) && !manualLots) return { ...lot, slots: [], totalSlots: NaN, layoutUnavailable: true }
+    return lot
+  }), [activeLots, currentLayouts, manualLots])
   const mapElement = useRef<HTMLDivElement>(null)
   const mapFrameRef = useRef<HTMLDivElement>(null)
   const mapMenuRef = useRef<HTMLDivElement>(null)
@@ -120,21 +138,20 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   const locationRequestRef = useRef(0)
   const routeRequestRef = useRef<AbortController | null>(null)
   const routeSequenceRef = useRef(0)
-  // Guards against duplicate operational-layout fetches while one is in flight.
-  const resolvingLotsRef = useRef(new Set<string>())
-  const layoutRetryAfterRef = useRef(new Map<string, number>())
-  const reconciledDetailSiteRef = useRef(new Map<string, string>())
-  const [detailOpenSeq, setDetailOpenSeq] = useState(0)
   const [layoutRevision, setLayoutRevision] = useState(0)
   const mountedRef = useRef(true)
-  const [selected, setSelected] = useState<ParkingLot | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = lots.find(lot => lot.id === selectedId)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [searchCollapsed, setSearchCollapsed] = useState(true)
   const [resultsOpen, setResultsOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [coordinateError, setCoordinateError] = useState("")
-  const vehicleCapacity: VehicleCapacityInfo = { status: "unavailable", car: null, motorcycle: null }
+  const selectedLayout = selectedId ? currentLayouts?.get(selectedId) : undefined
+  const vehicleCapacity: VehicleCapacityInfo = selectedLayout
+    ? { status: "ready", car: selectedLayout.car, motorcycle: selectedLayout.motorcycle }
+    : { status: "unavailable", car: null, motorcycle: null }
   const [query, setQuery] = useState("")
   const [availableOnly, setAvailableOnly] = useState(false)
   const [sortByPrice, setSortByPrice] = useState(false)
@@ -190,17 +207,20 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     catch { /* The in-memory list can still be cleared if storage is unavailable. */ }
     setSearchHistory([])
   }
-  const results = useMemo(() => {
+  const matchingLots = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
     return lots.filter((lot) => (!search || `${lot.name} ${lot.address}`.toLocaleLowerCase().includes(search)) &&
-      (!availableOnly || (hasAvailabilityData(lot) && availableSpaces(lot) > 0)) &&
       (lotType === "all" || lot.type === lotType) &&
       (maxPrice === null || (Number.isFinite(lot.hourlyRate) && lot.hourlyRate <= maxPrice)) &&
       (maxDistance === null || (location && validCoordinates(lot) && distanceKm(location, lot) <= maxDistance)))
       .map((lot) => ({ lot, distance: location && validCoordinates(lot) ? distanceKm(location, lot) : null }))
       .sort((a, b) => sortByPrice ? (Number.isFinite(a.lot.hourlyRate) ? a.lot.hourlyRate : Infinity) - (Number.isFinite(b.lot.hourlyRate) ? b.lot.hourlyRate : Infinity) :
         location ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : a.lot.name.localeCompare(b.lot.name))
-  }, [availableOnly, location, lotType, lots, maxDistance, maxPrice, query, sortByPrice])
+  }, [location, lotType, lots, maxDistance, maxPrice, query, sortByPrice])
+  const results = useMemo(
+    () => availableOnly ? matchingLots.filter(({ lot }) => availableSpaces(lot) > 0) : matchingLots,
+    [availableOnly, matchingLots],
+  )
 
   function cameraPadding() {
     const mobile = window.matchMedia("(max-width: 900px)").matches
@@ -251,63 +271,40 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
+  // Facility currently exposes layout per site. Request each matching site once
+  // per visit, prioritizing an opened site, with no interval or store writes.
   useEffect(() => {
-    if (detailsOpen && selected?.id) {
-      setDetailOpenSeq(value => value + 1)
-    }
-  }, [detailsOpen, selected?.id])
-  // Reconcile the selected site's authoritative layout whenever details open (even if persisted
-  // store slots are already non-empty or synthetic discovery counts exist), without fetching map-wide.
-  useEffect(() => {
-    if (!detailsOpen || !selected?.id) return
-    const targetLot = lots.find((lot) => lot.id === selected.id)
-    if (!targetLot) return
-    const generation = getSessionGeneration()
-    const reconcileToken = `${generation}:${targetLot.id}:${detailOpenSeq}`
-    if (reconciledDetailSiteRef.current.get(targetLot.id) === reconcileToken) return
-    if (resolvingLotsRef.current.has(targetLot.id) || (layoutRetryAfterRef.current.get(targetLot.id) ?? 0) > Date.now()) return
-
-    resolvingLotsRef.current.add(targetLot.id)
-    void (async () => {
-      try {
-        const layout = await parkingApi.operationalLayout(targetLot.id)
+    if (!visible) return
+    const candidates = new Set(detailsOpen && selectedId ? [selectedId] : [])
+    matchingLots.forEach(({ lot }) => candidates.add(lot.id))
+    for (const id of candidates) {
+      if (layoutRequests.inFlight >= maxLayoutRequests) break
+      if (!serverSiteId.test(id) || layoutRequests.requested.has(id)) continue
+      layoutRequests.requested.add(id)
+      layoutRequests.inFlight += 1
+      void parkingApi.operationalLayout(id).then(layout => {
         if (!mountedRef.current || generation !== getSessionGeneration()) return
-        const mappedSlots = mapOperationalLayoutSlots(layout.slots)
-        reconciledDetailSiteRef.current.set(targetLot.id, reconcileToken)
-        layoutRetryAfterRef.current.set(targetLot.id, Date.now() + 30_000)
-        if (!mappedSlots.length) return
-        const updatedLot: ParkingLot = {
-          ...targetLot,
-          slots: mappedSlots,
-          totalSlots: layout.metrics?.totalPhysicalCapacity ?? mappedSlots.length,
-        }
-        store.saveLot(updatedLot)
-        setSourceLots((previous) => previous.map((item) => (item.id === targetLot.id ? updatedLot : item)))
-        setDiscoveryLots((previous) => previous ? previous.map((item) => (item.id === targetLot.id ? updatedLot : item)) : null)
-      } catch (error) {
-        // Missing/inaccessible sites must not be retried on every store notification.
-        const permanent = error instanceof AuthApiError && [400, 403, 404].includes(error.status)
-        layoutRetryAfterRef.current.set(targetLot.id, Date.now() + (permanent ? 300_000 : 30_000))
-        // Offline, fixture mode or an unavailable service: keep the existing
-        // slots and never throw or overwrite them.
-      } finally {
-        resolvingLotsRef.current.delete(targetLot.id)
+        if (layout.siteId.toLowerCase() !== id.toLowerCase() || !Array.isArray(layout.slots)) return
+        setLayoutState(previous => {
+          const layouts = new Map(previous.generation === generation ? previous.layouts : undefined)
+          layouts.set(id, driverParkingLayout(layout))
+          return { generation, layouts }
+        })
+      }).catch(() => {
+        // An unavailable layout leaves availability unknown.
+      }).finally(() => {
+        layoutRequests.inFlight -= 1
         if (mountedRef.current && generation === getSessionGeneration()) setLayoutRevision(value => value + 1)
-      }
-    })()
-  }, [lots, layoutRevision, detailsOpen, selected?.id, detailOpenSeq])
-  useEffect(() => {
-    if (!selected) return
-    const latest = lots.find((lot) => lot.id === selected.id)
-    if (!latest) {
-      closeDirections()
-      setSelected(null)
-      setDetailsOpen(false)
-    } else if (latest !== selected) {
-      closeDirections()
-      setSelected(latest)
+      })
     }
-  }, [lots])
+  }, [visible, matchingLots, detailsOpen, selectedId, layoutRevision, generation, layoutRequests])
+  useEffect(() => {
+    if (selectedId && !selected) {
+      closeDirections()
+      setSelectedId(null)
+      setDetailsOpen(false)
+    }
+  }, [selectedId, selected])
   useEffect(() => () => {
     routeSequenceRef.current += 1
     routeRequestRef.current?.abort()
@@ -378,24 +375,20 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     markersRef.current.forEach((marker) => marker.remove())
     markersRef.current.clear()
     validLots.forEach((lot) => {
-      const level = availabilityLevel(lot)
       const element = document.createElement("div")
-      element.className = `parking-map-marker is-${level}`
+      element.className = "parking-map-marker"
       const button = document.createElement("button")
       button.type = "button"
-      button.className = `parking-map-label is-${level}`
-      button.setAttribute("aria-label", `${lot.name}, ${hasAvailabilityData(lot) ? `${availableSpaces(lot)} spaces available` : "availability unknown"}. View parking details`)
+      button.className = "parking-map-label"
       button.setAttribute("aria-describedby", `parking-hover-${lot.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`)
       const count = document.createElement("span")
       count.className = "parking-map-label-count"
-      count.textContent = hasAvailabilityData(lot) ? String(availableSpaces(lot)) : "?"
       const copy = document.createElement("span")
       copy.className = "parking-map-label-copy"
       const name = document.createElement("strong")
       name.textContent = lot.name
       const available = document.createElement("span")
       available.className = "parking-map-label-meta"
-      available.textContent = hasAvailabilityData(lot) ? `${availableSpaces(lot)} free` : "Availability unknown"
       copy.append(name, available)
       button.append(count, copy)
       const hover = document.createElement("div")
@@ -406,8 +399,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       const hoverAddress = document.createElement("span")
       hoverAddress.textContent = lot.address
       const hoverStatus = document.createElement("span")
-      hoverStatus.className = `parking-map-hover-status is-${level}`
-      hoverStatus.textContent = `${level === "open" ? "Available" : level === "limited" ? "Limited spaces" : level === "full" ? "Full" : "Availability unknown"} · ${hasAvailabilityData(lot) ? `${availableSpaces(lot)} spaces free` : "No live capacity"}`
+      hoverStatus.className = "parking-map-hover-status"
       hover.append(hoverName, hoverAddress, hoverStatus)
       element.append(button, hover)
       button.addEventListener("click", () => selectLot(lot))
@@ -431,6 +423,29 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     }
   }, [mapState, validLots])
   useEffect(() => {
+    for (const lot of lots) {
+      const element = markersRef.current.get(lot.id)?.getElement()
+      const button = element?.querySelector(".parking-map-label")
+      if (!element || !button) continue
+      const level = availabilityLevel(lot)
+      const available = hasAvailabilityData(lot) ? availableSpaces(lot) : null
+      const count = button.querySelector(".parking-map-label-count")
+      const meta = button.querySelector(".parking-map-label-meta")
+      const hover = element.querySelector(".parking-map-hover-status")
+      element.className = `parking-map-marker is-${level}`
+      button.className = `parking-map-label is-${level}`
+      button.classList.toggle("is-selected-parking-marker", detailsOpen && lot.id === selectedId)
+      button.setAttribute("aria-label", `${lot.name}, ${available === null ? "availability unknown" : `${available} spaces available`}. View parking details`)
+      if (count) count.textContent = available === null ? "?" : String(available)
+      if (meta) meta.textContent = available === null ? "Availability unknown" : `${available} free`
+      if (hover) {
+        hover.className = `parking-map-hover-status is-${level}`
+        const status = level === "open" ? "Available" : level === "limited" ? "Limited spaces" : "Full"
+        hover.textContent = available === null ? "Availability unknown" : `${status} · ${available} spaces free`
+      }
+    }
+  }, [lots, mapState, selectedId, detailsOpen])
+  useEffect(() => {
     const element = mapElement.current
     if (!element || !window.ResizeObserver) return
     const observer = new ResizeObserver(() => mapInstance.current?.resize())
@@ -438,14 +453,13 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    markersRef.current.forEach((marker, id) => marker.getElement().querySelector(".parking-map-label")?.classList.toggle("is-selected-parking-marker", detailsOpen && id === selected?.id))
     if (!visible || !detailsOpen || !selected || !validCoordinates(selected)) return
     const map = mapInstance.current
     if (!map) return
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     map.flyTo({ center: [selected.lng, selected.lat], zoom: Math.max(map.getZoom(), 15),
       padding: cameraPadding(), duration: reduced ? 0 : 850, essential: false })
-  }, [selected, mapState, searchCollapsed, detailsOpen, visible])
+  }, [selectedId, selected?.lng, selected?.lat, mapState, searchCollapsed, detailsOpen, visible])
   useEffect(() => {
     const visibleIds = new Set(results.map(({ lot }) => lot.id))
     markersRef.current.forEach((marker, id) => { marker.getElement().style.display = visibleIds.has(id) || id === selected?.id ? "" : "none" })
@@ -661,7 +675,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
   }
   function selectLot(lot: ParkingLot) {
     if (selected?.id !== lot.id) closeDirections()
-    setSelected(lot)
+    setSelectedId(lot.id)
     setCoordinateError(validCoordinates(lot) ? "" : "This parking lot has invalid coordinates. The map cannot move to it.")
     setDetailsOpen(true)
     if (window.matchMedia("(max-width: 900px)").matches) collapseSearch()
@@ -731,7 +745,13 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
             {results.map(({ lot, distance }) => <button key={lot.id} type="button" className={`find-parking-result${selected?.id === lot.id ? " is-selected" : ""}`} onClick={() => { rememberSearch(query || lot.name); selectLot(lot); setResultsOpen(false) }}>
               <span className="find-parking-result-top"><strong>{lot.name}</strong>{distance !== null && <span>{distance.toFixed(1)} km</span>}</span>
               <span className="find-parking-address">{lot.address}</span>
-              <span className="find-parking-result-bottom"><span className={availableSpaces(lot) ? "is-available" : "is-full"}>{hasAvailabilityData(lot) ? `${availableSpaces(lot)} spaces available` : "Availability unknown"} · {lotTypeLabels[lot.type]}</span><span>{formatRate(lot.hourlyRate)}/hr</span></span>
+              <span className="find-parking-result-bottom">
+                <span className={hasAvailabilityData(lot) ? (availableSpaces(lot) ? "is-available" : "is-full") : undefined}>
+                  {hasAvailabilityData(lot) ? `${availableSpaces(lot)} spaces available` : "Availability unknown"}
+                  {currentLayouts?.has(lot.id) ? ` · ${lot.totalSlots} registered` : ""}
+                  {" · "}{lotTypeLabels[lot.type]}
+                </span><span>{formatRate(lot.hourlyRate)}/hr</span>
+              </span>
               <span className="find-parking-view">View <UntitledIcon name="arrow-right" size={14} /></span>
             </button>)}
             {!results.length && <p className="find-parking-empty">No parking lots match. Try another name or parking type.</p>}
@@ -797,6 +817,7 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
       {selected && detailsOpen && <div ref={detailsPanelRef} className="find-parking-details-wrap">
         <ParkingDetailsPanel
           lot={selected}
+          availabilityUnknown={!hasAvailabilityData(selected)}
           vehicleCapacity={vehicleCapacity}
           route={route}
           routeStatus={routeStatus}
@@ -804,8 +825,12 @@ export function FindParking({ onBook, onDetailsOpenChange, visible = true }: {
           coordinateError={coordinateError}
           onDirection={startDirections}
           onCloseRoute={closeDirections}
-          onBook={() => onBook(selected)}
-          onClose={() => { closeDirections(); setDetailsOpen(false); setSelected(null) }}
+          onBook={() => {
+            const stored = selectedLayout && store.getLots().find(lot => lot.id === selected.id)
+            if (stored && selectedLayout) store.saveLot({ ...stored, slots: selectedLayout.slots, totalSlots: selectedLayout.totalSlots })
+            onBook(selected)
+          }}
+          onClose={() => { closeDirections(); setDetailsOpen(false); setSelectedId(null) }}
         />
       </div>}
     </section>

@@ -688,6 +688,10 @@ export interface PaymentTransactionStatus {
 }
 
 export const paymentApi = {
+  monthlyCoverage: (siteId: string, plateNumber: string) =>
+    checkoutRequest<{ isCovered: boolean; amountDueVnd: number | null }>(
+      `/monthly-coverage?siteId=${encodeURIComponent(siteId)}&plateNumber=${encodeURIComponent(plateNumber)}`,
+    ),
   prepare: (body: {
     siteId: string
     referenceId: string
@@ -704,7 +708,7 @@ export const paymentApi = {
     const path = body.reservationId
       ? `/reservations/${encodeURIComponent(referenceId)}/prepare?siteId=${encodeURIComponent(body.siteId)}`
       : `/sessions/${encodeURIComponent(referenceId)}${body.developmentTestPayOs ? "/prepare-test-payos" : "/prepare"}?siteId=${encodeURIComponent(body.siteId)}`
-    return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder }>(
+    return checkoutRequest<{ pricing: PricingResult; order: PaymentOrder | null; isMonthlyCovered: boolean }>(
       path,
       "POST",
       { plateNumber: body.plateNumber, imageData: body.imageData },
@@ -811,11 +815,11 @@ export const reservationApi = {
     )
   },
 
-  walkInCheckIn(siteId: string, plateNumber: string, imageData?: string, vehicleType?: string) {
+  walkInCheckIn(siteId: string, plateNumber: string, imageData?: string, vehicleType?: string, slotId?: string) {
     return parkingSessionRequest<WalkInParkingSession>(
       `/walk-in/check-in?siteId=${encodeURIComponent(siteId)}`,
       "POST",
-      { plateNumber, imageData, vehicleType },
+      { plateNumber, imageData, vehicleType, slotId },
     )
   },
 

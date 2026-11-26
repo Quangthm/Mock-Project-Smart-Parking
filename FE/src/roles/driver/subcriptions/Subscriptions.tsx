@@ -1,29 +1,25 @@
-import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { useState, useMemo, useEffect } from "react"
 import "../../../booking-support.css"
 
-import { Modal } from "../../../components/ui/Modal"
 
 import { useApp } from "../../../context/AppContext"
 
 import type {
   ParkingLot,
   PackageOrder,
-  PaymentMethod,
   User,
 } from "../../../lib/types"
 
 import { driverData as store } from "../data/data"
-import { showUiToast } from "../../../lib/uiToast"
 
-import { PAYMENT_OPTIONS } from "../data/paymentOptions"
 
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { PageHeader } from "../../../components/ui/PageHeader"
 
 import { PaymentMethodLogo } from "../../../components/payment/PaymentMethodLogo"
-import { formatVietnamesePlate, vehiclesApi, type RegisteredVehicle } from "../../../lib/vehiclesApi"
 import { distanceKm, validCoordinates, type LatLng } from "../../../lib/parkingCoordinates"
+
+import { PassOffersDialog } from "./PassOffers"
 
 function getLotEnterprise(lot: ParkingLot, users: User[]): string {
   const owner = users.find((u) => u.id === lot.ownerId)
@@ -36,10 +32,6 @@ function getLotEnterprise(lot: ParkingLot, users: User[]): string {
 type TabMode = "store" | "my-passes" | "orders"
 const passesPerPage = 12
 const nearbyRadiusKm = 3
-
-function hasPassPrice(price: unknown): price is number {
-  return typeof price === "number" && Number.isFinite(price) && price >= 0
-}
 
 export function Subscriptions() {
   const { user } = useApp()
@@ -59,18 +51,6 @@ export function Subscriptions() {
   const [selectedLotForDetail, setSelectedLotForDetail] =
     useState<ParkingLot | null>(null)
 
-  const [selectedPlan, setSelectedPlan] = useState<"monthly" | "annual">(
-    "monthly",
-  )
-
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("momo")
-
-  const [selectedVehicleId, setSelectedVehicleId] = useState("")
-  const [vehicleRetry, setVehicleRetry] = useState(0)
-  const [vehicleResult, setVehicleResult] = useState<{ scope: string; items: RegisteredVehicle[]; error?: string } | null>(null)
-
-  const [checkoutSuccess, setCheckoutSuccess] = useState<string | null>(null)
-
   const users = useMemo(() => store.getUsers?.() ?? [], [])
 
   const lots = useMemo(
@@ -80,7 +60,7 @@ export function Subscriptions() {
 
   const passes = useMemo(
     () => (user ? store.getPassesByDriver(user.id) : []),
-    [user, checkoutSuccess],
+    [user],
   )
   const passPageCount = Math.max(1, Math.ceil(passes.length / passesPerPage))
   const currentPassPage = Math.min(passPage, passPageCount)
@@ -88,26 +68,8 @@ export function Subscriptions() {
 
   const orders = useMemo(
     () => (user ? store.getPackageOrdersByDriver(user.id) : []),
-    [user, checkoutSuccess],
+    [user],
   )
-
-  const vehicleScope = user && selectedLotForDetail ? JSON.stringify([user.id, selectedLotForDetail.id, vehicleRetry]) : ""
-  const currentVehicles = vehicleResult?.scope === vehicleScope ? vehicleResult : null
-  const vehicles = currentVehicles?.items ?? []
-  const selectedVehicle = vehicles.find(vehicle => vehicle.id === selectedVehicleId) ?? vehicles[0]
-
-  useEffect(() => {
-    if (!vehicleScope) return
-    let active = true
-    vehiclesApi.list()
-      .then((items) => {
-        if (active) setVehicleResult({ scope: vehicleScope, items })
-      })
-      .catch(() => {
-        if (active) setVehicleResult({ scope: vehicleScope, items: [], error: "Không tải được danh sách xe đã đăng ký." })
-      })
-    return () => { active = false }
-  }, [vehicleScope])
 
   useEffect(() => {
     if (tabMode !== "store" || filterTag !== "near") return
@@ -148,76 +110,11 @@ export function Subscriptions() {
 
   useEffect(() => setStorePage(1), [searchQuery, filterTag])
 
-  function handleOpenLotDetail(lot: ParkingLot) {
-    setVehicleResult(null)
-    setSelectedVehicleId("")
-    setSelectedLotForDetail(lot)
-
-    setSelectedPlan(hasPassPrice(lot.subscriptionYearly) && !hasPassPrice(lot.subscriptionMonthly) ? "annual" : "monthly")
-
-    setSelectedMethod("momo")
-
-    setCheckoutSuccess(null)
-  }
-
-  const selectedPassPrice = selectedPlan === "monthly"
-    ? selectedLotForDetail?.subscriptionMonthly
-    : selectedLotForDetail?.subscriptionYearly
-
-  function handlePurchasePass() {
-    if (!user || !selectedLotForDetail || !selectedVehicle || !hasPassPrice(selectedPassPrice)) return
-
-    const amount = selectedPassPrice
-    const durationDays = selectedPlan === "monthly" ? 30 : 365
-
-    const now = new Date()
-
-    const expires = new Date(now.getTime() + durationDays * 86400000)
-
-    // Create payment order
-
-    store.createPackageOrder({
-      driverId: user.id,
-
-      lotId: selectedLotForDetail.id,
-
-      lotName: selectedLotForDetail.name,
-
-      plan: selectedPlan,
-
-      amount,
-
-      paymentMethod: selectedMethod,
-    })
-
-    // Instant pass activation
-
-    store.createPass({
-      driverId: user.id,
-
-      lotId: selectedLotForDetail.id,
-
-      lotName: selectedLotForDetail.name,
-
-      plan: selectedPlan,
-
-      amount,
-
-      expiresAt: expires.toISOString(),
-      vehiclePlate: formatVietnamesePlate(selectedVehicle),
-    })
-
-    setCheckoutSuccess(
-      `Gói gửi xe tại ${selectedLotForDetail.name} đã được kích hoạt. Có hiệu lực đến ${expires.toLocaleDateString("vi-VN")}.`,
-    )
-    showUiToast("Pass activated", `Your pass for ${selectedLotForDetail.name} is ready.`)
-  }
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <section className="driver-pass-header">
         <div className="relative z-10 min-w-0">
-          <PageHeader title="Parking Passes" description="Choose a parking location to compare monthly and annual plans." />
+          <PageHeader title="Parking Passes" description="Choose a parking location to see its available pass offers." />
         </div>
         <span aria-hidden="true" className="driver-pass-header-mark"><UntitledIcon name="ticket" size={72} /></span>
       </section>
@@ -384,7 +281,7 @@ export function Subscriptions() {
             {visibleDisplayLots.map((lot) => (
               <button key={lot.id} type="button" className="driver-pass-location driver-pass-reveal"
                 aria-label={"View pass packages for " + lot.name} aria-haspopup="dialog"
-                onClick={() => handleOpenLotDetail(lot)}>
+                onClick={() => setSelectedLotForDetail(lot)}>
                 <span aria-hidden="true" className="driver-pass-location-band">
                   <span className="driver-pass-location-icon"><UntitledIcon name="parking" size={23} /></span>
                   <span className="driver-pass-location-arrow"><UntitledIcon name="arrow-right" size={18} /></span>
@@ -807,304 +704,8 @@ export function Subscriptions() {
       )}
 
       {selectedLotForDetail && (
-        <Modal title={selectedLotForDetail.name + " — Gói gửi xe"} lang="vi" className="max-w-[820px]!" onClose={() => setSelectedLotForDetail(null)}>
-          <p className="mb-4 flex items-start gap-2 text-sm text-[var(--muted)]">
-            <UntitledIcon name="map-pin" size={16} /> {selectedLotForDetail.address}
-          </p>
-          {checkoutSuccess ? (
-            <div
-              style={{
-                padding: "2rem",
-                textAlign: "center",
-                background: "rgba(34, 197, 94, 0.08)",
-                border: "1.5px solid rgba(34, 197, 94, 0.35)",
-                borderRadius: "0.75rem",
-                margin: "1rem 0",
-              }}
-            >
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: "50%",
-                  background: "rgba(34, 197, 94, 0.15)",
-                  color: "#22c55e",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  margin: "0 auto 0.75rem",
-                }}
-              >
-                <UntitledIcon name="award" size={30} />
-              </div>
-              <h4
-                style={{
-                  fontFamily: "Be Vietnam Pro",
-                  fontWeight: 700,
-                  fontSize: "1.3rem",
-                  color: "#22c55e",
-                  margin: "0 0 0.5rem",
-                }}
-              >
-                Đã kích hoạt gói gửi xe
-              </h4>
-              <p
-                style={{
-                  fontSize: "0.9rem",
-                  color: "var(--fg)",
-                  marginBottom: "1.5rem",
-                }}
-              >
-                {checkoutSuccess}
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "0.75rem",
-                  justifyContent: "center",
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => {
-                    setSelectedLotForDetail(null)
-
-                    setTabMode("my-passes")
-                  }}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                  }}
-                >
-                  <span>Xem trong My Passes</span>
-                  <UntitledIcon name="arrow-right" size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="btn-outline"
-                  onClick={() => setSelectedLotForDetail(null)}
-                >
-                  Xong
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <fieldset className="driver-pass-plan-picker">
-                <legend>Chọn gói gửi xe</legend>
-                <div className="driver-pass-plan-list">
-                  {([
-                    { id: "monthly", label: "Gói tháng", description: "Phù hợp khi cần gửi xe trong thời gian ngắn.", days: 30, price: selectedLotForDetail.subscriptionMonthly },
-                    { id: "annual", label: "Gói năm", description: "Phù hợp khi gửi xe thường xuyên trong cả năm.", days: 365, price: selectedLotForDetail.subscriptionYearly },
-                  ] as const).map(plan => {
-                    const available = hasPassPrice(plan.price)
-                    const active = available && selectedPlan === plan.id
-                    const price = available ? plan.price.toLocaleString("vi-VN") + " VND" : "Chưa có giá"
-                    return <label key={plan.id} className="driver-pass-plan" data-selected={active}>
-                      <span className="driver-pass-plan-row">
-                        <input type="radio" name="parking-pass-plan" value={plan.id} checked={active}
-                          aria-label={plan.label + ", " + plan.days + " ngày, " + price}
-                          disabled={!available} onChange={() => setSelectedPlan(plan.id)} />
-                        <span className="driver-pass-plan-heading">
-                          <strong>{plan.label}</strong>
-                          <span>{plan.days} ngày kể từ khi kích hoạt</span>
-                        </span>
-                        <span className="driver-pass-plan-price">{price}{available && <small>mỗi gói</small>}</span>
-                      </span>
-                      <span className="driver-pass-plan-details" aria-hidden={!active}>
-                        <span className="driver-pass-plan-details-body">
-                          <span>{plan.description}</span>
-                          {available && <span><UntitledIcon name="banknote" size={15} /> Bình quân {Math.round(plan.price / plan.days).toLocaleString("vi-VN")} VND/ngày</span>}
-                          <span><UntitledIcon name="map-pin" size={15} /> Áp dụng tại {selectedLotForDetail.name}</span>
-                          <span><UntitledIcon name="car" size={15} /> Gắn với biển số xe bạn chọn khi thanh toán</span>
-                        </span>
-                      </span>
-                    </label>
-                  })}
-                </div>
-              </fieldset>
-
-              {/* CHECKOUT CONFIG: VEHICLE PLATE & PAYMENT METHOD */}
-              <div
-                style={{
-                  borderTop: "1px solid var(--border)",
-                  paddingTop: "1.25rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1rem",
-                }}
-              >
-                {/* VEHICLE BINDING */}
-                <div>
-                  <label htmlFor="pass-registered-vehicle"
-                    style={{
-                      display: "block",
-                      fontSize: "0.82rem",
-                      fontWeight: 700,
-                      color: "var(--fg)",
-                      marginBottom: "0.4rem",
-                    }}
-                  >
-                    Chọn biển số xe đã đăng ký
-                  </label>
-                  {!currentVehicles ? <p role="status" className="text-sm text-[var(--muted)]">Đang tải danh sách xe…</p>
-                    : currentVehicles.error ? <div className="flex flex-wrap items-center gap-3">
-                        <p role="alert" className="text-sm text-[var(--muted)]">{currentVehicles.error}</p>
-                        <button type="button" className="btn-outline" onClick={() => setVehicleRetry(value => value + 1)}>Thử lại</button>
-                      </div>
-                    : vehicles.length > 0 ? <RoundedSelect id="pass-registered-vehicle" className="input"
-                        aria-label="Biển số xe đã đăng ký" value={selectedVehicle?.id ?? ""}
-                        onChange={event => setSelectedVehicleId(event.target.value)}
-                        style={{ maxWidth: 360, fontSize: "0.85rem" }}>
-                        {vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>
-                          {formatVietnamesePlate(vehicle)} ({vehicle.vehicleType === "CAR" ? "Ô tô" : "Xe máy"})
-                        </option>)}
-                      </RoundedSelect>
-                    : <p className="text-sm text-[var(--muted)]">Bạn chưa có xe đã đăng ký. Hãy thêm xe trong My Vehicles rồi mở lại gói gửi xe.</p>}
-                </div>
-
-                {/* PAYMENT METHOD SELECTION */}
-                <div>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: "0.82rem",
-                      fontWeight: 700,
-                      color: "var(--fg)",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    Chọn phương thức thanh toán
-                  </label>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fit, minmax(110px, 1fr))",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    {PAYMENT_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setSelectedMethod(opt.id)}
-                        style={{
-                          display: "flex",
-
-                          flexDirection: "column",
-
-                          alignItems: "center",
-
-                          gap: "0.45rem",
-
-                          padding: "0.75rem 0.4rem",
-
-                          borderRadius: "0.6rem",
-
-                          border:
-                            selectedMethod === opt.id
-                              ? "2px solid var(--primary)"
-                              : "1px solid var(--border)",
-
-                          background:
-                            selectedMethod === opt.id
-                              ? "color-mix(in srgb, var(--primary) 10%, var(--card))"
-                              : "var(--card)",
-
-                          cursor: "pointer",
-
-                          transition: "all 0.15s ease",
-                        }}
-                      >
-                        <PaymentMethodLogo method={opt.id} size="md" />
-                        <span
-                          style={{
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            color: "var(--fg)",
-                            textAlign: "center",
-                          }}
-                        >
-                          {opt.name}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* SUMMARY & SUBMIT */}
-                <div
-                  style={{
-                    background: "var(--bg)",
-                    padding: "1rem 1.25rem",
-                    borderRadius: "0.75rem",
-                    border: "1px solid var(--border)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "1rem",
-                    marginTop: "0.5rem",
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        fontSize: "0.78rem",
-                        color: "var(--muted)",
-                        display: "block",
-                      }}
-                    >
-                      Tổng tiền phải trả (
-                      {selectedPlan === "monthly" ? "30 ngày" : "365 ngày"}
-                      ):
-                    </span>
-                    <strong
-                      style={{
-                        fontFamily: "Be Vietnam Pro",
-                        fontWeight: 800,
-                        fontSize: "1.4rem",
-                        color: "var(--primary)",
-                      }}
-                    >
-                      {hasPassPrice(selectedPassPrice) ? selectedPassPrice.toLocaleString("vi-VN") + " VND" : "Chưa có giá"}
-                    </strong>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2.5">
-                    <button
-                      type="button"
-                      className="btn-outline"
-                      onClick={() => setSelectedLotForDetail(null)}
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={handlePurchasePass}
-                        disabled={!selectedVehicle || !hasPassPrice(selectedPassPrice)}
-                      style={{
-                        padding: "0.55rem 1.25rem",
-                        fontSize: "0.85rem",
-                        fontWeight: 700,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.4rem",
-                      }}
-                    >
-                      <span>Thanh toán và kích hoạt gói</span>
-                      <UntitledIcon name="arrow-right" size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </Modal>
+        <PassOffersDialog siteId={selectedLotForDetail.id} name={selectedLotForDetail.name}
+          address={selectedLotForDetail.address} onClose={() => setSelectedLotForDetail(null)} />
       )}
     </div>
   )
