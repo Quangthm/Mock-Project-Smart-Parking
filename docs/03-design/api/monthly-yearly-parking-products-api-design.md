@@ -30,7 +30,7 @@ Tài liệu này đặc tả **API Contract & Database Schema** cho cụm tính 
 >    - Caller (`OperationService`) ký **short-lived Service JWT (`RS256`, TTL 60s)** bằng RSA private key riêng (`>= 2048 bit`). Service nhận (`PaymentService`) xác thực bằng public key tương ứng (`clockSkew <= 5s`), kiểm tra đồng thời: `alg = RS256`, `iss = SmartParking.OperationService`, `sub = SmartParking.OperationService`, `sender = SmartParking.OperationService`, `aud = SmartParking.PaymentService`, `exp`/`nbf`, và claim `permission` theo từng capability. Driver JWT và `X-Service-Key` đều bị từ chối (`401` / `403`).
 > 6. **Error Envelope theo từng service:**
 >    - `OperationService`: `{ "success": false, "code": "...", "message": "...", "traceId": "..." }`.
->    - `PaymentService`: `{ "success": false, "errorCode": "...", "message": "..." }`.
+>    - `PaymentService`: `{ "success": false, "code": "...", "message": "..." }`.
 > 7. **Quy chuẩn tổ chức code (`2026-11-16`):** Mỗi file `.cs` mới/chỉnh sửa chỉ khai báo **1 named type** (`one C# named type per source file`), triển khai theo từng slice dọc nhỏ.
 
 ---
@@ -407,7 +407,7 @@ Path: `productType` ∈ `{"MONTHLY", "YEARLY"}` (case-insensitive normalized to 
 
 #### Validation and error responses
 
-| HTTP status | Machine code (`errorCode`) | Trigger | Client recovery |
+| HTTP status | Machine code (`code`) | Trigger | Client recovery |
 | --- | --- | --- | --- |
 | `400` | `INVALID_FINANCIAL_TERMS` | `fullPeriodPrice <= 0`, trùng `vehicleType`, hoặc thiếu giá cho loại xe | Nhập đầy đủ giá hợp lệ (`> 0`) |
 | `422` | `YEARLY_POLICY_BLOCKED_Q05` | `productType == YEARLY` khi chính sách Q05 chưa duyệt | Giữ trạng thái blocked cho Yearly |
@@ -636,7 +636,7 @@ Path: `productType` ∈ `{"MONTHLY", "YEARLY"}` (case-insensitive normalized to 
 
 #### Validation and error responses (`PaymentService` envelope)
 
-| HTTP status | Machine code (`errorCode`) | Trigger | Caller (`332`) recovery |
+| HTTP status | Machine code (`code`) | Trigger | Caller (`332`) recovery |
 | --- | --- | --- | --- |
 | `401` | `UNAUTHENTICATED` | Thiếu, hết hạn, sai chữ ký RS256, hoặc dùng `X-Service-Key` / Driver JWT | Kiểm tra cấu hình RSA key của `OperationService` |
 | `403` | `FORBIDDEN` | Sai `iss` / `sub` / `sender` / `aud` / thiếu claim `permission` phù hợp | Kiểm tra policy & claims cấp cho `OperationService` |

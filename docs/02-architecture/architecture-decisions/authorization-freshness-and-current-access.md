@@ -599,7 +599,7 @@ MassTransit delayed redelivery for RabbitMQ may require the delayed-exchange plu
 
 ### Profile B — Saga-owned asynchronous Account-current authorization
 
-> **Reservation-specific user amendment, 9 November 2026:** the reservation first slice performs one durable evaluation per workflow. Its later delivery attempts replay the original persisted result, including the original DecidedAt; they do not re-evaluate current Account access. The 5-second delivery windows, 10/30-second waits, three-delivery budget and original 90-second deadline remain. Attempt IDs fence delivery envelopes; WorkflowId identifies the single decision. This explicitly overrides Profile B's fresh-evaluation rationale below for this slice only. No post-Allowed check is introduced. See [the reservation implementation decision](reservation-first-slice-implementation-proposal.md#one-evaluation-per-reservation-workflow--user-amendment-9-november).
+> **Reservation-specific amendment, 26 November 2026 (SPARK-273 D).** Operations sends one logical Account request per admission. UserService retains its single durable workflow decision across duplicate delivery. The stable AttemptId and wire attempt 1 bind the envelope. AttemptDeadline equals the original overall deadline, configurable from 1 to 90 seconds with a default of 15. A missing authoritative reply at the cutoff ends admission as a dependency timeout. Joined evaluation observes the same cutoff. Other Profile B uses retain their approved policies.
 
 
 ```text
@@ -954,7 +954,7 @@ workflow/request identifier
 status = PendingAuthorization
 ```
 
-The exact response envelope, polling/status endpoint, SignalR update, and eventual confirmed resource representation belong to the Reservation API design.
+The [Reservation API design](../../03-design/api/reservation-first-slice-api-design.md) specifies authenticated SignalR and a one-time recovery read per authorized connection, reconnect or explicit restoration. Reservation workflow polling is superseded by the 18 November amendment.
 
 A use case that requires immediate synchronous final confirmation must explicitly choose a different interaction model.
 

@@ -89,6 +89,8 @@ public sealed class CollectCashPaymentCommandHandler : IRequestHandler<CollectCa
 
         var invoice = await _invoiceRepository.GetByPaymentOrderIdAsync(order.Id, cancellationToken);
 
+        if (order.ReviewedMethod != null) throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Reviewed orders require provider verification.");
+
         // Idempotency: If already paid, replay response without duplicating outbox event
         if (order.Status == PaymentOrderStatus.PAID)
         {

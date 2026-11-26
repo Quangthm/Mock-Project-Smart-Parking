@@ -53,6 +53,7 @@ public static class PersistenceDependencyInjection
             options.UseNpgsql(connectionBuilder.ConnectionString);
         });
 
+        services.AddScoped<Application.Reservations.IReviewedTariffRepository, ReviewedTariffRepository>();
         services.AddScoped<IParkingTariffPort, TariffPersistenceAdapter>();
         services.AddScoped<Application.IDiscoveryPriceSource, DiscoveryPriceSource>();
         services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();

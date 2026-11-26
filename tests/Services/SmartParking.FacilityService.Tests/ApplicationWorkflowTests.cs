@@ -260,7 +260,7 @@ public sealed class ApplicationWorkflowTests
             SlotId = Structure.AddSlot(unit, "A01", VehicleType.CAR);
             Store = new MemoryStore(Events);
             Synchronization = new(Store, this);
-            UnitOfWork = new StructureEditHandlers(this, this, this, this, Store, StructureTestMediator.Create(Synchronization), new EmptyReservationDependencies());
+            UnitOfWork = new StructureEditHandlers(this, this, this, this, Store, StructureTestMediator.Create(Synchronization));
             Service = new StructureWorkflowTestHelper(UnitOfWork);
         }
 

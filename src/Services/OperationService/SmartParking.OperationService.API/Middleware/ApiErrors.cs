@@ -63,6 +63,16 @@ public static class ApiErrors
     public static void Use(IApplicationBuilder app)
     {
         app.UseMiddleware<RequestCompletionMiddleware>();
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api/parking-search"))
+                context.Response.OnStarting(() =>
+                {
+                    context.Response.Headers.CacheControl = "no-store";
+                    return Task.CompletedTask;
+                });
+            await next();
+        });
         app.UseExceptionHandler();
         app.UseStatusCodePages(async status =>
         {
@@ -84,7 +94,7 @@ public static class ApiErrors
         });
     }
 
-    private sealed class BindingErrorResult : IActionResult
+    internal sealed class BindingErrorResult : IActionResult
     {
         public async Task ExecuteResultAsync(ActionContext context)
         {

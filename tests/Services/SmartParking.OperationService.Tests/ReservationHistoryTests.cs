@@ -53,7 +53,7 @@ public sealed class ReservationHistoryTests
         booking.Status = "COMPLETED";
         booking.OriginalPlate = "51A-12345";
         booking.NormalizedPlate = "51A12345";
-        booking.RecordOrderCreated(Guid.NewGuid());
+        booking.BindCollection(Guid.NewGuid(), Guid.NewGuid(), "verified");
         var allocation = CreateAllocation(booking, "RELEASED", CreatedAt);
         var session = CreateSession(booking);
         session.ExitTime = CreatedAt.AddHours(3);
@@ -85,9 +85,8 @@ public sealed class ReservationHistoryTests
         Assert.Equal("RELEASED", item.AllocationStatus);
         Assert.Equal(session.Id, item.ParkingSessionId);
         Assert.Equal(booking.PaymentOrderId, item.OrderId);
-        Assert.Equal("CREATED", item.OrderProvisioningState);
         Assert.Equal(20_000m, item.BookedAmount);
-        Assert.Equal(5_000m, item.DepositAmount);
+        Assert.Equal(20_000m, item.DepositAmount);
         Assert.Equal("VND", item.Currency);
         Assert.Null(item.PaymentStatus);
         Assert.Null(item.SiteName);
@@ -99,6 +98,11 @@ public sealed class ReservationHistoryTests
         Assert.True(detailJson.RootElement.GetProperty("success").GetBoolean());
         Assert.Equal(JsonValueKind.Array, listJson.RootElement.GetProperty("data").ValueKind);
         var data = detailJson.RootElement.GetProperty("data");
+        foreach (var representation in new[] { data, listJson.RootElement.GetProperty("data")[0] })
+        {
+            Assert.Equal(booking.RequestId!.Value, representation.GetProperty("requestId").GetGuid());
+            Assert.Equal("51A-12345", representation.GetProperty("vehicle").GetProperty("displayLabel").GetString());
+        }
         Assert.Equal(item.ReservationId, data.GetProperty("reservationId").GetGuid());
         Assert.Equal(JsonValueKind.Null, data.GetProperty("paymentStatus").ValueKind);
         Assert.Equal(JsonValueKind.Null, data.GetProperty("siteName").ValueKind);
@@ -160,8 +164,6 @@ public sealed class ReservationHistoryTests
         Assert.Equal(0m, detail.DepositAmount);
         Assert.Null(detail.OrderId);
         Assert.Null(detail.PaymentStatus);
-        Assert.Equal("NOT_REQUIRED", detail.OrderProvisioningState);
-        Assert.Equal("PENDING", detail.ZeroPriceAcceptanceState);
     }
 
     [Theory]
@@ -241,11 +243,11 @@ public sealed class ReservationHistoryTests
     public void OriginalBookingViewConstructorAndJsonFieldsRemainCompatible()
     {
         var booking = new BookingView(Guid.NewGuid(), "CONFIRMED", Guid.NewGuid(), null, CreatedAt,
-            CreatedAt.AddHours(1), null, null, "NOT_REQUIRED", null, "ACCEPTED", 0, 0, "VND", CreatedAt, CreatedAt);
+            CreatedAt.AddHours(1), null, null, 0, 0, "VND", CreatedAt, CreatedAt);
         string[] originalNames =
         [
             "reservationId", "state", "siteId", "requestedSlotId", "start", "end", "holdExpiresAt", "orderId",
-            "orderProvisioningState", "orderProvisioningCode", "zeroPriceAcceptanceState", "bookedAmount",
+            "bookedAmount",
             "depositAmount", "currency", "confirmedAt", "createdAt"
         ];
         var json = JsonSerializer.SerializeToElement(booking, JsonOptions);
@@ -288,10 +290,10 @@ public sealed class ReservationHistoryTests
     }
 
     private static ReservationRow CreateBooking(Guid accountId, bool zeroPrice = false) =>
-        ReservationRow.Prepare(Guid.NewGuid(), Guid.NewGuid(), accountId, Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "terms-v1", "PAYOS", CreatedAt.AddHours(1),
-            CreatedAt.AddHours(2), CreatedAt.AddHours(2), CreatedAt, CreatedAt.AddMinutes(5),
-            zeroPrice ? 0m : 20_000m, zeroPrice ? 0m : 5_000m, "VND", "{}", "{}");
+        ReservationRow.PrepareQuote(Guid.NewGuid(), accountId, "51A12345", Guid.NewGuid(), Guid.NewGuid(),
+            Guid.NewGuid(), "PAYOS", CreatedAt.AddHours(1), CreatedAt.AddHours(2), CreatedAt.AddHours(2),
+            CreatedAt, zeroPrice ? null : CreatedAt.AddMinutes(5), zeroPrice ? 0m : 20_000m, 0m, zeroPrice ? 0m : 20_000m,
+            "VND", "{}", Guid.NewGuid(), CreatedAt.AddMinutes(1), "tariff", "coverage", false);
 
     private static SlotAllocationRow CreateAllocation(ReservationRow booking, string status, DateTimeOffset createdAt) =>
         new()

@@ -86,6 +86,10 @@ function pendingCheckInStorageKey(siteId: string) {
   return `smartpark:demo-pending-checkins:${siteId}`
 }
 
+function acceptsDemoVehicle(slot: OperatorSlot, vehicleType?: string) {
+  return vehicleType !== "CAR" || slot.vehicleType === "CAR" || slot.vehicleType === "ANY"
+}
+
 function demoVehicleImage(index: number) {
   const colors = ["#38bdf8", "#a78bfa", "#34d399", "#fbbf24", "#fb7185"]
   const color = colors[index % colors.length]
@@ -456,10 +460,13 @@ export function useLotStatus(
     void reservationApi.listParkingSessions(site.id).then((sessions) => {
       if (!active) return
       const assignments: Record<string, DemoVehicle> = {}
+      const locatedIds = new Set<string>()
       for (const session of sessions) {
         if (!session.currentSlotId || !session.locationScannedAt ||
             !(session.status === "ACTIVE" || session.status === "PENDING_PAYMENT")) continue
         const vehicle = toDemoSession(session)
+        locatedIds.add(session.id)
+        if (session.reservationId) locatedIds.add(session.reservationId)
         assignments[session.currentSlotId] = {
           plate: vehicle.originalPlate,
           imageUrl: vehicle.entryImageUrl ?? "",
@@ -467,6 +474,16 @@ export function useLotStatus(
         }
       }
       setDemoAssignments(assignments)
+      if (locatedIds.size > 0) {
+        setPendingDemoAssignments((current) => Object.fromEntries(
+          Object.entries(current).filter(([, vehicle]) => !locatedIds.has(vehicle.session.id)),
+        ))
+        const key = pendingCheckInStorageKey(site.id)
+        const pending = JSON.parse(window.localStorage.getItem(key) ?? "[]") as PendingCheckIn[]
+        window.localStorage.setItem(key, JSON.stringify(
+          pending.filter((item) => !item.session || !locatedIds.has(item.session.id)),
+        ))
+      }
     }).catch(() => undefined)
 
     const stored = JSON.parse(
@@ -476,12 +493,12 @@ export function useLotStatus(
     const assignments: Record<string, DemoVehicle> = {}
     const availableSlots = site.slots.filter((slot) => slot.status === "available")
     stored.forEach((checkIn, index) => {
-      let slot = checkIn.slotId
-        ? availableSlots.find((candidate) => candidate.id === checkIn.slotId)
-        : undefined
-      if (slot) availableSlots.splice(availableSlots.indexOf(slot), 1)
-      else slot = availableSlots.splice(Math.floor(Math.random() * availableSlots.length), 1)[0]
+      const candidates = availableSlots.filter((slot) =>
+        acceptsDemoVehicle(slot, checkIn.vehicleType ?? checkIn.session?.vehicleType))
+      const slot = candidates.find((candidate) => candidate.id === checkIn.slotId)
+        ?? candidates[Math.floor(Math.random() * candidates.length)]
       if (!slot) return
+      availableSlots.splice(availableSlots.indexOf(slot), 1)
       const imageUrl = checkIn.imageUrl || demoVehicleImage(Date.now() + index)
       assignments[slot.id] = {
         plate: checkIn.plate,
@@ -498,7 +515,8 @@ export function useLotStatus(
   useEffect(() => {
     const handleCheckIn = (event: Event) => {
       const detail = (event as CustomEvent<{
-        siteId: string; plate: string; imageUrl?: string; session?: DemoSlotSession; vehicleType?: string; slotId?: string
+        siteId: string; plate: string; imageUrl?: string; session?: DemoSlotSession; vehicleType?: string
+        slotId?: string; recordedSlotId?: string
       }>).detail
       if (!site || detail.siteId !== site.id) return
       const imageUrl = detail.imageUrl || demoVehicleImage(Date.now())
@@ -507,10 +525,17 @@ export function useLotStatus(
         imageUrl,
         session: detail.session ?? createDemoSession(detail.plate, detail.vehicleType ?? "CAR", imageUrl),
       }
+      if (detail.recordedSlotId) {
+        const slotId = detail.recordedSlotId
+        setDemoAssignments((current) => ({ ...current, [slotId]: vehicle }))
+        void refreshLayout()
+        return
+      }
       const occupiedIds = new Set(Object.keys(demoAssignments))
       const pendingIds = new Set(Object.keys(pendingDemoAssignments))
       const availableSlots = site.slots.filter((slot) =>
-        slot.status === "available" && !occupiedIds.has(slot.id) && !pendingIds.has(slot.id),
+        slot.status === "available" && !occupiedIds.has(slot.id) && !pendingIds.has(slot.id) &&
+        acceptsDemoVehicle(slot, vehicle.session.vehicleType),
       )
       const slot = availableSlots.find((candidate) => candidate.id === detail.slotId)
         ?? availableSlots[Math.floor(Math.random() * availableSlots.length)]

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { classifyPaymentStatus, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
 import { useServerRefresh } from "../../../lib/serverRefresh"
@@ -11,6 +11,7 @@ type PaymentCheckoutProps = {
   showMethodPicker?: boolean
   reservationOrderId?: string
   bookingOrderId?: string
+  reservationRequestId?: string
   holdExpiresAt?: string | null
 }
 
@@ -18,6 +19,7 @@ export function PaymentCheckout({
   showMethodPicker = true,
   reservationOrderId,
   bookingOrderId,
+  reservationRequestId,
   holdExpiresAt,
 }: PaymentCheckoutProps) {
   const [manualOrderId, setManualOrderId] = useState(() =>
@@ -30,10 +32,17 @@ export function PaymentCheckout({
   const orderId = providedOrderId ?? manualOrderId
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
+  const submitting = useRef(false)
+  const mounted = useRef(false)
   const [error, setError] = useState("")
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null)
   const [status, setStatus] = useState<"pending" | "success" | "failed">("pending")
   const [now, setNow] = useState(Date.now)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => {
     if ((!checkout && !holdExpiresAt) || status !== "pending") return
@@ -47,7 +56,7 @@ export function PaymentCheckout({
   }, [checkout])
 
   const transactionId = checkout?.paymentTransactionId
-  useServerRefresh(status === "pending" && transactionId ? transactionId + ":" + orderId : undefined, async (isCurrent) => {
+  useServerRefresh(!providedOrderId && status === "pending" && transactionId ? transactionId + ":" + orderId : undefined, async (isCurrent) => {
       if (!transactionId) return
       try {
         const result = await paymentApi.status(transactionId)
@@ -61,11 +70,12 @@ export function PaymentCheckout({
 
   async function pay(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selected || !isPaymentOrderId(orderId) || busy) return
+    if (!selected || !isPaymentOrderId(orderId) || submitting.current) return
     if (holdExpiresAt && Date.parse(holdExpiresAt) <= Date.now()) {
       setError("The reservation payment deadline has passed. Refresh the reservation status.")
       return
     }
+    submitting.current = true
     setBusy(true)
     setError("")
     try {
@@ -73,9 +83,11 @@ export function PaymentCheckout({
       const previous = paymentApi.rememberedCheckout(normalized)
       if (previous) {
         const result = await paymentApi.status(previous.paymentTransactionId)
+        if (providedOrderId && !mounted.current) return
         if (result.orderId.toLowerCase() !== normalized) throw new Error("Payment Service returned a different order.")
         if (classifyPaymentStatus(result) === "success") throw new Error("This payment order has already been paid.")
         if (result.status === "PENDING" && new Date(previous.expiresAt).getTime() > Date.now()) {
+          if (providedOrderId) paymentApi.bindReservationCheckout(normalized, previous.paymentTransactionId)
           setCheckout(previous)
           setStatus("pending")
           return
@@ -85,12 +97,13 @@ export function PaymentCheckout({
         }
         if (result.status === "FAILED" || result.status === "CANCELLED") paymentApi.resetAttempt(normalized)
       }
-      const created = await paymentApi.checkout(normalized)
+      const created = await paymentApi.checkout(normalized, providedOrderId ? reservationRequestId ?? null : undefined)
       setCheckout(created)
       setStatus("pending")
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Payment could not be started.")
     } finally {
+      submitting.current = false
       setBusy(false)
     }
   }
@@ -98,9 +111,14 @@ export function PaymentCheckout({
   const holdExpired = !!holdExpiresAt && Date.parse(holdExpiresAt) <= now
   const expired = holdExpired || (checkout ? new Date(checkout.expiresAt).getTime() <= now : false)
   const payable = !!checkout && status === "pending" && !expired
+  const showQr = payable && Boolean(checkout?.qrCode?.trim())
+  const paymentStatus = status === "success" ? "Payment confirmed" : status === "failed" ? "Payment failed" : expired ? "Link expired" : "Awaiting confirmation"
 
   return <section className="card payos-checkout" aria-labelledby="payos-checkout-title">
-    <div className="payos-checkout-heading"><span>PAYMENT SERVICE</span><h3 id="payos-checkout-title">Pay by QR</h3><p>{showMethodPicker ? "Generate a real VietQR from an existing Payment Service order." : "Your payment details will appear here when the booking creates a payment order."}</p></div>
+    <header className="payos-checkout-heading">
+      <h3 id="payos-checkout-title">Pay with payOS VietQR</h3>
+      {!checkout && <p>Generate a QR code for this payment order.</p>}
+    </header>
     {!checkout && !showMethodPicker && !providedOrderId ? <div className="payos-checkout-unavailable" role="status">
       <strong>QR payment is not available for this booking yet.</strong>
       <p>SmartParking needs a payment order from the booking service before it can request a real payOS QR code. Check your reservation status before trying again.</p>
@@ -118,17 +136,27 @@ export function PaymentCheckout({
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
       {holdExpired && <p role="status">The reservation payment deadline has passed.</p>}
       <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || busy || holdExpired}>{busy ? "Generating QR…" : "Generate payment QR"}</button>
-    </form> : <div className="payos-checkout-details">
-      {payable && checkout.qrCode?.trim() ? <div className="payos-qr-panel"><QRCodeSVG value={checkout.qrCode} size={224} marginSize={2} title="Scan this payOS VietQR to pay" /><p>Scan with your banking app</p></div> : <p role="status">{expired ? "This payment link has expired. Check its status before starting another payment." : status === "success" ? "Payment confirmed by Payment Service." : status === "failed" ? "This payment attempt failed." : "payOS did not return a QR image. Use its secure checkout page to pay."}</p>}
-      <dl className="payos-checkout-facts">
-        <div><dt>Amount</dt><dd>{checkout.amount.toLocaleString("vi-VN")} VND</dd></div>
-        <div><dt>Order code</dt><dd>{checkout.orderCode}</dd></div>
-        <div><dt>Bank BIN</dt><dd>{checkout.bin || "—"}</dd></div>
-        <div><dt>Account number</dt><dd>{checkout.accountNumber || "—"}</dd></div>
-        <div><dt>Account name</dt><dd>{checkout.accountName || "—"}</dd></div>
-        <div><dt>Expires</dt><dd>{new Date(checkout.expiresAt).toLocaleString("en-GB")}</dd></div>
-        <div><dt>Status</dt><dd>{status === "success" ? "Payment confirmed" : status === "failed" ? "Payment failed" : "Awaiting confirmation"}</dd></div>
-      </dl>
+    </form> : <div className="payos-checkout-details" data-qr={showQr}>
+      {showQr && <figure className="payos-qr-panel">
+        <div><QRCodeSVG value={checkout.qrCode} size={232} marginSize={4} title="Scan this payOS VietQR to pay" /></div>
+        <figcaption>Scan with your banking app</figcaption>
+      </figure>}
+      <div className="payos-transfer">
+        <div className="payos-transfer-summary">
+          <div><span>Amount to pay</span><strong>{checkout.amount.toLocaleString("vi-VN")} <small>VND</small></strong></div>
+          <span className="payos-transfer-status" data-status={status === "pending" && expired ? "expired" : status} role="status">{paymentStatus}</span>
+        </div>
+        {!showQr && status === "pending" && <p className="payos-transfer-message">
+          {expired ? "Check the payment status before starting another payment." : "Open payOS checkout to pay."}
+        </p>}
+        <dl className="payos-checkout-facts">
+          <div><dt>Account name</dt><dd>{checkout.accountName || "—"}</dd></div>
+          <div><dt>Account number</dt><dd>{checkout.accountNumber || "—"}</dd></div>
+          <div><dt>Order code</dt><dd>{checkout.orderCode}</dd></div>
+          <div><dt>Bank BIN</dt><dd>{checkout.bin || "—"}</dd></div>
+          <div className="payos-transfer-expiry"><dt>Expires</dt><dd><time dateTime={checkout.expiresAt}>{new Date(checkout.expiresAt).toLocaleString("en-GB")}</time></dd></div>
+        </dl>
+      </div>
       <div className="payos-checkout-actions">
         {payable && <button type="button" className="btn-primary" onClick={() => window.location.assign(checkout.checkoutUrl)}>Open payOS checkout</button>}
         <button type="button" className="btn-outline" onClick={async () => {
@@ -137,7 +165,7 @@ export function PaymentCheckout({
             if (result.orderId.toLowerCase() !== orderId.trim().toLowerCase()) throw new Error("Payment Service returned a different order.")
             setStatus(classifyPaymentStatus(result))
             setError("")
-          } catch { setError("Could not check payment status. Please try again.") }
+          } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not check payment status. Please try again.") }
         }}>Check payment status</button>
       </div>
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}

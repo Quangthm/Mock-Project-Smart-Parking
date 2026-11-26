@@ -65,7 +65,7 @@ public class InvoicesController : ControllerBase
             return BadRequest(new
             {
                 success = false,
-                errorCode = "MISSING_SESSION_ID",
+                code = "MISSING_SESSION_ID",
                 message = "The sessionId query parameter is required."
             });
         }

@@ -12,12 +12,16 @@ namespace SmartParking.OperationService.API.Controllers;
 public sealed class ReservationRequestsController(IMediator mediator) : ApiControllerBase(mediator)
 {
     [HttpPost]
-    public async Task<IActionResult> Create(CreateReservationRequest request,
+    public async Task<IActionResult> Create([FromBody] QuoteReservationIntent intent,
         [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey, CancellationToken cancellationToken)
     {
-        var receipt = await Mediator.Send(new AdmitReservationCommand(request, idempotencyKey), cancellationToken);
+        var receipt = await Mediator.Send(new AdmitQuoteReservation(intent, idempotencyKey), cancellationToken);
         return AcceptedAtAction(nameof(Read), new { requestId = receipt.RequestId }, new { success = true, data = receipt });
     }
+
+    [HttpGet("{requestId:guid}/progress")]
+    public async Task<IActionResult> Progress(Guid requestId, CancellationToken ct) =>
+        Ok(new { success = true, data = await Mediator.Send(new ReadOwnReservationProgress(requestId), ct) });
 
     [HttpGet("{requestId:guid}")]
     public async Task<IActionResult> Read(Guid requestId, CancellationToken cancellationToken)

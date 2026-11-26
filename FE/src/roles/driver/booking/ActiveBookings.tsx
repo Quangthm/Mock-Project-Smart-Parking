@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { driverReservationApi, type DriverReservation } from "../../../lib/driverReservationApi"
 import { formatStatus } from "../../../lib/formatStatus"
-import { useServerRefresh } from "../../../lib/serverRefresh"
 import { readReservationAttempt } from "./ReservationCheckout"
 
 import { useApp } from "../../../context/AppContext"
@@ -23,7 +22,7 @@ function reservationStamp(value: string, formatter: Intl.DateTimeFormat) {
   return Number.isFinite(Date.parse(value)) ? formatter.format(new Date(value)) : "Unavailable"
 }
 const reservationTone: Record<string, BadgeTone> = {
-  COMPLETED: "success", PENDING_PAYMENT: "warning", NO_SHOW: "danger", UNFULFILLABLE: "danger",
+  COMPLETED: "success", PENDING_PAYMENT: "warning", NO_SHOW: "danger", UNFULFILLABLE: "danger", INVALIDATED: "danger",
   CONFIRMED: "primary", ALLOCATED: "primary", PARKING: "primary",
 }
 
@@ -132,10 +131,17 @@ function ServerReservations({ userId, onResume }: { userId: string; onResume?: (
 
   useEffect(() => {
     let current = true
-    void load(() => current)
-    return () => { current = false }
-  }, [retry])
-  useServerRefresh(userId, load)
+    const read = () => { void load(() => current) }
+    const restore = (event: PageTransitionEvent) => { if (event.persisted) read() }
+    read()
+    window.addEventListener("pageshow", restore)
+    window.addEventListener("sp-data-change", read)
+    return () => {
+      current = false
+      window.removeEventListener("pageshow", restore)
+      window.removeEventListener("sp-data-change", read)
+    }
+  }, [userId, retry])
 
   return <details className="card driver-recent-reservations">
     <summary className="recent-reservations-header">

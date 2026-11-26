@@ -26,14 +26,9 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.AddTransactionalOutboxEntities();
+        modelBuilder.Entity<ReservationAdmissionState>().HasKey(x => x.CorrelationId);
+        Map<ReservationAdmissionState>(modelBuilder, "reservation_admission_sagas");
         Map<ReservationRequest>(modelBuilder, "reservation_requests");
-        Map<ReservationTerms>(modelBuilder, "reservation_terms");
-        Map<ReservationFacilityDependency>(modelBuilder, "reservation_facility_dependencies");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.OutcomeJson).HasColumnType("jsonb");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.Version).IsConcurrencyToken();
-        modelBuilder.Entity<ReservationFacilityDependency>().HasIndex(x => new { x.WorkflowId, x.Purpose }).IsUnique();
-        modelBuilder.Entity<ReservationTerms>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedPricingSnapshot).HasColumnType("jsonb");
         Map<OperationalPolicyRow>(modelBuilder, "operational_policies");
         modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.OverrideBounds).HasColumnType("jsonb");
@@ -41,7 +36,9 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<OperationalPolicyDraftRow>(modelBuilder, "operational_policy_drafts");
         modelBuilder.Entity<OperationalPolicyDraftRow>().Property(x => x.DraftPayload).HasColumnType("jsonb");
         modelBuilder.Entity<OperationalPolicyDraftRow>().HasIndex(x => x.SiteId).IsUnique();
-        Map<OperationalCapacityConfig>(modelBuilder, "operational_capacity_configs");
+        Map<ReservationQuotaConfig>(modelBuilder, "reservation_quota_configs");
+        modelBuilder.Entity<ReservationQuotaConfig>().HasIndex(x => new { x.TenantId, x.SiteId, x.VehicleType })
+            .IsUnique().HasDatabaseName("uq_reservation_quota_scope");
         Map<ReservationCancellationEvidence>(modelBuilder, "reservation_cancellation_evidence");
         modelBuilder.Entity<ReservationCancellationEvidence>().Property(x => x.PolicySnapshot).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationCancellationEvidence>().HasIndex(x => x.ReservationId).IsUnique();
@@ -50,6 +47,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationRequest>().Property(x => x.IntentJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRequest>().HasIndex(x => new { x.AccountId, x.Operation, x.IdempotencyKey }).IsUnique();
         Map<ReservationRow>(modelBuilder, "reservations");
+        modelBuilder.Entity<ReservationRow>().HasIndex(x => x.QuoteId).IsUnique();
         modelBuilder.Entity<ReservationRow>().Property(x => x.Version).IsConcurrencyToken();
         Map<ParkingSessionRow>(modelBuilder, "parking_sessions");
         modelBuilder.Entity<ParkingSessionRow>().Property(x => x.Version).IsConcurrencyToken();

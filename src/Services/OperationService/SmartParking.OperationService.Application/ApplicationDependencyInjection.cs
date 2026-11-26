@@ -14,10 +14,12 @@ public static class ApplicationDependencyInjection
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        services.AddSingleton<Reservations.IReservationSubscriptionEligibility, Reservations.ReservationSubscriptionEligibility>();
         services.AddAutoMapper(cfg => cfg.AddMaps(typeof(ApplicationDependencyInjection).Assembly));
         services.AddValidatorsFromAssembly(typeof(ApplicationDependencyInjection).Assembly);
         services.TryAddSingleton(Options.Create(new PassPlanDefaultsOptions()));
         services.AddScoped<IPassPlanSnapshotService, PassPlanSnapshotService>();
+        services.AddScoped<Usecase.ReservationGate.GateSlotOccupancy>();
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(ApplicationDependencyInjection).Assembly);

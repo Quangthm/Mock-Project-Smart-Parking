@@ -14,7 +14,7 @@ public sealed class ScanParkingSessionCommandHandler(
     ISlotAllocationRepository allocations,
     IOperationsConcurrency guards,
     IUnitOfWork work,
-    IOperatorGateSlotClaims gateSlots,
+    GateSlotOccupancy occupancy,
     TimeProvider clock) : IRequestHandler<ScanParkingSessionCommand, ParkingSessionHistoryEntry>
 {
     public async Task<ParkingSessionHistoryEntry> Handle(ScanParkingSessionCommand request, CancellationToken ct)
@@ -28,13 +28,6 @@ public sealed class ScanParkingSessionCommandHandler(
         if (observed.LocationScannedAt is not null)
             return Project(observed);
 
-        var reservedSlotId = observed.ReservationId is { } reservationId
-            ? (await reservations.FindByIdAsync(scope.TenantId, request.SiteId, reservationId, ct))?.SlotId
-                ?? throw AllocationUnavailable()
-            : request.SlotId;
-        await using var lease = await gateSlots.ClaimAvailableAsync(
-            scope.TenantId, request.SiteId, observed.VehicleType, reservedSlotId, null, observed.ReservationId is not null, ct);
-
         await using var transaction = await work.BeginTransactionAsync(ct);
         await guards.LockVehicleAsync(observed.NormalizedPlate!, ct);
         await guards.LockSiteAsync(request.SiteId, ct);
@@ -42,31 +35,20 @@ public sealed class ScanParkingSessionCommandHandler(
             ?? throw SessionNotFound();
         if (session.ExitTime is not null || session.LocationScannedAt is not null)
             throw new ReservationGateException(409, "INVALID_SESSION_STATE", "The session changed during the scan. Refresh before retrying.");
-        var now = clock.GetUtcNow();
-        if (lease.Slot.Id != reservedSlotId)
-            throw AllocationUnavailable();
-
+        var slotId = request.SlotId;
+        SlotAllocationRow? allocation = null;
         if (session.ReservationId is { } bookedReservationId)
         {
+            slotId = (await reservations.FindByIdAsync(scope.TenantId, request.SiteId, bookedReservationId, ct))?.SlotId
+                ?? throw AllocationUnavailable();
             var active = await allocations.FindActiveForSessionAsync(scope.TenantId, request.SiteId, session.Id, ct);
-            var allocation = active.SingleOrDefault(row => row.SlotId == reservedSlotId && row.ReservationId == bookedReservationId);
-            if (allocation is null)
-                throw AllocationUnavailable();
-            if (allocation.AllocationStatus == "RESERVED")
-                allocation.Occupy(session.Id);
+            allocation = active.SingleOrDefault(row => row.SlotId == slotId && row.ReservationId == bookedReservationId)
+                ?? throw AllocationUnavailable();
         }
-        else
-        {
-            var allocation = new SlotAllocationRow
-            {
-                Id = Guid.NewGuid(), TenantId = scope.TenantId, SiteId = request.SiteId, SlotId = reservedSlotId,
-                AllocatedStartTime = now, AllocatedEndTime = DateTimeOffset.MaxValue, AllocationStatus = "RESERVED",
-                CreatedAt = now
-            };
+        await using var lease = await occupancy.ClaimAsync(session, slotId, clock.GetUtcNow(), ct);
+        if (allocation is { AllocationStatus: "RESERVED" })
             allocation.Occupy(session.Id);
-            await allocations.AddAsync(allocation, ct);
-        }
-        session.RecordSlotScan(reservedSlotId, now);
+        session.RecordSlotScan(slotId, clock.GetUtcNow());
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         lease.Commit();

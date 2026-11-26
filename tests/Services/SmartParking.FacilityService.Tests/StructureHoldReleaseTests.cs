@@ -139,7 +139,7 @@ public sealed class StructureHoldReleaseTests
             var zone = Structure.AddUnit(UnitType.ZONE, "A", maxCapacity: 1);
             Structure.AddSlot(zone, "A01", VehicleType.CAR);
             UnitOfWork = new StructureEditHandlers(this, this, this, Commitments, Store,
-                StructureTestMediator.Create(new StructureSynchronizationHandlers(Store, Commitments)), new EmptyReservationDependencies());
+                StructureTestMediator.Create(new StructureSynchronizationHandlers(Store, Commitments)));
             Service = new StructureTestHelper(UnitOfWork);
         }
 

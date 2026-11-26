@@ -13,8 +13,7 @@ public sealed class StructureEditHandlers(
     ISlotOperatorAuthorizer operators,
     IStructureCommitments commitments,
     IStructureSynchronizationRepository synchronizationStore,
-    IMediator synchronization,
-    IReservationDependencyRepository reservationDependencies)
+    IMediator synchronization)
     : IRequestHandler<BeginStructureEditCommand, IStructureEditSession>, IRequestHandler<RecoverAuthorizedStructureCommand>
 {
     public Task<IStructureEditSession> Handle(BeginStructureEditCommand command, CancellationToken ct) =>
@@ -38,8 +37,6 @@ public sealed class StructureEditHandlers(
 
         try
         {
-            if (await reservationDependencies.HasHeldAsync(siteId, ct))
-                throw new StructureException("STRUCTURE_BUSY", "Reservation acceptance is using this site's configuration.");
             await synchronization.Send(new RecoverStructureSiteCommand(siteId), ct);
         }
         catch { await gate.DisposeAsync(); throw; }

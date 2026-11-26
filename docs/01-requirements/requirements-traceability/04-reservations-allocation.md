@@ -30,3 +30,7 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | FR-BAS-02 | CONFIRMED — implementation pending / not assessed | 04-reservations-allocation | BR-RES-01, BR-RES-08 | US-D01, US-O05 | UC-RES-02 |
 | FR-BAS-03 | CONFIRMED — implementation pending / not assessed | 04-reservations-allocation | BR-RES-08 | US-D17 | UC-RES-02 |
 | FR-BAS-04 | CONFIRMED — implementation pending / not assessed | 04-reservations-allocation | BR-CAP-04, BR-RES-08 | US-D01, US-O05, US-OW02 | UC-RES-01 |
+
+## Reservation amendment trace
+
+The [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) preserves existing IDs and associations. [Reservation scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md#admission-realtime-and-commercial-acceptance) trace FR-RES-01/02/03/04/05/06/10/12 and FR-POL-06 to review, identity, overlap, admission, progress, payment/covered readiness and protected confirmation. Implementation and execution evidence are pending.

@@ -94,6 +94,8 @@ public sealed class PassPlanPaymentHttpPipelineTests
             .ConfigureServices(services =>
             {
                 services.AddLogging();
+                services.AddExceptionHandler<PaymentExceptionHandler>();
+                services.AddProblemDetails();
                 services.AddSingleton<IConfiguration>(config);
                 services.AddRouting();
                 services.AddHttpContextAccessor();
@@ -131,7 +133,7 @@ public sealed class PassPlanPaymentHttpPipelineTests
             })
             .Configure(app =>
             {
-                app.UseMiddleware<ExceptionHandlingMiddleware>();
+                app.UseExceptionHandler();
                 app.UseRouting();
                 app.UseAuthentication();
                 app.UseAuthorization();
@@ -163,7 +165,7 @@ public sealed class PassPlanPaymentHttpPipelineTests
         Assert.Equal(HttpStatusCode.Unauthorized, dummyOnOwnerResp.StatusCode);
         var unauthJson = await dummyOnOwnerResp.Content.ReadFromJsonAsync<JsonElement>();
         Assert.False(unauthJson.GetProperty("success").GetBoolean());
-        Assert.Equal("UNAUTHENTICATED", unauthJson.GetProperty("errorCode").GetString());
+        Assert.Equal("UNAUTHENTICATED", unauthJson.GetProperty("code").GetString());
 
         // 3. Driver RS256 JWT gets 403 FORBIDDEN PaymentService envelope
         using var driverReq = new HttpRequestMessage(
@@ -173,7 +175,7 @@ public sealed class PassPlanPaymentHttpPipelineTests
         var driverResp = await client.SendAsync(driverReq);
         Assert.Equal(HttpStatusCode.Forbidden, driverResp.StatusCode);
         var forbidJson = await driverResp.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("FORBIDDEN", forbidJson.GetProperty("errorCode").GetString());
+        Assert.Equal("FORBIDDEN", forbidJson.GetProperty("code").GetString());
 
         // 4. Lowercase "owner" RS256 JWT accesses A5 + Idempotency-Replayed header & A6
         var ownerJwt = CreateUserToken(userRsa, OwnerUserId, "owner");
@@ -233,7 +235,7 @@ public sealed class PassPlanPaymentHttpPipelineTests
         var wrongScopeResp = await client.SendAsync(wrongScopeB3);
         Assert.Equal(HttpStatusCode.Forbidden, wrongScopeResp.StatusCode);
         var wrongScopeJson = await wrongScopeResp.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("FORBIDDEN", wrongScopeJson.GetProperty("errorCode").GetString());
+        Assert.Equal("FORBIDDEN", wrongScopeJson.GetProperty("code").GetString());
 
         // Proper B3 read & quote tokens succeed
         using var readB3 = new HttpRequestMessage(HttpMethod.Get, $"/internal/pass-financial-terms?siteId={SiteId}");
@@ -329,23 +331,24 @@ public sealed class PassPlanPaymentHttpPipelineTests
     }
 
     [Fact]
-    public async Task ExceptionHandlingMiddleware_MapsPostgres23505UniqueViolation_To409IdempotencyConflict()
+    public async Task PaymentExceptionHandler_MapsPostgres23505UniqueViolation_To409IdempotencyConflict()
     {
-        var context = new DefaultHttpContext();
-        context.Response.Body = new MemoryStream();
+        using var services = new ServiceCollection().BuildServiceProvider();
+        using var responseBody = new MemoryStream();
+        var context = new DefaultHttpContext { RequestServices = services };
+        context.Response.Body = responseBody;
         var pgEx = new PostgresException("duplicate key value violates unique constraint", "ERROR", "ERROR", PostgresErrorCodes.UniqueViolation);
         var dbEx = new DbUpdateException("Update failed", pgEx);
 
-        var middleware = new ExceptionHandlingMiddleware(
-            _ => throw dbEx,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<ExceptionHandlingMiddleware>.Instance);
+        var handler = new PaymentExceptionHandler(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PaymentExceptionHandler>.Instance);
 
-        await middleware.InvokeAsync(context);
+        Assert.True(await handler.TryHandleAsync(context, dbEx, default));
 
         Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
         context.Response.Body.Position = 0;
         var payload = await JsonSerializer.DeserializeAsync<JsonElement>(context.Response.Body);
-        Assert.Equal("IDEMPOTENCY_CONFLICT", payload.GetProperty("errorCode").GetString());
+        Assert.Equal("IDEMPOTENCY_CONFLICT", payload.GetProperty("code").GetString());
         Assert.DoesNotContain("constraint", payload.GetProperty("message").GetString()!, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -368,6 +371,8 @@ public sealed class PassPlanPaymentHttpPipelineTests
             .ConfigureServices(services =>
             {
                 services.AddLogging();
+                services.AddExceptionHandler<PaymentExceptionHandler>();
+                services.AddProblemDetails();
                 services.AddRouting();
                 services.AddUserJwtAuthentication(config, new TestHostEnvironment("Production"));
                 services.AddHttpClient("SmartParking.Payment.Jwks")
@@ -375,7 +380,7 @@ public sealed class PassPlanPaymentHttpPipelineTests
             })
             .Configure(app =>
             {
-                app.UseMiddleware<ExceptionHandlingMiddleware>();
+                app.UseExceptionHandler();
                 app.UseRouting();
                 app.UseAuthentication();
                 app.UseAuthorization();
@@ -393,7 +398,7 @@ public sealed class PassPlanPaymentHttpPipelineTests
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("AUTHENTICATION_KEYS_UNAVAILABLE", body.GetProperty("errorCode").GetString());
+        Assert.Equal("AUTHENTICATION_KEYS_UNAVAILABLE", body.GetProperty("code").GetString());
     }
 
     private static string CreateUserToken(RSA rsa, Guid userId, string role)

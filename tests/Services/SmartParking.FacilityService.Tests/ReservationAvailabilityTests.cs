@@ -7,101 +7,194 @@ namespace SmartParking.FacilityService.Tests;
 public sealed class ReservationAvailabilityTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 10, 8, 0, 0, TimeSpan.Zero);
-    private static OperationalCapacityConfig Quota(int count) => new()
-        { IsActive = true, VehicleType = "CAR", TotalPhysicalCapacity = count, MaxReservationQuota = count };
-    private static CapacityResource Resource(Guid id, bool backup = false) => new(id, null, [], true, backup);
-    private static CapacityDemand Demand(Guid slot, DateTimeOffset? start = null) =>
-        new(Guid.NewGuid(), slot, null, start ?? Now.AddMinutes(10), Now.AddHours(1));
+    private static CapacityDemand Demand(Guid slot) => new(Guid.NewGuid(), slot, Now.AddMinutes(10), Now.AddHours(1));
 
-    [Fact]
-    public void SameSelectedSlotOverlapLosesEvenWhenAnotherSlotIsFree()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(10_000)]
+    public void RejectsOnlyTheOccupiedNamedSlotAcrossTheWholeInterval(int? quota)
     {
-        var slot = Guid.NewGuid();
-        var result = ReservationAvailability.Evaluate(Demand(slot), [Demand(slot)], [],
-            [Resource(slot), Resource(Guid.NewGuid())], [], [Quota(2)], Now, TimeSpan.FromHours(4), false);
-        Assert.Equal("SLOT_TIME_CONFLICT", result.Rejection);
+        var first = Demand(Guid.NewGuid());
+        var second = Demand(Guid.NewGuid());
+        var middle = first.Start.AddMinutes(15);
+        var existing = new[] { first with { End = middle }, second with { Start = middle } };
+        AvailabilityDecision Check(Guid slot) => ReservationAvailability.Evaluate(Demand(slot),
+            existing, [], quota, Now, TimeSpan.Zero);
+
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(first.Slot!.Value).Rejection);
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(second.Slot!.Value).Rejection);
+        Assert.True(Check(Guid.NewGuid()).Allowed);
     }
 
     [Fact]
-    public void AdjacentIntervalsDoNotConflict()
+    public void NamedSlotUsesEachAcceptedBufferedEnd()
     {
-        var slot = Guid.NewGuid();
-        var earlier = new CapacityDemand(Guid.NewGuid(), slot, null, Now, Now.AddMinutes(10));
-        Assert.True(ReservationAvailability.Evaluate(Demand(slot), [earlier], [], [Resource(slot)], [],
-            [Quota(1)], Now, TimeSpan.FromHours(4), false).Allowed);
+        var first = Demand(Guid.NewGuid());
+        var candidate = first with { Id = Guid.NewGuid(), Start = first.End, End = first.End.AddMinutes(30) };
+        AvailabilityDecision Check(CapacityDemand existing) => ReservationAvailability.Evaluate(candidate,
+            [existing], [], 1, Now, TimeSpan.Zero);
+
+        Assert.True(Check(first).Allowed);
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(first with { End = first.End.AddMinutes(1) }).Rejection);
     }
 
     [Fact]
-    public void OccupiedBackupIsCountedOnceAndUnknownVisitStillConsumesCapacity()
+    public void LinkedVisitAndReservationConsumeOneCommercialUnit()
     {
-        var ids = Enumerable.Range(0, 10).Select(_ => Guid.NewGuid()).ToArray();
-        var resources = ids.Select((id, i) => Resource(id, i is 0 or 3)).ToArray();
-        var visits = ids.Take(3).Select(id => new CapacityVisit(Guid.NewGuid(), null, id, Now)).ToArray();
-        var claims = ids.Skip(4).Take(5).Select(id => Demand(id)).ToArray();
-        Assert.True(ReservationAvailability.Evaluate(Demand(ids[9]), claims, visits, resources, [],
-            [Quota(10)], Now, TimeSpan.FromHours(4), false).Allowed);
-        Assert.False(ReservationAvailability.Evaluate(Demand(ids[9]), claims,
-            visits.Append(new(Guid.NewGuid(), null, null, Now)).ToArray(), resources, [],
-            [Quota(10)], Now, TimeSpan.FromHours(4), false).Allowed);
-    }
-
-    [Fact]
-    public void LinkedVisitAndReservationConsumeOneResource()
-    {
-        var occupied = Guid.NewGuid(); var free = Guid.NewGuid();
+        var occupied = Guid.NewGuid();
         var existing = Demand(occupied);
         var visit = new CapacityVisit(Guid.NewGuid(), existing.Id, occupied, Now);
-        Assert.True(ReservationAvailability.Evaluate(Demand(free), [existing], [visit],
-            [Resource(occupied), Resource(free)], [], [Quota(2)], Now, TimeSpan.FromHours(4), false).Allowed);
+        var allocation = new CapacityAllocation(occupied, existing.Start, existing.End,
+            "OCCUPIED", existing.Id, visit.Id, Now);
+        existing = existing with { Allocations = [allocation] };
+        visit = visit with { Allocations = [allocation] };
+        var candidate = Demand(Guid.NewGuid());
+        Assert.True(ReservationAvailability.Evaluate(candidate, [existing], [visit],
+            2, Now, TimeSpan.FromHours(4)).Allowed);
+        Assert.Equal("RESERVATION_QUOTA_EXCEEDED", ReservationAvailability.Evaluate(candidate, [existing], [visit],
+            1, Now, TimeSpan.FromHours(4)).Rejection);
     }
 
     [Fact]
-    public void MissingQuotaFailsClosed()
+    public void MissingQuotaAllowsAdmissionAndInvalidQuotaIsIndeterminate()
+    {
+        var candidate = Demand(Guid.NewGuid());
+        Assert.True(ReservationAvailability.Evaluate(candidate, [], [], null, Now, TimeSpan.Zero).Allowed);
+        var invalid = ReservationAvailability.Evaluate(candidate, [], [], -1, Now, TimeSpan.Zero);
+        Assert.Equal("RESERVATION_QUOTA_CONFIGURATION_INVALID", invalid.Rejection);
+        Assert.True(invalid.Indeterminate);
+        var zero = ReservationAvailability.Evaluate(candidate, [], [], 0, Now, TimeSpan.Zero);
+        Assert.Equal("RESERVATION_QUOTA_EXCEEDED", zero.Rejection);
+        Assert.False(zero.Indeterminate);
+    }
+
+    [Fact]
+    public void CommercialQuotaUsesOverlappingEffectiveIntervalsAndCountsTheCandidateOnce()
+    {
+        var candidate = Demand(Guid.NewGuid());
+        var earlier = Demand(Guid.NewGuid()) with { Start = Now, End = candidate.Start };
+        var later = Demand(Guid.NewGuid()) with { Start = candidate.Start.AddMinutes(5) };
+        var otherCategory = Demand(Guid.NewGuid()) with { CountsQuota = false, Category = "MOTORCYCLE" };
+        AvailabilityDecision Check(int quota, params CapacityDemand[] claims) =>
+            ReservationAvailability.Evaluate(candidate, claims, [], quota, Now, TimeSpan.Zero);
+
+        Assert.True(Check(1, candidate, earlier, otherCategory).Allowed);
+        Assert.True(Check(2, earlier, later).Allowed);
+        Assert.Equal("RESERVATION_QUOTA_EXCEEDED", Check(1, later).Rejection);
+        Assert.Equal("RESERVATION_QUOTA_EXCEEDED", Check(1, earlier with { End = candidate.Start.AddMinutes(1) }).Rejection);
+    }
+
+    [Theory]
+    [InlineData("CAR")]
+    [InlineData("MOTORCYCLE")]
+    public void UnlocatedWalkInNeverTakesTheLastSlotButObservedOccupancyDoes(string category)
     {
         var slot = Guid.NewGuid();
-        Assert.Equal("CAPACITY_CONFIGURATION_REQUIRED", ReservationAvailability.Evaluate(Demand(slot),
-            [], [], [Resource(slot)], [], [], Now, TimeSpan.FromHours(4), false).Rejection);
+        var visit = new CapacityVisit(Guid.NewGuid(), null, null, Now, category);
+        AvailabilityDecision Check(CapacityVisit occupant) => ReservationAvailability.Evaluate(Demand(slot), [],
+            [occupant], null, Now, TimeSpan.FromHours(4));
+
+        Assert.True(Check(visit).Allowed);
+        Assert.Equal("CAPACITY_UNAVAILABLE", Check(visit with { Slot = slot }).Rejection);
     }
 
     [Fact]
-    public void UnknownMotorcycleCannotConsumeAnIncompatibleCarOnlySlot()
+    public void AllocationSupersedesOriginalTargetOnlyWhileAssigned()
     {
-        var mixed = Guid.NewGuid(); var carOnly = Guid.NewGuid();
-        var resources = new CapacityResource[]
+        var original = Guid.NewGuid();
+        var assigned = Guid.NewGuid();
+        var candidate = Demand(original);
+        var changeAt = candidate.Start.AddMinutes(10);
+        var existing = candidate with { Id = Guid.NewGuid(), TargetSlot = original };
+        var visit = new CapacityVisit(Guid.NewGuid(), existing.Id, assigned, changeAt);
+        var replacement = new CapacityAllocation(assigned, changeAt, candidate.End, "OCCUPIED",
+            existing.Id, visit.Id, changeAt);
+        existing = existing with { Allocations = [replacement] };
+        AvailabilityDecision Check(CapacityDemand request, CapacityDemand[] claims, params CapacityVisit[] visits) =>
+            ReservationAvailability.Evaluate(request, claims, visits, 4, Now, TimeSpan.FromHours(4));
+
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(candidate with { End = changeAt }, [existing], visit).Rejection);
+        var later = candidate with { Start = changeAt };
+        Assert.True(Check(later, [existing], visit).Allowed);
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(later with { Slot = assigned }, [existing], visit).Rejection);
+        Assert.Equal("CAPACITY_UNAVAILABLE",
+            Check(later, [existing], visit, new CapacityVisit(Guid.NewGuid(), null, original, Now)).Rejection);
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(later, [existing, Demand(original)], visit).Rejection);
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(later,
+            [existing with { Allocations = [replacement with { Status = "RELEASED" }] }]).Rejection);
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(later with { Slot = assigned },
+            [existing with { Slot = assigned }], visit).Rejection);
+    }
+
+    [Fact]
+    public void ContradictoryEvidenceFencesOnlyTheInvolvedSlots()
+    {
+        var original = Guid.NewGuid();
+        var assigned = Guid.NewGuid();
+        var existing = Demand(original);
+        var visit = new CapacityVisit(Guid.NewGuid(), existing.Id, assigned, Now);
+        var replacement = new CapacityAllocation(assigned, existing.Start, existing.End, "OCCUPIED",
+            existing.Id, visit.Id, Now);
+        var contradictory = new[]
         {
-            new(mixed, null, [], true, false, ["CAR", "MOTORCYCLE"]),
-            new(carOnly, null, [], true, false, ["CAR"])
+            existing with { Allocations = [replacement with { Status = "RESERVED", ScannedAt = null }] },
+            existing with { Allocations = [replacement, new(original, existing.Start, existing.End)] },
+            existing with { Allocations = [replacement with { ReservationId = Guid.NewGuid() }] },
         };
-        var visit = new CapacityVisit(Guid.NewGuid(), null, null, Now, "MOTORCYCLE");
-        Assert.False(ReservationAvailability.Evaluate(Demand(mixed), [], [visit], resources, [],
-            [Quota(2)], Now, TimeSpan.FromHours(4), false).Allowed);
-        Assert.True(ReservationAvailability.Evaluate(Demand(carOnly), [], [visit], resources, [],
-            [Quota(2)], Now, TimeSpan.FromHours(4), false).Allowed);
+        foreach (var claim in contradictory)
+        {
+            AvailabilityDecision Check(Guid slot) => ReservationAvailability.Evaluate(Demand(slot), [claim], [visit],
+                null, Now, TimeSpan.FromHours(4));
+            Assert.Equal("OCCUPANCY_RECONCILIATION_REQUIRED", Check(original).Rejection);
+            Assert.Equal("OCCUPANCY_RECONCILIATION_REQUIRED", Check(assigned).Rejection);
+            Assert.True(Check(Guid.NewGuid()).Allowed);
+        }
     }
 
     [Fact]
-    public void NarrowerQuotaConstrainsItsDescendantSlots()
+    public void OrphanAllocationIsAnIndeterminateBlockForItsNamedSlot()
     {
-        var parent = Guid.NewGuid(); var unit = Guid.NewGuid();
-        var first = Guid.NewGuid(); var second = Guid.NewGuid();
-        var narrower = Quota(1); narrower.SpatialUnitId = parent;
-        var resources = new CapacityResource[]
-        { new(first, unit, [parent], true, false), new(second, unit, [parent], true, false) };
-        Assert.Equal("RESERVATION_QUOTA_EXCEEDED", ReservationAvailability.Evaluate(Demand(first),
-            [Demand(second)], [], resources, [], [Quota(2), narrower], Now, TimeSpan.FromHours(4), false).Rejection);
+        var slot = Guid.NewGuid();
+        var candidate = Demand(slot);
+        var orphan = new CapacityAllocation(slot, candidate.Start, candidate.End, ReservationId: Guid.NewGuid());
+        AvailabilityDecision Evaluate(Guid target) => ReservationAvailability.Evaluate(candidate with { Slot = target },
+            [], [], null, Now, TimeSpan.Zero, [orphan]);
+
+        Assert.True(Evaluate(slot).Indeterminate);
+        Assert.Equal("OCCUPANCY_RECONCILIATION_REQUIRED", Evaluate(slot).Rejection);
+        Assert.True(Evaluate(Guid.NewGuid()).Allowed);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WalkInOccupancyBlocksOnlyItsObservedSlotUntilProjectionEnds(bool legacy)
+    {
+        var slot = Guid.NewGuid();
+        var horizon = Now.AddHours(4);
+        var visit = new CapacityVisit(Guid.NewGuid(), null, slot, Now);
+        if (legacy) visit = visit with { Allocations = [new(slot, Now, DateTimeOffset.MaxValue, "OCCUPIED", null, visit.Id, Now)] };
+        AvailabilityDecision Check(Guid target, DateTimeOffset start) => ReservationAvailability.Evaluate(
+            Demand(target) with { Start = start, End = start.AddMinutes(30) }, [], [visit], 1,
+            Now, TimeSpan.FromHours(4));
+
+        Assert.Equal("CAPACITY_UNAVAILABLE", Check(slot, horizon.AddMinutes(-1)).Rejection);
+        Assert.True(Check(Guid.NewGuid(), Now).Allowed);
+        Assert.True(Check(slot, horizon).Allowed);
     }
 
     [Fact]
-    public void ProducerTombstoneRejectsDelayedAcquireAndCompletedOutcomeRejectsAbort()
+    public void AllocationOutlastingItsBookingStillOwnsItsSlotWithoutUsingBookingQuota()
     {
-        ReservationDependency New() => ReservationDependency.Create(Guid.NewGuid(), Guid.NewGuid(),
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "ADMISSION", "fingerprint", Now.AddMinutes(1), Now);
-        var aborted = New(); aborted.Abort(Now);
-        Assert.Throws<StructureException>(() => aborted.Hold("{}", Now));
-        var committed = New(); committed.Hold("{}", Now);
-        committed.Complete("same", Now.AddHours(1));
-        committed.Complete("same", Now.AddHours(2));
-        Assert.Throws<StructureException>(() => committed.Abort(Now.AddHours(3)));
-        Assert.Throws<StructureException>(() => committed.Complete("different", Now.AddHours(3)));
+        var allocated = Guid.NewGuid();
+        var request = Demand(allocated);
+        var prior = request with { Id = Guid.NewGuid(), End = request.Start, Start = Now,
+            Allocations = [new(allocated, Now, request.End)] };
+        AvailabilityDecision Check(Guid slot) => ReservationAvailability.Evaluate(request with { Slot = slot },
+            [prior], [], 1, Now, TimeSpan.Zero);
+
+        Assert.Equal("SLOT_TIME_CONFLICT", Check(allocated).Rejection);
+        Assert.True(Check(Guid.NewGuid()).Allowed);
     }
+
 }
