@@ -37,3 +37,18 @@ public sealed class SignalRLayoutRealtimeBroadcaster(IHubContext<ParkingLotLayou
         }
     }
 }
+
+public sealed class SignalRCheckoutNotifier(IHubContext<ParkingLotLayoutHub> hub) : IRealtimeCheckoutNotifier
+{
+    public Task CheckoutCompletedAsync(
+        Guid siteId, Guid sessionId, Guid? reservationId, Guid paymentOrderId, CancellationToken ct) =>
+        hub.Clients.Group($"site:{siteId}:operators").SendAsync("CheckoutCompleted", new
+        {
+            siteId,
+            sessionId,
+            reservationId,
+            referenceId = reservationId ?? sessionId,
+            paymentOrderId,
+            status = "COMPLETED"
+        }, ct);
+}

@@ -54,9 +54,11 @@ export function OperatorDashboard({
 
   const accessRole = accessRoleOverride ?? user?.operatorRole ?? "operation"
 
-  const [tab, setTab] = useState<OperatorTab>(
-    accessRole === "financial" ? "finance" : "overview",
-  )
+  const [tab, setTab] = useState<OperatorTab>(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab")
+    if (requested === "checkout" || requested === "checkin") return requested
+    return accessRole === "financial" ? "finance" : "overview"
+  })
 
   const [targetPlateQuery, setTargetPlateQuery] = useState("")
   const [targetSlotStatus, setTargetSlotStatus] = useState<
@@ -142,7 +144,11 @@ export function OperatorDashboard({
 
   useEffect(() => {
     if (!selectedLot?.id) return
-    return watchOperatorLayout(selectedLot.id, () => setRefreshKey((value) => value + 1))
+    return watchOperatorLayout(
+      selectedLot.id,
+      () => setRefreshKey((value) => value + 1),
+      (event) => window.dispatchEvent(new CustomEvent("sp:checkout-completed", { detail: event })),
+    )
   }, [selectedLot?.id])
 
   const resourceScope = `${userScope}:${selectedLot?.id ?? ""}:${refreshKey}`
@@ -418,6 +424,7 @@ export function OperatorDashboard({
               mode={tab === "checkin" ? "check-in" : "check-out"}
               lot={selectedLot}
               initialPlateQuery={targetPlateQuery}
+              realtimeRefreshKey={refreshKey}
               onDataChanged={() => setRefreshKey((value) => value + 1)}
             />
           )}

@@ -8,7 +8,7 @@ namespace SmartParking.OperationService.API.Controllers;
 
 [Route("api/checkout")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class CheckoutController(IMediator mediator, IHostEnvironment environment) : ApiControllerBase(mediator)
+public sealed class CheckoutController(IMediator mediator, IHostEnvironment environment, IConfiguration configuration) : ApiControllerBase(mediator)
 {
     [HttpPost("pricing")]
     public async Task<IActionResult> Pricing([FromBody] PricingRequest body, CancellationToken ct) =>
@@ -18,6 +18,17 @@ public sealed class CheckoutController(IMediator mediator, IHostEnvironment envi
             data = await Mediator.Send(new CalculateCheckoutPricingQuery(
                 body.SiteId, body.ReferenceId, body.ReferenceType, body.VehicleType,
                 body.EntryTime, body.ExitTime), ct)
+        });
+
+    [HttpGet("monthly-coverage")]
+    public async Task<IActionResult> MonthlyCoverage(
+        [FromQuery] Guid siteId,
+        [FromQuery] string plateNumber,
+        CancellationToken ct) =>
+        Ok(new
+        {
+            success = true,
+            data = await Mediator.Send(new CheckMonthlyCoverageQuery(siteId, plateNumber), ct)
         });
 
     [HttpPost("reservations/{reservationId:guid}/prepare")]
@@ -65,7 +76,8 @@ public sealed class CheckoutController(IMediator mediator, IHostEnvironment envi
     [HttpPost("orders/{orderId:guid}/payos")]
     public async Task<IActionResult> PayOs(Guid orderId, [FromBody] IdempotencyRequest body, CancellationToken ct) =>
         Ok(new { success = true, data = await Mediator.Send(
-            new InitiateCheckoutCommand(orderId, body.IdempotencyKey), ct) });
+            new InitiateCheckoutCommand(orderId, body.IdempotencyKey,
+                BuildCheckoutReturnUrl(), BuildCheckoutReturnUrl()), ct) });
 
     [HttpPost("orders/{orderId:guid}/cash")]
     public async Task<IActionResult> Cash(Guid orderId, [FromBody] IdempotencyRequest body, CancellationToken ct) =>
@@ -89,4 +101,24 @@ public sealed class CheckoutController(IMediator mediator, IHostEnvironment envi
         DateTimeOffset EntryTime,
         DateTimeOffset ExitTime);
     public sealed record IdempotencyRequest(string IdempotencyKey);
+
+    private string BuildCheckoutReturnUrl()
+    {
+        var configured = configuration["Cors:AllowedOrigins"]?
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            ?? configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443"];
+        var allowedOrigins = configured.Select(NormalizeOrigin).Where(origin => origin is not null).ToArray();
+        var requestOrigin = NormalizeOrigin(Request.Headers.Origin.FirstOrDefault());
+        var selectedOrigin = allowedOrigins.FirstOrDefault(origin => origin == requestOrigin)
+            ?? allowedOrigins.FirstOrDefault()
+            ?? throw new InvalidOperationException("Configure at least one frontend origin in Cors:AllowedOrigins.");
+        return new Uri(new Uri(selectedOrigin), "/dashboard/operation?tab=checkout").ToString();
+    }
+
+    private static string? NormalizeOrigin(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        uri.Scheme is "http" or "https" && string.IsNullOrEmpty(uri.UserInfo)
+            ? uri.GetLeftPart(UriPartial.Authority).TrimEnd('/')
+            : null;
 }

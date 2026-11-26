@@ -10,6 +10,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
 {
     public DbSet<ReservationRow> Reservations => Set<ReservationRow>();
     public DbSet<ParkingSessionRow> ParkingSessions => Set<ParkingSessionRow>();
+    public DbSet<SubscribedVehicleRow> SubscribedVehicles => Set<SubscribedVehicleRow>();
     public DbSet<SlotAllocationRow> SlotAllocations => Set<SlotAllocationRow>();
     public DbSet<SiteCapacityPoolRow> SiteCapacityPools => Set<SiteCapacityPoolRow>();
     public DbSet<StructureEditHoldRow> StructureEditHolds => Set<StructureEditHoldRow>();
@@ -43,6 +44,8 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationRow>().Property(x => x.Version).IsConcurrencyToken();
         Map<ParkingSessionRow>(modelBuilder, "parking_sessions");
         modelBuilder.Entity<ParkingSessionRow>().Property(x => x.Version).IsConcurrencyToken();
+        Map<SubscribedVehicleRow>(modelBuilder, "subscribed_vehicles");
+        modelBuilder.Entity<SubscribedVehicleRow>().HasKey(x => x.SubscriptionId);
         Map<SlotAllocationRow>(modelBuilder, "slot_allocations");
         Map<SiteCapacityPoolRow>(modelBuilder, "site_capacity_pools");
         Map<StructureEditHoldRow>(modelBuilder, "structure_edit_holds");

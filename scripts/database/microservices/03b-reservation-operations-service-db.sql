@@ -442,6 +442,19 @@ CREATE TABLE IF NOT EXISTS monthly_passes (
 CREATE INDEX IF NOT EXISTS idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_passes_account ON monthly_passes(account_id);
 
+-- 8A. BẢNG XE ĐƯỢC ĐĂNG KÝ GÓI (SUBSCRIBED VEHICLES)
+CREATE TABLE IF NOT EXISTS subscribed_vehicles (
+    subscription_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    license_plate VARCHAR(50) NOT NULL,
+    vehicle_type VARCHAR(50) NOT NULL
+        CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
+    transaction_id UUID NOT NULL,
+    active_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expire_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 9. BẢNG SỰ CỐ VẬN HÀNH (OPERATIONAL INCIDENTS)
 CREATE TABLE IF NOT EXISTS operational_incidents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

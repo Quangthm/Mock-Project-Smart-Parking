@@ -17,6 +17,7 @@ export function PaymentResultPage() {
   const [detail, setDetail] = useState<PaymentStatusResponse | null>(null)
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
+  const [returnCountdown, setReturnCountdown] = useState<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -54,6 +55,32 @@ export function PaymentResultPage() {
     return () => { active = false; if (timeout !== undefined) window.clearTimeout(timeout) }
   }, [orderId, refresh, transactionId])
 
+  useEffect(() => {
+    if (result !== "success") {
+      setReturnCountdown(null)
+      return
+    }
+    let pending: { siteId?: string; paymentMethod?: string } | null = null
+    try {
+      pending = JSON.parse(localStorage.getItem("smartpark.pendingCheckout") ?? "null")
+    } catch {
+      localStorage.removeItem("smartpark.pendingCheckout")
+    }
+    if (!pending?.siteId || !["PAYOS", "PAYOS_TEST"].includes(pending.paymentMethod ?? "")) return
+
+    setReturnCountdown(5)
+    let remaining = 5
+    const tick = window.setInterval(() => {
+      remaining -= 1
+      setReturnCountdown(remaining)
+      if (remaining <= 0) {
+        window.clearInterval(tick)
+        navigate("/dashboard/operation?tab=checkout", { replace: true })
+      }
+    }, 1000)
+    return () => window.clearInterval(tick)
+  }, [result, navigate])
+
   const title = result === "success" ? "Payment successful" : result === "failed" ? "Payment not completed" : result === "checking" ? "Checking your payment" : result === "pending" ? "Payment is still processing" : "Payment status unavailable"
   const description = result === "success" ? "Payment Service confirmed your transaction with payOS." : result === "failed" ? "Payment Service reported that this transaction was cancelled or failed." : result === "checking" ? "We are asking Payment Service for the confirmed result. This may take a moment." : result === "pending" ? "The payment has not been confirmed yet. Please check again before trying to pay." : error
 
@@ -62,6 +89,7 @@ export function PaymentResultPage() {
     <span className={`payment-result-icon is-${result}`} aria-hidden="true">{result === "success" ? "✓" : result === "failed" ? "×" : "·"}</span>
     <h1>{title}</h1><p>{description}</p>
     {detail && <dl className="payment-result-facts"><div><dt>Order code</dt><dd>{detail.orderCode}</dd></div><div><dt>Amount</dt><dd>{detail.amount.toLocaleString("vi-VN")} VND</dd></div><div><dt>Status</dt><dd>{formatStatus(detail.status)}</dd></div></dl>}
+    {returnCountdown !== null && <p>Returning to checkout in {returnCountdown} seconds…</p>}
     {(orderId || transactionId) && <p className="payment-result-reference">Payment reference: {orderId || transactionId}</p>}
     <div className="payment-result-actions">
       {(result === "pending" || (result === "unavailable" && (!!paymentApi.rememberedCheckout(orderId) || isPaymentOrderId(transactionId)))) && <button type="button" className="btn-primary" onClick={() => setRefresh(value => value + 1)}>Check status again</button>}

@@ -69,6 +69,7 @@ public static class OperationHost
             });
         }
         builder.Services.AddSingleton<IRealtimeLayoutBroadcaster, SignalRLayoutRealtimeBroadcaster>();
+        builder.Services.AddSingleton<IRealtimeCheckoutNotifier, SignalRCheckoutNotifier>();
 
         var rawOrigins = builder.Configuration["Cors:AllowedOrigins"];
         var origins = !string.IsNullOrWhiteSpace(rawOrigins)

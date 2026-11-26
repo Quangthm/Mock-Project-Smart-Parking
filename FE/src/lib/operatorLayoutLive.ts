@@ -13,7 +13,11 @@ function slotIdOf(envelope: RealtimeEventEnvelope): string | undefined {
   return typeof slotId === "string" ? slotId : undefined
 }
 
-export function watchOperatorLayout(siteId: string, onLayoutChanged: () => void): () => void {
+export function watchOperatorLayout(
+  siteId: string,
+  onLayoutChanged: () => void,
+  onCheckoutCompleted?: (event: { siteId: string; sessionId: string; referenceId: string; status: string }) => void,
+): () => void {
   if (!siteId || !siteId.trim()) return () => {}
 
   let stopped = false
@@ -33,6 +37,17 @@ export function watchOperatorLayout(siteId: string, onLayoutChanged: () => void)
   }
 
   for (const eventType of LAYOUT_EVENT_TYPES) connection.on(eventType, receive)
+  const checkoutCompleted = (event: { siteId?: string; sessionId?: string; referenceId?: string; status?: string }) => {
+    if (event?.siteId !== siteId || typeof event.sessionId !== "string" || typeof event.referenceId !== "string") return
+    onLayoutChanged()
+    onCheckoutCompleted?.({
+      siteId: event.siteId,
+      sessionId: event.sessionId,
+      referenceId: event.referenceId,
+      status: event.status ?? "COMPLETED",
+    })
+  }
+  connection.on("CheckoutCompleted", checkoutCompleted)
 
   // A fresh connect/reconnect starts a new authoritative snapshot; drop stale watermarks first.
   connection.on("SnapshotRequired", () => {
@@ -82,6 +97,7 @@ export function watchOperatorLayout(siteId: string, onLayoutChanged: () => void)
     window.removeEventListener(authExpiredEvent, expire)
     window.removeEventListener("focus", resume)
     document.removeEventListener("visibilitychange", resume)
+    connection.off("CheckoutCompleted", checkoutCompleted)
     void connection.stop()
   }
 }

@@ -13,7 +13,8 @@ public sealed class SimulatePaidGateDepartureCommandHandler(
     ISlotAllocationRepository allocations,
     IOperationsConcurrency guards,
     IUnitOfWork work,
-    IOperatorGateSlotClaims gateSlots) : IRequestHandler<SimulatePaidGateDepartureCommand>
+    IOperatorGateSlotClaims gateSlots,
+    IRealtimeCheckoutNotifier realtime) : IRequestHandler<SimulatePaidGateDepartureCommand>
 {
     public async Task Handle(SimulatePaidGateDepartureCommand request, CancellationToken ct)
     {
@@ -47,5 +48,7 @@ public sealed class SimulatePaidGateDepartureCommandHandler(
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         await GateDeparture.ReleaseScannedSlotAsync(session, gateSlots, ct);
+        await realtime.CheckoutCompletedAsync(
+            session.SiteId, session.Id, session.ReservationId, request.PaymentOrderId, ct);
     }
 }

@@ -25,7 +25,7 @@ public interface ICheckoutPaymentClient
         CancellationToken ct,
         decimal? developmentTestAmount = null);
 
-    Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct);
+    Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, string returnUrl, string cancelUrl, CancellationToken ct);
     Task<CheckoutPaymentStatus> ConfirmCashAsync(Guid orderId, string idempotencyKey, CancellationToken ct);
     Task<CheckoutPaymentStatus> DemoPayAsync(Guid orderId, CancellationToken ct);
     Task<CheckoutPaymentStatus> GetStatusAsync(Guid transactionId, CancellationToken ct);
@@ -33,7 +33,8 @@ public interface ICheckoutPaymentClient
 
 public sealed record CheckoutPaymentPreparation(
     CheckoutPricing Pricing,
-    CheckoutPaymentOrder Order);
+    CheckoutPaymentOrder? Order,
+    bool IsMonthlyCovered = false);
 
 public sealed record CheckoutPricing(
     long FinalAmountVnd,
