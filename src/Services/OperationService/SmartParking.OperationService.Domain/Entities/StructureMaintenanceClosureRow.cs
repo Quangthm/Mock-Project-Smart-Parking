@@ -1,9 +1,10 @@
 namespace SmartParking.OperationService.Domain.Entities;
 
 /// <summary>
-/// Durable record of a planned maintenance closure that Operations acknowledged.
-/// A closure never cancels or moves commitments; it only blocks new admissions
-/// whose period overlaps the closed window.
+/// Durable local projection of a Facility-owned maintenance closure. A closure never
+/// cancels bookings directly during Facility's write; Facility emits FacilityMaintenanceChangedV1
+/// and Operations updates this projection under the site lock, blocks new admissions, and
+/// reconciles affected commitments asynchronously.
 /// </summary>
 public sealed class StructureMaintenanceClosureRow
 {
@@ -15,9 +16,10 @@ public sealed class StructureMaintenanceClosureRow
     public string? ScopedUnitIds { get; set; }
     public string? ScopedSlotIds { get; set; }
     public DateTimeOffset WindowStart { get; set; }
-    public DateTimeOffset WindowEnd { get; set; }
+    public DateTimeOffset? WindowEnd { get; set; }
     public string Reason { get; set; } = "";
     public Guid EnforcementRef { get; set; }
     public DateTimeOffset AcknowledgedAt { get; set; }
     public DateTimeOffset? CancelledAt { get; set; }
+    public long Revision { get; set; } = 1;
 }

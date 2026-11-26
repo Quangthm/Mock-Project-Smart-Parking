@@ -21,20 +21,4 @@ public interface IStructureRepository
     void RemoveHold(StructureEditHoldRow hold);
     void AddReceipt(StructureReleaseReceiptRow receipt);
     void AddState(StructureSiteStateRow state);
-    Task<StructureMaintenanceClosureRow?> MaintenanceClosureAsync(Guid windowId, CancellationToken ct) =>
-        Task.FromResult<StructureMaintenanceClosureRow?>(null);
-    void AddMaintenanceClosure(StructureMaintenanceClosureRow closure) =>
-        throw new NotSupportedException("Maintenance closures are not supported by this repository.");
-    Task<IReadOnlyList<MaintenanceCommitmentConflict>> FindMaintenanceConflictsAsync(
-        Guid tenantId,
-        Guid siteId,
-        Guid? unitId,
-        Guid? slotId,
-        IReadOnlySet<Guid> scopedUnitIds,
-        IReadOnlySet<Guid> scopedSlotIds,
-        DateTimeOffset start,
-        DateTimeOffset end,
-        DateTimeOffset now,
-        CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<MaintenanceCommitmentConflict>>([]);
 }

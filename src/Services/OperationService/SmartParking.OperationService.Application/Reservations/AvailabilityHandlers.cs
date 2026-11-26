@@ -43,7 +43,8 @@ public sealed class RequireReservationAvailabilityHandler(IReservationAvailabili
         }
         bool ClosureOverlaps(StructureMaintenanceClosureRow closure) =>
             closure.CancelledAt is null &&
-            closure.WindowStart < proposedEnd && closure.WindowEnd > proposed.ExpectedStartTime;
+            closure.WindowStart < proposedEnd &&
+            (closure.WindowEnd is null || closure.WindowEnd > proposed.ExpectedStartTime);
         bool ClosureCoversProposedUnit(StructureMaintenanceClosureRow closure) =>
             closure.SlotId is null && proposed.TargetSpatialUnitId is { } proposedUnit &&
             (closure.UnitId == proposedUnit || ReadIds(closure.ScopedUnitIds).Contains(proposedUnit));

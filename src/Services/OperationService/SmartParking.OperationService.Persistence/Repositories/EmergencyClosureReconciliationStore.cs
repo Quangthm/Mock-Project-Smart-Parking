@@ -35,6 +35,12 @@ public sealed class EmergencyClosureReconciliationStore(ReservationDbContext db,
         await db.SaveChangesAsync(ct);
     }
 
+    public Task<StructureMaintenanceClosureRow?> FindMaintenanceClosureAsync(Guid windowId, CancellationToken ct) =>
+        db.StructureMaintenanceClosures.FirstOrDefaultAsync(row => row.WindowId == windowId, ct);
+
+    public void AddMaintenanceClosure(StructureMaintenanceClosureRow closure) =>
+        db.StructureMaintenanceClosures.Add(closure);
+
     public async Task RecordProcessedEventAsync(FacilityEventReceiptRow receipt, CancellationToken ct)
     {
         var exists = await db.FacilityEventReceipts

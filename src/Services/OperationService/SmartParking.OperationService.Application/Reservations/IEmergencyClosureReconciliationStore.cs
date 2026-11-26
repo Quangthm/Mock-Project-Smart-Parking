@@ -15,6 +15,10 @@ public interface IEmergencyClosureReconciliationStore
     Task MarkClosureReleasedAsync(
         Guid restrictionId, Guid tenantId, Guid siteId, DateTimeOffset releasedAt, CancellationToken ct);
 
+    Task<StructureMaintenanceClosureRow?> FindMaintenanceClosureAsync(Guid windowId, CancellationToken ct);
+
+    void AddMaintenanceClosure(StructureMaintenanceClosureRow closure);
+
     Task RecordProcessedEventAsync(FacilityEventReceiptRow receipt, CancellationToken ct);
 
     Task<IReadOnlyList<ReservationRow>> FindEmergencyCandidatesAsync(

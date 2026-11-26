@@ -38,7 +38,6 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             return false;
         var result = (Status: 500, Code: "INTERNAL_ERROR", Message: "An unexpected error occurred.");
         object? errors = null;
-        object? commitments = null;
         if (exception is ValidationException validation)
         {
             var primaryError = validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_TIME_DURATION")
@@ -67,11 +66,6 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))
             result = (503, "PROTOTYPE_SCHEMA_NOT_READY", "Reservation data is unavailable until database reconciliation is complete.");
         else if (FindMapping(exception.GetType()) is { } map) result = map(exception);
-        else if (exception is MaintenanceCommitmentConflictException conflict)
-        {
-            result = (409, "STRUCTURE_IN_USE", conflict.Message);
-            commitments = conflict.Commitments;
-        }
         else if (exception is BadHttpRequestException bad)
             result = (bad.StatusCode, "INVALID_REQUEST", "The request body or parameters are invalid.");
         else if ((exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException)
@@ -81,7 +75,7 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             exception.GetType().Name, ApiErrors.Correlation(context));
 
         return await ApiErrors.WriteAsync(context, result.Status, result.Code, result.Message,
-            errors, commitments: commitments, ct: cancellationToken);
+            errors, ct: cancellationToken);
     }
 
     private static Func<Exception, (int Status, string Code, string Message)>? FindMapping(Type type)

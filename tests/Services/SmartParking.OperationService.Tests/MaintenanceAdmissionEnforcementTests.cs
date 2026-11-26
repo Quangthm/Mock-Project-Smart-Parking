@@ -99,6 +99,41 @@ public sealed class MaintenanceAdmissionEnforcementTests
         await setup.Handler(Closure(setup, cancelledAt: EvaluatedAt)).Handle(setup.Command, Ct);
     }
 
+    [Fact]
+    public async Task OpenEndedClosure_BlocksOverlappingFutureAdmission_AndAllowsBookingEndingAtStart()
+    {
+        var setup = Setup();
+        var openEnded = new StructureMaintenanceClosureRow
+        {
+            WindowId = Guid.NewGuid(),
+            TenantId = setup.TenantId,
+            SiteId = setup.SiteId,
+            WindowStart = setup.Start.AddMinutes(-15),
+            WindowEnd = null,
+            Reason = "open-ended maintenance",
+            EnforcementRef = Guid.NewGuid(),
+            AcknowledgedAt = EvaluatedAt
+        };
+
+        var error = await Assert.ThrowsAsync<ReservationGateException>(() =>
+            setup.Handler(openEnded).Handle(setup.Command, Ct));
+        Assert.Equal(409, error.StatusCode);
+        Assert.Equal("SLOT_UNAVAILABLE", error.Code);
+
+        var openEndedLater = new StructureMaintenanceClosureRow
+        {
+            WindowId = Guid.NewGuid(),
+            TenantId = setup.TenantId,
+            SiteId = setup.SiteId,
+            WindowStart = setup.ProposedEnd,
+            WindowEnd = null,
+            Reason = "open-ended later",
+            EnforcementRef = Guid.NewGuid(),
+            AcknowledgedAt = EvaluatedAt
+        };
+        await setup.Handler(openEndedLater).Handle(setup.Command, Ct);
+    }
+
     private static StructureMaintenanceClosureRow Closure(AdmissionSetup setup, Guid? unitId = null, Guid? slotId = null,
         DateTimeOffset? windowStart = null, DateTimeOffset? windowEnd = null,
         IReadOnlyList<Guid>? scopedUnitIds = null, IReadOnlyList<Guid>? scopedSlotIds = null,

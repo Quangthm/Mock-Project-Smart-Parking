@@ -142,6 +142,7 @@ public static class ReservationMessaging
             {
                 registration.AddConsumer<FacilityCapacityRestrictedConsumer>();
                 registration.AddConsumer<FacilityCapacityRestrictionReleasedConsumer>();
+                registration.AddConsumer<FacilityMaintenanceChangedConsumer>();
             }
             if (restrictedBroker) registration.AddEntityFrameworkOutbox<ReservationDbContext>(outbox =>
             {
@@ -174,6 +175,8 @@ public static class ReservationMessaging
                     message.SetEntityName(FacilityCapacityRestrictionConsumerTopology.RestrictedExchangeName));
                 bus.Message<FacilityCapacityRestrictionReleasedMessage>(message =>
                     message.SetEntityName(FacilityCapacityRestrictionConsumerTopology.ReleasedExchangeName));
+                bus.Message<FacilityMaintenanceChangedMessage>(message =>
+                    message.SetEntityName(FacilityMaintenanceConsumerTopology.ChangedExchangeName));
                 if (gateCheckoutEnabled)
                 {
                     bus.ReceiveEndpoint("smartpark-operation-payment-succeeded-v1", endpoint =>
@@ -205,6 +208,12 @@ public static class ReservationMessaging
                         endpoint.UseMessageRetry(retry => retry.Intervals(
                             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
                         endpoint.ConfigureConsumer<FacilityCapacityRestrictionReleasedConsumer>(context);
+                    });
+                    bus.ReceiveEndpoint(FacilityMaintenanceConsumerTopology.ChangedQueueName, endpoint =>
+                    {
+                        endpoint.UseMessageRetry(retry => retry.Intervals(
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)));
+                        endpoint.ConfigureConsumer<FacilityMaintenanceChangedConsumer>(context);
                     });
                 }
                 if (admissionEnabled)

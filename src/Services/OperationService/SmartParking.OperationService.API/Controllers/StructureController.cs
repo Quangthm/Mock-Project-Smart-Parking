@@ -2,8 +2,6 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.OperationService.API.Controllers.Base;
 using SmartParking.OperationService.Application;
-using SmartParking.OperationService.Application.Usecase.Structure.Commands.ApplyMaintenanceWindow;
-using SmartParking.OperationService.Application.Usecase.Structure.Commands.CancelMaintenanceWindow;
 using SmartParking.OperationService.Application.Usecase.Structure.Commands.CompleteStructureEdit;
 using SmartParking.OperationService.Application.Usecase.Structure.Commands.ForceReleaseStructureHolds;
 using SmartParking.OperationService.Application.Usecase.Structure.Commands.PrepareStructureEdit;
@@ -59,38 +57,6 @@ public sealed class StructureController(IMediator mediator) : ApiControllerBase(
         CancellationToken ct)
     {
         await Mediator.Send(new ForceReleaseStructureHoldsCommand(tenantId, siteId), ct);
-        return NoContent();
-    }
-// Acknowledged maintenance closures (SPARK-238 Phase 2). Facility creates the
-    // window transactionally, then applies it here and records our acknowledgement.
-    [HttpPut("{siteId:guid}/maintenance-windows/{windowId:guid}")]
-    public async Task<IActionResult> ApplyMaintenanceWindow(
-        [FromRoute] Guid siteId,
-        [FromRoute] Guid windowId,
-        ApplyMaintenanceWindowRequest body,
-        CancellationToken ct) =>
-        Ok(await Mediator.Send(
-            new ApplyMaintenanceWindowCommand(
-                body.TenantId,
-                siteId,
-                windowId,
-                body.UnitId,
-                body.SlotId,
-                body.ScopedUnitIds,
-                body.ScopedSlotIds,
-                body.Start,
-                body.End,
-                body.Reason),
-            ct));
-
-    [HttpDelete("{siteId:guid}/maintenance-windows/{windowId:guid}")]
-    public async Task<IActionResult> CancelMaintenanceWindow(
-        [FromRoute] Guid siteId,
-        [FromRoute] Guid windowId,
-        [FromQuery] Guid tenantId,
-        CancellationToken ct)
-    {
-        await Mediator.Send(new CancelMaintenanceWindowCommand(tenantId, siteId, windowId), ct);
         return NoContent();
     }
 }

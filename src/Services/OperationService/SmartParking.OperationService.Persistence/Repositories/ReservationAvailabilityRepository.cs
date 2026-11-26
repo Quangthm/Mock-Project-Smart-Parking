@@ -40,7 +40,7 @@ public sealed class ReservationAvailabilityRepository(ReservationDbContext db, O
         var proposedEnd = proposed.ClaimEndTime ?? proposed.ExpectedEndTime;
         var closures = await db.StructureMaintenanceClosures.AsNoTracking().Where(c =>
             c.TenantId == proposed.TenantId && c.SiteId == proposed.SiteId && c.CancelledAt == null &&
-            c.WindowStart < proposedEnd && c.WindowEnd > proposed.ExpectedStartTime).ToArrayAsync(ct);
+            c.WindowStart < proposedEnd && (c.WindowEnd == null || c.WindowEnd > proposed.ExpectedStartTime)).ToArrayAsync(ct);
         // Emergency closures may not have been reconciled yet, so they are read from the local
         // mirror that the Facility consumer writes; a released or expired closure blocks nothing.
         var emergencies = await db.StructureEmergencyClosures.AsNoTracking().Where(c =>
