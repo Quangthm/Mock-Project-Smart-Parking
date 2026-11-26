@@ -81,15 +81,6 @@ public sealed class ReservationCommercialClient(
         return new(data.State, collections);
     }
 
-    public async Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct)
-    {
-        if (!configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled") || !collection.VerifiedProviderEvidence) throw Unavailable();
-        var ack = await SendAsync<DispositionAcknowledgement>(HttpMethod.Post, "/internal/reservation-reconciliations",
-            new { reservationId, collection.CollectionId, collection.Amount, reason }, ct, servicePermission: DepositOrderPermission);
-        if (ack.ReservationId != reservationId || ack.CollectionId != collection.CollectionId || ack.RefundRequestId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(ack.Status)) throw InvalidOwner();
-    }
-
     private async Task<T> SendAsync<T>(
         HttpMethod method,
         string path,

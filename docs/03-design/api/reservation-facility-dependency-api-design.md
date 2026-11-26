@@ -1,18 +1,25 @@
 # Reservation Facility dependency — API design
 
-The [18 November reservation contract amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) established selected-slot metadata and interval eligibility. B4 retires the site-qualified facts route and limits token operations to confirmation.
+The [18 November reservation contract amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) established selected-slot metadata and interval eligibility. B4 retired the site-qualified facts route and limited token operations to confirmation; C subsequently retired the remaining reservation-specific confirmation token workflow.
+
+## Current SPARK-273 status (2026-11-26)
+
+- Facility eligibility itself was **not** removed. Quote review uses the selected-slot metadata HTTP lookup; reviewed admission uses one interval-aware MassTransit eligibility decision and keeps the structure guard/claim outcome in Operations.
+- Checkpoint chronology: B4 retired the `ADMISSION`-purpose dependency token route, C retired the remaining reservation-specific `CONFIRMATION` acquire/complete/abort token workflow, and D retired the remaining authorization and unpaid hold-expiry polling workers. The acquire/complete/abort contract below is retained only as historical decommissioning evidence.
+- Operations `OrderId` is unrelated to Facility eligibility and remains nullable through pending paid admission; checkout readiness is Payment-owned. Zero-deposit coverage confirmation does not create an unpaid hold.
+- Current verification entry points: [manual test guide](../../04-testing/postman/SPARK-273-manual-test-guide.md), [deployment checklist](../../04-testing/reports/SPARK-273-deployment-checklist.md#checkpoint-d-coordinated-cutover-and-recovery), and [Checkpoint E tester handoff](../../04-testing/reports/SPARK-273-checkpoint-e-tester-handoff.md).
 
 | Metadata | Value |
 | --- | --- |
-| Status | Implemented development contract |
-| Contract version / date | v1 / 2026-11-11 |
+| Status | Implemented development contract; historical token sections retained for decommissioning evidence |
+| Contract version / date | v1 / 2026-11-26 current status; token section dated 2026-11-11 |
 | Owning service | Facility; Operations is the only caller |
-| Implementation / verification | Selected-slot lookup and eligibility consumer implemented; confirmation token contract retained |
+| Implementation / verification | Selected-slot lookup and eligibility consumer implemented; confirmation token workflow retired by C |
 | Requirements baseline | [Reservation requirements](../../01-requirements/business-rules/policy-catalogue.md), CAR / Specific Slot |
 
 ## Overview
 
-Confirmation uses Facility resource facts with a durable configuration hold. Reviewed quote metadata and the interval eligibility decision are read-only. Service calls use a dedicated machine identity.
+Current confirmation relies on the committed Operations claim/guard outcome plus the correlated interval-aware Facility eligibility decision; the former durable Facility configuration hold token workflow was retired by C. Reviewed quote metadata and the interval eligibility decision are read-only. Service calls use a dedicated machine identity.
 
 | Traceability | Reference |
 | --- | --- |
@@ -24,7 +31,9 @@ Confirmation uses Facility resource facts with a durable configuration hold. Rev
 
 All paths start `/internal/reservation-dependencies/v1`. JSON uses camelCase; unknown properties are ignored. Successful responses are the DTO directly, without the public Driver API's `data` wrapper. UTC timestamps are ISO 8601. Each call requires `Authorization: Bearer <service JWT>`: RS256, issuer/subject/sender `SmartParking.OperationService`, audience `SmartParking.FacilityService`, permission `reservation:facility-dependency`, valid expiry. Operations issues 60-second tokens; validation clock skew is five seconds. Signature, issuer, audience and permission are independently validated. Driver JWT and `X-Service-Key` cannot authorize this capability. TLS is required except explicit protected/local HTTP opt-in on Operations. See [key setup](../../../LOCAL-SETUP.md#57-dedicated-operations--facility-service-jwt-reservation).
 
-### Acquire
+### Acquire (historical token contract; retired by Checkpoint C)
+
+> The following acquire/complete/abort contract is retained as historical decommissioning evidence. Current Operations no longer calls these token operations for reservation admission or confirmation.
 
 | Item | Contract |
 | --- | --- |
@@ -50,7 +59,7 @@ HELD response contains the exact accepted intent plus `snapshot`:
 
 The example is the `snapshot` property, not the whole response. Resources have unique slot IDs. `reachable` means MVP operational eligibility, not a route calculation. Unit ancestry includes the slot's own unit. A mixed-category resource appears once; compatibility is eligibility, not additional physical stock. Dynamic backups carry nullable `spatialUnitId`, `vehicleType`, integer `count`. ABORTED has `snapshot:null`.
 
-### Complete
+### Complete (historical token contract; retired by Checkpoint C)
 
 | Item | Contract |
 | --- | --- |
@@ -62,7 +71,7 @@ The example is the `snapshot` property, not the whole response. Resources have u
 
 Operations includes the persisted confirmation outcome in the completion request. Operations sends only an outcome already committed in its database. Complete requires an acquired token. Exact outcome replay succeeds; changed outcome or aborted token conflicts. Deadline expiry cannot undo a committed outcome. Acquire after completion replays the original HELD snapshot; it never creates another hold.
 
-### Abort
+### Abort (historical token contract; retired by Checkpoint C)
 
 | Item | Contract |
 | --- | --- |
@@ -94,19 +103,19 @@ A timeout is an unknown result. Operations owns durable retries and sends exact 
 ## Deferred items and review checklist
 
 - [x] Service-local contracts and dedicated JWT validation implemented; no shared project dependency.
-- [x] Acquire/complete/abort persisted through Domain/repository/UoW; resource facts and opposite-direction writer coordination implemented.
+- [x] Historical acquire/complete/abort persisted through Domain/repository/UoW; resource facts and opposite-direction writer coordination implemented, then the reservation-specific token workflow was retired by C.
 - [ ] Fresh compile and real PostgreSQL race/restart verification.
-- [ ] Deploy keys/topology and verify wrong sender/audience/signature/permission, errors, lost responses and delayed acquire after abort.
-- [ ] Complete Operations commercial recovery and Payment producers before enabling paid reservations.
-- [ ] SignalR relay and post-confirmation allocation/refund/maintenance enforcement remain teammate/next-phase work.
+- [ ] Deploy keys/topology and verify wrong sender/audience/signature/permission, errors and lost responses for the retained HTTP slot metadata contract.
+- [ ] Runtime verification of reviewed admission, D08 ordering, and financial reconciliation before production enablement.
+- [ ] SignalR relay and post-confirmation allocation/refund/maintenance runtime enforcement remain pending verification/teammate work where separately owned.
 
 See [the deployment cases and durable event handoff](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-10-reservation-events-and-facility-integration.md).
 
 ## 11 November 2026 — conditional confirmation dependency retirement (design note)
 
-[Architecture decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) approves a **target** aggregate-only fast path for an unexpired held claim. The `/internal/reservation-dependencies/v1` `CONFIRMATION` acquire/complete/abort contract remains in use. Existing Facility changes can be coordinated with Operations ahead of reservation status changes.
+[Architecture decision](../../05-project-management/decision-log/2026-11-11-reservation-event-driven-confirmation.md) approved a **target** aggregate-only fast path for an unexpired held claim. This 11 November note is historical: Checkpoint C subsequently retired the `/internal/reservation-dependencies/v1` `CONFIRMATION` acquire/complete/abort workflow for reservations. Existing Facility changes can still be coordinated with Operations ahead of reservation status changes.
 
-For a future `CONFIRMATION`-free fast path, Facility and Operations must demonstrate that **every supported Facility structure/site/slot/unit mutation and physical Gate claim** either serializes against the live Operations claim or causes a durable, timely invalidation visible under the guarded Operations aggregate transition. Prove delayed/out-of-order Facility synchronization, callback loss/replay, crash/restart, same-slot concurrent edit/entry, maintenance and future writer behavior; document excluded direct-write bypasses. Only after the gate passes may Operations skip the redundant confirmation dependency for a **still-valid protected hold**. `CONFIRMATION` acquire and fresh capacity checks continue for expired/invalidated-hold reacquisition strictly before reservation start T.
+The C retirement requires Facility and Operations to demonstrate that **every supported Facility structure/site/slot/unit mutation and physical Gate claim** either serializes against the live Operations claim or causes a durable, timely invalidation visible under the guarded Operations aggregate transition. Prove delayed/out-of-order Facility synchronization, callback loss/replay, crash/restart, same-slot concurrent edit/entry, maintenance and future writer behavior; document excluded direct-write bypasses. Expired/invalidated-hold reacquisition no longer uses `CONFIRMATION` acquire; current guarded evaluation uses committed Operations evidence plus the interval-aware eligibility decision and fails closed strictly before reservation start T when evidence is insufficient.
 
 The 10 November single guarded database evaluation timestamp and no-entitlement-after-T rule remain unchanged. This note authorizes no new Facility endpoint, key reuse, schema reset or production behavior claim.
 
@@ -138,4 +147,4 @@ An overlapping effective bounded site maintenance window is ineligible. A materi
 
 ### Protected claim verification
 
-Reviewed admission uses its correlated Facility outcome, Payment proof and the guarded Operations transaction. Confirmation uses token snapshots and acquire/complete/abort replay. Keep independent structure-edit coordination. The production rollout of the reviewed admission path requires verification of both D08 event orderings and financial reconciliation.
+Reviewed admission uses its correlated Facility outcome, Payment proof and the guarded Operations transaction. Current confirmation uses the committed Operations claim/guard outcome; the token snapshots and acquire/complete/abort replay in this document are historical evidence retained after C. Keep independent structure-edit coordination. The production rollout of the reviewed admission path requires verification of both D08 event orderings and financial reconciliation.
