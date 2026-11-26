@@ -1,0 +1,183 @@
+@baseUrl = http://localhost:5065
+@siteId = b0000000-0000-4000-8000-000000000001
+@tenantId = a0000000-0000-4000-8000-000000000001
+@planId = d1000000-0000-4000-8000-000000000001
+@passId = e1000000-0000-4000-8000-000000000001
+@paymentOrderId = f2000000-0000-4000-8000-000000000001
+@closureId = c1000000-0000-4000-8000-000000000001
+@ownerToken = <PASTE_OWNER_JWT_HERE>
+@serviceReadToken = <PASTE_RS256_SERVICE_JWT_READ_HERE>
+@serviceQuoteToken = <PASTE_RS256_SERVICE_JWT_QUOTE_HERE>
+@serviceCompensateToken = <PASTE_RS256_SERVICE_JWT_COMPENSATE_HERE>
+
+### Health Check
+GET {{baseUrl}}/health
+Accept: application/json
+
+### A5. Upsert Monthly Pass Financial Terms (Happy Path - 200 OK)
+PUT {{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{planId}}/financial-terms
+Authorization: Bearer {{ownerToken}}
+Idempotency-Key: fin-terms-v1
+Content-Type: application/json
+
+{
+  "productType": "MONTHLY",
+  "planRevision": 1,
+  "currency": "VND",
+  "vehiclePrices": [
+    { "vehicleType": "CAR", "fullPeriodPrice": 1500000 },
+    { "vehicleType": "MOTORCYCLE", "fullPeriodPrice": 180000 }
+  ],
+  "refundPolicy": {
+    "voluntaryBeforeStartPercent": 100,
+    "voluntaryInPeriodPercent": 50,
+    "facilityClosurePercent": 100,
+    "roundingMode": "HALF_UP_THOUSAND"
+  }
+}
+
+### A5. Error - Yearly Product Blocked by Q05 (422 YEARLY_POLICY_BLOCKED_Q05)
+PUT {{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{planId}}/financial-terms
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "productType": "YEARLY",
+  "planRevision": 1,
+  "currency": "VND",
+  "vehiclePrices": [
+    { "vehicleType": "CAR", "fullPeriodPrice": 15000000 }
+  ],
+  "refundPolicy": {
+    "voluntaryBeforeStartPercent": 100,
+    "voluntaryInPeriodPercent": 50,
+    "facilityClosurePercent": 100,
+    "roundingMode": "HALF_UP_THOUSAND"
+  }
+}
+
+### A5. Error - Invalid Price & Non-M05 Refund Policy (400 INVALID_FINANCIAL_TERMS)
+PUT {{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{planId}}/financial-terms
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "productType": "MONTHLY",
+  "planRevision": 1,
+  "currency": "VND",
+  "vehiclePrices": [
+    { "vehicleType": "CAR", "fullPeriodPrice": 0 }
+  ],
+  "refundPolicy": {
+    "voluntaryBeforeStartPercent": 100,
+    "voluntaryInPeriodPercent": 70,
+    "facilityClosurePercent": 100,
+    "roundingMode": "HALF_UP_THOUSAND"
+  }
+}
+
+### A5. Error - Unauthenticated (401 UNAUTHENTICATED)
+PUT {{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{planId}}/financial-terms
+Content-Type: application/json
+
+{
+  "productType": "MONTHLY",
+  "planRevision": 1,
+  "currency": "VND",
+  "vehiclePrices": [{ "vehicleType": "CAR", "fullPeriodPrice": 1500000 }],
+  "refundPolicy": {
+    "voluntaryBeforeStartPercent": 100,
+    "voluntaryInPeriodPercent": 50,
+    "facilityClosurePercent": 100,
+    "roundingMode": "HALF_UP_THOUSAND"
+  }
+}
+
+### A6. Owner Pass Revenue Summary (Happy Path - 200 OK)
+GET {{baseUrl}}/api/v1/payments/owners/lots/{{siteId}}/pass-revenue-summary?productType=MONTHLY
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### A6. Yearly Revenue Summary Zeroed (200 OK)
+GET {{baseUrl}}/api/v1/payments/owners/lots/{{siteId}}/pass-revenue-summary?productType=YEARLY
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### A6. Error - Invalid Product Type (400 INVALID_PRODUCT_TYPE)
+GET {{baseUrl}}/api/v1/payments/owners/lots/{{siteId}}/pass-revenue-summary?productType=WEEKLY
+Authorization: Bearer {{ownerToken}}
+Accept: application/json
+
+### B3. Internal Lookup Active Pass Financial Terms (Happy Path - 200 OK)
+GET {{baseUrl}}/internal/pass-financial-terms?siteId={{siteId}}&planId={{planId}}
+Authorization: Bearer {{serviceReadToken}}
+Accept: application/json
+
+### B3. Internal Quote Snapshot Freeze (Happy Path - 200 OK)
+POST {{baseUrl}}/internal/pass-financial-terms/quote-snapshot
+Authorization: Bearer {{serviceQuoteToken}}
+Content-Type: application/json
+
+{
+  "siteId": "{{siteId}}",
+  "planId": "{{planId}}",
+  "planRevision": 1,
+  "expectedFinancialTermRevision": 1,
+  "productType": "MONTHLY",
+  "vehicleType": "CAR"
+}
+
+### B3. Error - Quote Revision Stale (409 FINANCIAL_TERMS_CHANGED)
+POST {{baseUrl}}/internal/pass-financial-terms/quote-snapshot
+Authorization: Bearer {{serviceQuoteToken}}
+Content-Type: application/json
+
+{
+  "siteId": "{{siteId}}",
+  "planId": "{{planId}}",
+  "planRevision": 1,
+  "expectedFinancialTermRevision": 999,
+  "productType": "MONTHLY",
+  "vehicleType": "CAR"
+}
+
+### B4. Internal Idempotent Closure Compensation (Happy Path - 200 OK)
+POST {{baseUrl}}/internal/pass-closures/compensate
+Authorization: Bearer {{serviceCompensateToken}}
+Content-Type: application/json
+
+{
+  "idempotencyKey": "closure-{{closureId}}-pass-{{passId}}",
+  "closureId": "{{closureId}}",
+  "closureType": "TEMPORARY",
+  "siteId": "{{siteId}}",
+  "tenantId": "{{tenantId}}",
+  "passId": "{{passId}}",
+  "paymentOrderId": "{{paymentOrderId}}",
+  "paidPeriodStart": "2026-11-01T00:00:00Z",
+  "paidPeriodEnd": "2026-12-01T00:00:00Z",
+  "unavailableIntervals": [
+    {
+      "start": "2026-11-10T00:00:00Z",
+      "end": "2026-11-15T00:00:00Z"
+    }
+  ]
+}
+
+### B4. Error - Invalid Closure Intervals (400 INVALID_CLOSURE_INTERVALS)
+POST {{baseUrl}}/internal/pass-closures/compensate
+Authorization: Bearer {{serviceCompensateToken}}
+Content-Type: application/json
+
+{
+  "idempotencyKey": "invalid-closure-1",
+  "closureId": "{{closureId}}",
+  "closureType": "TEMPORARY",
+  "siteId": "{{siteId}}",
+  "tenantId": "{{tenantId}}",
+  "passId": "{{passId}}",
+  "paymentOrderId": "{{paymentOrderId}}",
+  "paidPeriodStart": "2026-12-01T00:00:00Z",
+  "paidPeriodEnd": "2026-11-01T00:00:00Z",
+  "unavailableIntervals": []
+}

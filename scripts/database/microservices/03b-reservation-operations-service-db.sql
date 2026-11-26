@@ -457,6 +457,19 @@ CREATE TABLE IF NOT EXISTS monthly_passes (
 CREATE INDEX IF NOT EXISTS idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_passes_account ON monthly_passes(account_id);
 
+-- 8A. BẢNG XE ĐƯỢC ĐĂNG KÝ GÓI (SUBSCRIBED VEHICLES)
+CREATE TABLE IF NOT EXISTS subscribed_vehicles (
+    subscription_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    license_plate VARCHAR(50) NOT NULL,
+    vehicle_type VARCHAR(50) NOT NULL
+        CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
+    transaction_id UUID NOT NULL,
+    active_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expire_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 9. BẢNG SỰ CỐ VẬN HÀNH (OPERATIONAL INCIDENTS)
 CREATE TABLE IF NOT EXISTS operational_incidents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -720,3 +733,53 @@ CREATE INDEX IF NOT EXISTS idx_qrtz_t_nft_st ON qrtz_triggers (sched_name, trigg
 CREATE INDEX IF NOT EXISTS idx_qrtz_ft_inst_job_req_rcvry ON qrtz_fired_triggers (sched_name, instance_name, requests_recovery);
 CREATE INDEX IF NOT EXISTS idx_qrtz_ft_j_g ON qrtz_fired_triggers (sched_name, job_name, job_group);
 CREATE INDEX IF NOT EXISTS idx_qrtz_ft_t_g ON qrtz_fired_triggers (sched_name, trigger_name, trigger_group);
+
+-- 13. BẢNG ĐỊNH NGHĨA GÓI ĐỖ XE THEO THÁNG / NĂM (SPARK-331 - WHEN_SPACE_AVAILABLE ONLY)
+-- Tách biệt hoàn toàn khỏi giá & điều khoản hoàn tiền bên PaymentDb; không giữ chỗ hay chiếm công suất.
+CREATE TABLE IF NOT EXISTS parking_pass_plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    entitlement_type VARCHAR(50) NOT NULL DEFAULT 'WHEN_SPACE_AVAILABLE'
+        CHECK (entitlement_type = 'WHEN_SPACE_AVAILABLE'),
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT', 'PUBLISHED', 'DISABLED')),
+    active_revision INT NOT NULL DEFAULT 0 CHECK (active_revision >= 0),
+    draft_revision INT NULL,
+    draft_payload JSONB NULL,
+    created_by UUID NOT NULL,
+    updated_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, product_type)
+);
+CREATE INDEX IF NOT EXISTS idx_parking_pass_plans_site ON parking_pass_plans(site_id, is_enabled);
+
+-- Snapshot bất biến mỗi lần Owner Publish gói (chỉ INSERT, không UPDATE nội dung revision đã phát hành)
+CREATE TABLE IF NOT EXISTS parking_pass_plan_revisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_id UUID NOT NULL REFERENCES parking_pass_plans(id) ON DELETE RESTRICT,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    revision_number INT NOT NULL CHECK (revision_number >= 1),
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    zone_id UUID NULL,
+    vehicle_types JSONB NOT NULL,
+    ordinary_coverage_rules JSONB NOT NULL,
+    contract_timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_to TIMESTAMPTZ NULL,
+    publish_note TEXT NULL,
+    idempotency_key VARCHAR(128) NULL,
+    idempotency_payload_hash VARCHAR(128) NULL,
+    published_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (plan_id, revision_number)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pass_plan_rev_idempotency
+    ON parking_pass_plan_revisions(plan_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pass_plan_rev_site
+    ON parking_pass_plan_revisions(site_id, product_type, revision_number DESC);

@@ -27,6 +27,7 @@ const rolePages: Record<string, { id: string; label: string }[]> = {
     { id: "dashboard", label: "Overview" },
     { id: "sites", label: "Parking sites" },
     { id: "lots", label: "Parking lots" },
+    { id: "passes", label: "Parking passes" },
     { id: "structure", label: "Parking Structure" },
     { id: "operators", label: "Operators" },
     { id: "policy", label: "Policies" },

@@ -26,7 +26,13 @@ function buildRevenueTrend(bookings: Booking[]) {
   });
 }
 
-export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }: { selectedSiteId: string; onSiteChange: (siteId: string) => void; sites: Site[]; operators: Operator[] }) {
+export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators, rosterUnavailable }: {
+  selectedSiteId: string;
+  onSiteChange: (siteId: string) => void;
+  sites: Site[];
+  operators: Operator[];
+  rosterUnavailable: boolean;
+}) {
   const [liveCapacity, setLiveCapacity] = useState<{ available: number; total: number } | null>(null);
   const refreshCapacity = useRef<(() => Promise<void>) | null>(null);
   const visibleSiteIds = useMemo(() => (selectedSiteId === 'all' ? sites : sites.filter(site => site.id === selectedSiteId)).map(site => site.id), [selectedSiteId, sites]);
@@ -73,7 +79,7 @@ export function OwnerOverview({ selectedSiteId, onSiteChange, sites, operators }
   const stats = [
     { label: 'Local booking revenue preview', value: `${overview.revenue.toLocaleString('vi-VN')} VND` },
     { label: 'Available Slots', value: `${liveCapacity === null ? '—' : liveCapacity.available.toLocaleString('en-US')}/${(liveCapacity?.total ?? overview.capacity).toLocaleString('en-US')}` },
-    { label: 'Total Employees', value: overview.employeeCount.toLocaleString('en-US') },
+    { label: 'Total Employees', value: rosterUnavailable ? '—' : overview.employeeCount.toLocaleString('en-US') },
   ];
 
   return (

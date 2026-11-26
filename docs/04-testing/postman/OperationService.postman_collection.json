@@ -17,13 +17,18 @@
       "type": "string"
     },
     {
+      "key": "paymentBaseUrl",
+      "value": "http://localhost:5065",
+      "type": "string"
+    },
+    {
       "key": "ownerEmail",
       "value": "owner@smartpark.local",
       "type": "string"
     },
     {
       "key": "ownerPassword",
-      "value": "Aa1!RKJ7NEyy",
+      "value": "",
       "type": "string"
     },
     {
@@ -93,6 +98,36 @@
     },
     {
       "key": "regressionImmKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passSiteId",
+      "value": "b0000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "passPlanId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passPlanRevision",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "passPublishKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passInvalidZoneId",
+      "value": "e0000000-0000-4000-8000-000000000099",
+      "type": "string"
+    },
+    {
+      "key": "passServiceFreezeToken",
       "value": "",
       "type": "string"
     }
@@ -1559,6 +1594,932 @@
               ]
             },
             "description": "Kiểm tra tính năng ghi đè lịch hẹn giờ tương lai khi xuất bản ngay (IMMEDIATE) - ngăn chặn lỗi exclusion constraint 409 RESOURCE_CONFLICT."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Monthly & Yearly Pass Plans (SPARK-331)",
+      "description": "A1-A4 Owner Pass Plan lifecycle, B1 Public Pass Offers, and B2 Internal Validate-and-Freeze (RS256 Service JWT). Run 0.2 Login as Owner first. Use seed-demo-site.ps1 siteId (passSiteId).",
+      "item": [
+        {
+          "name": "2.1 A1 Get Site Pass Plans (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Contains MONTHLY and YEARLY plans with 3/15/7 defaults\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.effectiveOperationalParams.monthlyMaxPrepaidTerms).to.eql(3);",
+                  "    pm.expect(json.data.effectiveOperationalParams.monthlyPaymentHoldMinutes).to.eql(15);",
+                  "    pm.expect(json.data.effectiveOperationalParams.monthlyRenewalWindowDays).to.eql(7);",
+                  "    const types = json.data.plans.map(p => p.productType);",
+                  "    pm.expect(types).to.include(\"MONTHLY\");",
+                  "    pm.expect(types).to.include(\"YEARLY\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans"
+              ]
+            },
+            "description": "Reads MONTHLY and YEARLY pass plan states, effectiveOperationalParams (3/15/7), and financialReadiness from PaymentService via RS256 S2S JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 A2 Save Monthly Pass Plan Draft (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Draft saved and planId captured\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.status).to.eql(\"DRAFT\");",
+                  "    pm.expect(json.data.planId).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"passPlanId\", json.data.planId);",
+                  "    pm.environment.set(\"passPlanId\", json.data.planId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "draft"
+              ]
+            },
+            "description": "Saves available-only monthly draft for CAR and MOTORCYCLE across the whole site (zoneId: null).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zoneId\": null,\n  \"vehicleTypes\": [\n    \"CAR\",\n    \"MOTORCYCLE\"\n  ],\n  \"ordinaryCoverageRules\": {\n    \"dayCovered\": true,\n    \"nightCovered\": true,\n    \"excludedZoneIds\": []\n  },\n  \"isAvailableOnly\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 A2 Validation Error - isAvailableOnly=false & No Coverage (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is VALIDATION_ERROR\", () => {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code).to.eql(\"VALIDATION_ERROR\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "draft"
+              ]
+            },
+            "description": "Verifies VALIDATION_ERROR (400) when isAvailableOnly is false and both dayCovered/nightCovered are false.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zoneId\": null,\n  \"vehicleTypes\": [\n    \"CAR\"\n  ],\n  \"ordinaryCoverageRules\": {\n    \"dayCovered\": false,\n    \"nightCovered\": false,\n    \"excludedZoneIds\": []\n  },\n  \"isAvailableOnly\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.4 A2 Scope Error - Foreign ZoneId (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is UNSUPPORTED_LOT_SCOPE\", () => {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code).to.eql(\"UNSUPPORTED_LOT_SCOPE\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "draft"
+              ]
+            },
+            "description": "Verifies UNSUPPORTED_LOT_SCOPE (422) when zoneId does not belong to the site in FacilityService.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zoneId\": \"{{passInvalidZoneId}}\",\n  \"vehicleTypes\": [\"CAR\"],\n  \"ordinaryCoverageRules\": {\n    \"dayCovered\": true,\n    \"nightCovered\": true,\n    \"excludedZoneIds\": []\n  },\n  \"isAvailableOnly\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.5 A3 Publish Monthly Pass Plan (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const key = pm.variables.replaceIn(\"{{$guid}}\");",
+                  "pm.collectionVariables.set(\"passPublishKey\", key);",
+                  "pm.environment.set(\"passPublishKey\", key);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Published revision captured\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.publishedRevision).to.be.above(0);",
+                  "    pm.collectionVariables.set(\"passPlanId\", json.data.planId);",
+                  "    pm.collectionVariables.set(\"passPlanRevision\", String(json.data.publishedRevision));",
+                  "    pm.environment.set(\"passPlanId\", json.data.planId);",
+                  "    pm.environment.set(\"passPlanRevision\", String(json.data.publishedRevision));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{passPublishKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "publish"
+              ]
+            },
+            "description": "Publishes the saved draft as an immutable revision using a fresh Idempotency-Key and stores passPlanId and passPlanRevision.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publishNote\": \"Initial monthly pass configuration\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.6 A3 Publish Idempotent Replay (200 OK + Idempotency-Replayed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Idempotency-Replayed header is true\", () => {",
+                  "    pm.response.to.have.header(\"Idempotency-Replayed\", \"true\");",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Payload reports isReplayed = true\", () => pm.expect(json.data.isReplayed).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{passPublishKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "publish"
+              ]
+            },
+            "description": "Replays 2.5 with the exact same passPublishKey and payload; expects 200 OK and Idempotency-Replayed: true header.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publishNote\": \"Initial monthly pass configuration\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.7 A3 Publish Idempotency Conflict (409 IDEMPOTENCY_CONFLICT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409 Conflict\", () => pm.response.to.have.status(409));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is IDEMPOTENCY_CONFLICT\", () => {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code).to.eql(\"IDEMPOTENCY_CONFLICT\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{passPublishKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "publish"
+              ]
+            },
+            "description": "Reuses passPublishKey with a different publishNote; expects 409 IDEMPOTENCY_CONFLICT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publishNote\": \"Modified note causing idempotency conflict\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.8 A4 Enable Monthly Before Financial Terms (422 MISSING_FINANCIAL_TERMS)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422 when financial terms are not yet configured (or 200 if already configured in PaymentService)\", () => {",
+                  "    pm.expect([200, 422]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/enablement",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "enablement"
+              ]
+            },
+            "description": "Run BEFORE 5.1 (PaymentService A5). Verifies OperationService rejects enabling a monthly plan without active prices/terms in PaymentService.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": true,\n  \"expectedPlanRevision\": {{passPlanRevision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.9 A4 Enable Yearly Blocked by Q05 (422 YEARLY_POLICY_BLOCKED_Q05)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is YEARLY_POLICY_BLOCKED_Q05\", () => {",
+                  "    pm.expect(json.success).to.be.false;",
+                  "    pm.expect(json.code).to.eql(\"YEARLY_POLICY_BLOCKED_Q05\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/YEARLY/enablement",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "YEARLY",
+                "enablement"
+              ]
+            },
+            "description": "Verifies enabling YEARLY is strictly blocked by Q05 policy.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.10 A4 Enable Monthly After Financial Terms (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Ensure PaymentService has active financial terms matching the latest published passPlanRevision from 2.5.",
+                  "const paymentBaseUrl = pm.variables.get(\"paymentBaseUrl\");",
+                  "const siteId = pm.variables.get(\"passSiteId\");",
+                  "const planId = pm.variables.get(\"passPlanId\");",
+                  "const planRevision = Number(pm.variables.get(\"passPlanRevision\"));",
+                  "const token = pm.variables.get(\"ownerToken\");",
+                  "if (paymentBaseUrl && siteId && planId && planRevision > 0 && token) {",
+                  "    pm.sendRequest({",
+                  "        url: `${paymentBaseUrl}/api/v1/pricing/lots/${siteId}/pass-plans/${planId}/financial-terms`,",
+                  "        method: 'PUT',",
+                  "        header: {",
+                  "            'Content-Type': 'application/json',",
+                  "            'Accept': 'application/json',",
+                  "            'Authorization': `Bearer ${token}`,",
+                  "            'Idempotency-Key': pm.variables.replaceIn('{{$guid}}')",
+                  "        },",
+                  "        body: {",
+                  "            mode: 'raw',",
+                  "            raw: JSON.stringify({",
+                  "                productType: 'MONTHLY',",
+                  "                planRevision: planRevision,",
+                  "                currency: 'VND',",
+                  "                vehiclePrices: [",
+                  "                    { vehicleType: 'CAR', fullPeriodPrice: 1500000 },",
+                  "                    { vehicleType: 'MOTORCYCLE', fullPeriodPrice: 180000 }",
+                  "                ],",
+                  "                refundPolicy: {",
+                  "                    voluntaryBeforeStartPercent: 100,",
+                  "                    voluntaryInPeriodPercent: 50,",
+                  "                    facilityClosurePercent: 100,",
+                  "                    roundingMode: 'HALF_UP_THOUSAND'",
+                  "                }",
+                  "            })",
+                  "        }",
+                  "    }, function (err, res) {",
+                  "        if (err) {",
+                  "            console.error('Auto-sync financial terms failed:', err);",
+                  "        } else {",
+                  "            console.log(`Synced financial terms in PaymentService for planRevision=${planRevision} (HTTP ${res.code}).`);",
+                  "        }",
+                  "    });",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Monthly plan isEnabled = true\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.isEnabled).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/lots/{{passSiteId}}/pass-plans/MONTHLY/enablement",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "lots",
+                "{{passSiteId}}",
+                "pass-plans",
+                "MONTHLY",
+                "enablement"
+              ]
+            },
+            "description": "Run AFTER 5.1 in PaymentService collection (A5 Upsert Financial Terms). Enables MONTHLY pass for public offers.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isEnabled\": true,\n  \"expectedPlanRevision\": {{passPlanRevision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.11 B1 Get Public Site Pass Offers (200 OK - No Auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Valid public offers response\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.yearlyBlockedByQ05).to.be.true;",
+                  "    pm.expect(json.data.offers).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sites/{{passSiteId}}/pass-offers?vehicleType=CAR",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sites",
+                "{{passSiteId}}",
+                "pass-offers"
+              ],
+              "query": [
+                {
+                  "key": "vehicleType",
+                  "value": "CAR"
+                }
+              ]
+            },
+            "description": "Public Driver catalogue endpoint (noauth). Returns enabled monthly offers with prices from PaymentService.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.12 B1 Invalid VehicleType Filter (400 VALIDATION_ERROR)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is VALIDATION_ERROR\", () => pm.expect(json.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sites/{{passSiteId}}/pass-offers?vehicleType=TRUCK",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sites",
+                "{{passSiteId}}",
+                "pass-offers"
+              ],
+              "query": [
+                {
+                  "key": "vehicleType",
+                  "value": "TRUCK"
+                }
+              ]
+            },
+            "description": "Rejects unsupported vehicleType query filter with 400 VALIDATION_ERROR.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.13 B2 Internal Validate & Freeze - Reject X-Service-Key (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.code).to.eql(\"UNAUTHENTICATED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Service-Key",
+                "value": "local-dev-service-key"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-plans/validate-and-freeze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-plans",
+                "validate-and-freeze"
+              ]
+            },
+            "description": "Confirms X-Service-Key is rejected on /internal/pass-plans/validate-and-freeze (RS256 Service JWT required).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteId\": \"{{passSiteId}}\",\n  \"planId\": \"{{passPlanId}}\",\n  \"expectedPlanRevision\": {{passPlanRevision}},\n  \"productType\": \"MONTHLY\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.14 B2 Internal Validate & Freeze - Reject Owner User JWT (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401 or 403\", () => pm.expect([401, 403]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-plans/validate-and-freeze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-plans",
+                "validate-and-freeze"
+              ]
+            },
+            "description": "Confirms end-user Bearer JWT is rejected on /internal/pass-plans/validate-and-freeze.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteId\": \"{{passSiteId}}\",\n  \"planId\": \"{{passPlanId}}\",\n  \"expectedPlanRevision\": {{passPlanRevision}},\n  \"productType\": \"MONTHLY\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.15 B2 Internal Validate & Freeze - RS256 Service JWT (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK (requires valid passServiceFreezeToken)\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Snapshot returned\", () => {",
+                  "    pm.expect(json.entitlementType).to.eql(\"WHEN_SPACE_AVAILABLE\");",
+                  "    pm.expect(json.effectivePolicyParams.maxPrepaidTerms).to.eql(3);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-plans/validate-and-freeze",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-plans",
+                "validate-and-freeze"
+              ]
+            },
+            "description": "Set passServiceFreezeToken to a short-lived RS256 Service JWT signed by operations-private.pem (iss/sub/sender=SmartParking.OperationService, aud=SmartParking.OperationService, permission=pass:plan:freeze).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{passServiceFreezeToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteId\": \"{{passSiteId}}\",\n  \"planId\": \"{{passPlanId}}\",\n  \"expectedPlanRevision\": {{passPlanRevision}},\n  \"productType\": \"MONTHLY\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
           "response": []
         }

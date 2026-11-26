@@ -37,7 +37,7 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
         CancellationToken ct)
     {
         var session = await Mediator.Send(
-            new CheckInWalkInCommand(siteId, body.PlateNumber, body.ImageData, body.VehicleType), ct);
+            new CheckInWalkInCommand(siteId, body.PlateNumber, body.ImageData, body.VehicleType, body.SlotId), ct);
         return Ok(new { success = true, data = session });
     }
 
@@ -84,5 +84,5 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
     }
 }
 
-public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null);
+public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null, Guid? SlotId = null);
 public sealed record ScanParkingLocationRequest(Guid SlotId);

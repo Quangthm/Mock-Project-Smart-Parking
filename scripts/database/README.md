@@ -30,8 +30,8 @@ This image migration does not implement Partner PDF versions, terms replacement,
 | `microservices/01-user-access-service-db.sql` | user / auth / access schema |
 | `microservices/02-facility-service-db.sql` | parking lots, spatial units, slots, paths, operations, structure sync, maintenance windows, operator tables |
 | `microservices/03a-parking-structure-ops-service-db.sql` | structure-ops schema |
-| `microservices/03b-reservation-operations-service-db.sql` | reservations, `slot_allocations`, sessions, capacity pools, structure safety holds, receipts, versioned reservation policies and transactional outbox (application guards; no Operations triggers) |
-| `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy |
+| `microservices/03b-reservation-operations-service-db.sql` | reservations, `slot_allocations`, sessions, capacity pools, structure safety holds, receipts, versioned reservation policies, pass plans (`SPARK-331`) and transactional outbox (application guards; no Operations triggers) |
+| `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy, subscription financial terms and closure compensations (`SPARK-331`) |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
 | `seeds/` | demo data plus explicitly approved reservation policy defaults; never schema |

@@ -34,7 +34,8 @@ public interface ICheckoutPaymentClient
 
 public sealed record CheckoutPaymentPreparation(
     CheckoutPricing Pricing,
-    CheckoutPaymentOrder Order);
+    CheckoutPaymentOrder? Order,
+    bool IsMonthlyCovered = false);
 
 public sealed record CheckoutPricing(
     long FinalAmountVnd,

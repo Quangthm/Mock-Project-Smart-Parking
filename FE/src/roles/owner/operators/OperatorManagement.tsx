@@ -13,7 +13,6 @@ import {
 } from "../../../lib/parkingApi"
 import { CreateOperatorForm } from "./CreateOperatorForm"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { watchOperators } from "../../../lib/operatorLive"
 import { showUiToast } from "../../../lib/uiToast"
 import { formatStatus } from "../../../lib/formatStatus"
 
@@ -21,10 +20,16 @@ export function OperatorManagement({
   selectedSiteId,
   onOperatorsChanged,
   liveOperators,
+  rosterDenied = false,
+  rosterLoading = false,
+  onRefreshRoster,
 }: {
   selectedSiteId: string
   onOperatorsChanged: () => void
-  liveOperators?: Operator[]
+  liveOperators: Operator[]
+  rosterDenied?: boolean
+  rosterLoading?: boolean
+  onRefreshRoster: () => void
 }) {
   const { user } = useApp()
   const { confirm, confirmation } = useConfirmation()
@@ -34,22 +39,13 @@ export function OperatorManagement({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
-  const [reload, setReload] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
   const [filterSite, setFilterSite] = useState(selectedSiteId)
   const [inviting, setInviting] = useState<string | null>(null)
   useEffect(() => {
-    if (liveOperators !== undefined) { setOperators(liveOperators); return }
-    let active = true
-    const stop = watchOperators(() => {
-      void operatorsApi.list().then(accounts => {
-        if (active) setOperators(accounts)
-      }).catch(err => {
-        if (active) setError(err instanceof Error ? err.message : "Cannot refresh operators.")
-      })
-    })
-    return () => { active = false; stop() }
-  }, [user?.id, liveOperators])
+    setOperators(liveOperators)
+    if (rosterDenied) { setShowCreate(false); setTransferOp(null) }
+  }, [liveOperators, rosterDenied])
 
   async function resendInvitation(id: string) {
     setInviting(id)
@@ -76,10 +72,9 @@ export function OperatorManagement({
     setLoading(true)
     setError("")
     setMessage("")
-    Promise.all([liveOperators === undefined ? operatorsApi.list() : Promise.resolve(null), parkingApi.list()])
-      .then(([accounts, parkingSites]) => {
+    parkingApi.list()
+      .then(parkingSites => {
         if (!current) return
-        if (accounts) setOperators(accounts)
         setSites(
           parkingSites.filter(
             (site) => site.isActive && site.status === "ACTIVE",
@@ -100,7 +95,7 @@ export function OperatorManagement({
     return () => {
       current = false
     }
-  }, [user?.id, reload])
+  }, [user?.id])
 
   function onCreated(operator: Operator) {
     setOperators((current) =>
@@ -171,15 +166,15 @@ export function OperatorManagement({
           <button
             type="button"
             className="btn-outline text-xs px-3 py-2"
-            disabled={loading}
-            onClick={() => setReload((v) => v + 1)}
+            disabled={rosterLoading}
+            onClick={onRefreshRoster}
           >
             Refresh
           </button>
           <button
             type="button"
             className="btn-primary text-xs px-3.5 py-2 font-medium flex items-center gap-1.5"
-            disabled={loading}
+            disabled={loading || rosterLoading || rosterDenied}
             onClick={() => setShowCreate(true)}
           >
             <UntitledIcon name="plus" size={14} />
@@ -261,7 +256,7 @@ export function OperatorManagement({
       </div>
 
       {/* Operators List / Table */}
-      {loading ? (
+      {rosterDenied ? null : loading || rosterLoading ? (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--muted)]">
           Loading operator accounts and site rosters…
         </div>

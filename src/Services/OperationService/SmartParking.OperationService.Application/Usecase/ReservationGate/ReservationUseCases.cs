@@ -13,7 +13,8 @@ public sealed record ListParkingSessionsQuery(Guid SiteId) : IRequest<IReadOnlyL
 public sealed record ScanParkingSessionCommand(Guid SiteId, Guid ReferenceId, Guid SlotId) : IRequest<ParkingSessionHistoryEntry>;
 public sealed record FindReservationQuery(Guid SiteId, string Query) : IRequest<ReservationGateEntry>;
 public sealed record FindWalkInSessionQuery(Guid SiteId, string Plate) : IRequest<WalkInParkingSession>;
-public sealed record CheckInWalkInCommand(Guid SiteId, string PlateNumber, string? ImageData, string? VehicleType)
+public sealed record CheckInWalkInCommand(
+    Guid SiteId, string PlateNumber, string? ImageData, string? VehicleType, Guid? PreferredSlotId = null)
     : IRequest<WalkInParkingSession>;
 public sealed record CheckOutWalkInCommand(Guid SiteId, Guid SessionId, string PlateNumber, string? ImageData)
     : IRequest<WalkInParkingSession>;
@@ -67,6 +68,7 @@ public sealed class CalculateCheckoutPricingQueryHandler(
 public sealed class PrepareReservationCheckoutCommandHandler(
     IOperatorIdentityClient identity,
     ICheckoutPaymentClient payment,
+    ISubscribedVehicleRepository subscriptions,
     IParkingSessionRepository sessions,
     IOperationsConcurrency guards,
     IUnitOfWork work,
@@ -80,6 +82,10 @@ public sealed class PrepareReservationCheckoutCommandHandler(
         var session = await sessions.FindByReservationAsync(scope.TenantId, request.SiteId, request.ReservationId, true, ct)
             ?? throw new ReservationGateException(404, "ACTIVE_SESSION_NOT_FOUND", "No active parking session was found for this reservation.");
         GateRules.VerifyPlate(session.OriginalPlate ?? session.NormalizedPlate ?? "", request.PlateNumber);
+        if (await subscriptions.IsCoveredAsync(scope.TenantId, request.SiteId,
+                session.OriginalPlate ?? session.NormalizedPlate ?? "", clock.GetUtcNow(), ct))
+            return MonthlyCoverageCheckoutPreparation.Create(session.EntryTime, clock.GetUtcNow());
+
         var result = await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,
@@ -91,7 +97,8 @@ public sealed class PrepareReservationCheckoutCommandHandler(
             session.OriginalPlate ?? session.NormalizedPlate ?? "",
             session.AccountId,
             ct);
-        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, request.ImageData, ct);
+        await GateCheckout.BindOrderAsync(sessions, guards, work, session,
+            result.Order?.OrderId ?? throw new InvalidOperationException("Payment Service returned no checkout order."), request.ImageData, ct);
         return result;
     }
 }
@@ -100,6 +107,7 @@ public sealed class PrepareSessionCheckoutCommandHandler(
     IOperatorIdentityClient identity,
     IParkingSessionRepository sessions,
     ICheckoutPaymentClient payment,
+    ISubscribedVehicleRepository subscriptions,
     IOperationsConcurrency guards,
     IUnitOfWork work,
     TimeProvider clock) : IRequestHandler<PrepareSessionCheckoutCommand, CheckoutPaymentPreparation>
@@ -113,6 +121,10 @@ public sealed class PrepareSessionCheckoutCommandHandler(
         if (session is null || session.ReservationId is not null || session.ExitTime is not null)
             throw new ReservationGateException(404, "PARKING_SESSION_NOT_FOUND", "Parking session was not found.");
         GateRules.VerifyPlate(session.OriginalPlate ?? session.NormalizedPlate ?? "", request.PlateNumber);
+        if (await subscriptions.IsCoveredAsync(scope.TenantId, request.SiteId,
+                session.OriginalPlate ?? session.NormalizedPlate ?? "", clock.GetUtcNow(), ct))
+            return MonthlyCoverageCheckoutPreparation.Create(session.EntryTime, clock.GetUtcNow());
+
         var result = await payment.PrepareAsync(
             scope.TenantId,
             request.SiteId,
@@ -125,9 +137,16 @@ public sealed class PrepareSessionCheckoutCommandHandler(
             null,
             ct,
             request.DevelopmentTestAmount);
-        await GateCheckout.BindOrderAsync(sessions, guards, work, session, result.Order.OrderId, request.ImageData, ct);
+        await GateCheckout.BindOrderAsync(sessions, guards, work, session,
+            result.Order?.OrderId ?? throw new InvalidOperationException("Payment Service returned no checkout order."), request.ImageData, ct);
         return result;
     }
+}
+
+internal static class MonthlyCoverageCheckoutPreparation
+{
+    public static CheckoutPaymentPreparation Create(DateTimeOffset entryTime, DateTimeOffset now) =>
+        new(new CheckoutPricing(0, "VND", (decimal)Math.Max(0, (now - entryTime).TotalMinutes), true), null, true);
 }
 
 internal static class GateCheckout

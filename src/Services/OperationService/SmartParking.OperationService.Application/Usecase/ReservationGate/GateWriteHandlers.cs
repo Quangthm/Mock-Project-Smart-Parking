@@ -10,7 +10,7 @@ using SmartParking.OperationService.Domain.Entities;
 namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 
 public sealed class CheckInWalkInCommandHandler(IOperatorIdentityClient identity, IParkingSessionRepository sessions, IOperationsAuditPublisher audit,
-    IOperationsConcurrency guards, IUnitOfWork work, TimeProvider clock) : IRequestHandler<CheckInWalkInCommand, WalkInParkingSession>
+    ISlotAllocationRepository allocations, IOperatorGateSlotClaims gateSlots, IOperationsConcurrency guards, IUnitOfWork work, TimeProvider clock) : IRequestHandler<CheckInWalkInCommand, WalkInParkingSession>
 {
     public async Task<WalkInParkingSession> Handle(CheckInWalkInCommand request, CancellationToken ct)
     {
@@ -21,18 +21,27 @@ public sealed class CheckInWalkInCommandHandler(IOperatorIdentityClient identity
         await guards.LockSiteAsync(request.SiteId, ct);
         if (await sessions.HasActivePlateAsync(scope.TenantId, request.SiteId, plate, ct))
             throw new ReservationGateException(409, "VEHICLE_ALREADY_INSIDE", "An active parking session already exists for this plate.");
+        var vehicleType = GateRules.NormalizeVehicleType(request.VehicleType) ?? throw new InvalidOperationException("Vehicle type was not validated.");
+        await using var lease = await gateSlots.ClaimAvailableAsync(scope.TenantId, request.SiteId, vehicleType, request.PreferredSlotId, null, false, ct);
         var now = clock.GetUtcNow();
         var id = Guid.NewGuid();
         var session = new ParkingSessionRow { Id = id, TenantId = scope.TenantId, SiteId = request.SiteId,
             OriginalPlate = request.PlateNumber.Trim(), NormalizedPlate = plate,
-            VehicleType = GateRules.NormalizeVehicleType(request.VehicleType) ?? throw new InvalidOperationException("Vehicle type was not validated."),
+            VehicleType = vehicleType,
             TicketReference = $"WALKIN-{id:N}", EntryTime = now, EntryImageUrl = request.ImageData,
             SessionStatus = "ACTIVE", CreatedAt = now, Version = 1 };
+        var allocation = new SlotAllocationRow { Id = Guid.NewGuid(), TenantId = scope.TenantId, SiteId = request.SiteId,
+            SlotId = lease.Slot.Id, AllocatedStartTime = now, AllocatedEndTime = DateTimeOffset.MaxValue,
+            AllocationStatus = "RESERVED", CreatedAt = now };
+        allocation.Occupy(id);
+        await allocations.AddAsync(allocation, ct);
+        session.RecordSlotScan(lease.Slot.Id, now);
         await sessions.AddAsync(session, ct);
         await audit.PublishAsync(GateProjection.Audit(scope, null, session.Id, "VEHICLE_CHECK_IN", now), ct);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        return GateProjection.WalkIn(session);
+        lease.Commit();
+        return GateProjection.WalkIn(session, lease.Slot.Code);
     }
 }
 
@@ -157,8 +166,8 @@ internal static class GateDeparture
 
 internal static class GateProjection
 {
-    public static WalkInParkingSession WalkIn(ParkingSessionRow session) => new(session.Id, session.SiteId,
-        session.CurrentSlotId, session.CurrentSlotId?.ToString(), session.OriginalPlate ?? session.NormalizedPlate ?? "",
+    public static WalkInParkingSession WalkIn(ParkingSessionRow session, string? slotCode = null) => new(session.Id, session.SiteId,
+        session.CurrentSlotId, slotCode ?? session.CurrentSlotId?.ToString(), session.OriginalPlate ?? session.NormalizedPlate ?? "",
         session.VehicleType, session.EntryTime, session.ExitTime, session.EntryImageUrl, session.ExitImageUrl);
     public static OperationsGateAuditV1 Audit(OperatorSiteScope scope, Guid? reservationId, Guid sessionId, string action, DateTimeOffset now) =>
         new(Guid.NewGuid(), now, scope.UserId, scope.TenantId, scope.SiteId, action, reservationId, sessionId);

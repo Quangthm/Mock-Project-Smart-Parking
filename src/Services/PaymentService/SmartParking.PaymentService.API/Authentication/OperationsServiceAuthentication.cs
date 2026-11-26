@@ -10,6 +10,12 @@ public static class OperationsServiceAuthentication
     public const string QuotePolicy = "ReviewedReservationQuotes";
     public const string Policy = "ReservationDepositOrders";
     public const string Permission = "reservation:deposit-order";
+    public const string PassFinancialTermsReadPolicy = "PassFinancialTermsRead";
+    public const string PassFinancialTermsReadPermission = "pass:financial-terms:read";
+    public const string PassFinancialTermsQuotePolicy = "PassFinancialTermsQuote";
+    public const string PassFinancialTermsQuotePermission = "pass:financial-terms:quote";
+    public const string PassClosuresCompensatePolicy = "PassClosuresCompensate";
+    public const string PassClosuresCompensatePermission = "pass:closures:compensate";
 
     public static void AddOperationsServiceAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
@@ -40,6 +46,23 @@ public static class OperationsServiceAuthentication
                 {
                     if (!enabled) context.Fail("Reservation integration is disabled.");
                     return Task.CompletedTask;
+                },
+                OnChallenge = async context =>
+                {
+                    context.HandleResponse();
+                    await PaymentAuthChallengeWriter.WriteErrorAsync(
+                        context.HttpContext,
+                        StatusCodes.Status401Unauthorized,
+                        "UNAUTHENTICATED",
+                        "A valid Operations service credential is required.");
+                },
+                OnForbidden = async context =>
+                {
+                    await PaymentAuthChallengeWriter.WriteErrorAsync(
+                        context.HttpContext,
+                        StatusCodes.Status403Forbidden,
+                        "FORBIDDEN",
+                        "The service is not permitted to use this capability.");
                 }
             };
             options.TokenValidationParameters = new TokenValidationParameters
@@ -67,6 +90,9 @@ public static class OperationsServiceAuthentication
                     .RequireClaim("permission", permission));
             Add(Policy, Permission);
             Add(QuotePolicy, "reservation:quote");
+            Add(PassFinancialTermsReadPolicy, PassFinancialTermsReadPermission);
+            Add(PassFinancialTermsQuotePolicy, PassFinancialTermsQuotePermission);
+            Add(PassClosuresCompensatePolicy, PassClosuresCompensatePermission);
         });
     }
 }

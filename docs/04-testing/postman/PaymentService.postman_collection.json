@@ -250,6 +250,96 @@
       "key": "spark273WebhookSignature",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "userBaseUrl",
+      "value": "http://localhost:5035",
+      "type": "string"
+    },
+    {
+      "key": "ownerEmail",
+      "value": "owner@smartpark.local",
+      "type": "string"
+    },
+    {
+      "key": "ownerPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passPlanId",
+      "value": "d1000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "passPlanRevision",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "passFinancialTermId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passTermRevision",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "passTermIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passServiceReadToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passServiceQuoteToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passServiceCompensateToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reservationServiceToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "passClosureId",
+      "value": "c1000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "passId",
+      "value": "e1000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "passPaymentOrderId",
+      "value": "f2000000-0000-4000-8000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "passClosureIdempotencyKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentWebhookBody",
+      "value": "",
+      "type": "string"
     }
   ],
   "auth": {
@@ -3196,20 +3286,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3256,20 +3346,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3315,20 +3405,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3387,20 +3477,20 @@
           ],
           "request": {
             "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3427,14 +3517,14 @@
           }
         },
         {
-          "name": "4.10 S2S Ensure Deposit Order - Regular Driver Token Forbidden S2S (Expected 403)",
+          "name": "4.10 S2S Ensure Deposit Order - Regular Driver Token Rejected S2S (Expected 401/403)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Status code is 403 Forbidden', () => pm.response.to.have.status(403));"
+                  "pm.test('Status code is 401 or 403', () => pm.expect([401, 403]).to.include(pm.response.code));"
                 ]
               }
             }
@@ -3800,18 +3890,17 @@
           ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
-                "type": "text"
-              }
-            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/internal/reservation-deposit-orders/{{spark273OrderId}}/collections",
               "host": [
@@ -3848,20 +3937,20 @@
           ],
           "request": {
             "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3905,20 +3994,20 @@
           ],
           "request": {
             "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{reservationServiceToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Internal-Service-Key",
-                "value": "{{internalServiceKey}}",
                 "type": "text"
               }
             ],
@@ -3942,6 +4031,972 @@
               }
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "05 - Pass Financial Terms, Revenue & Closure Compensation (SPARK-331)",
+      "description": "A5 Upsert Financial Terms, A6 Owner Pass Revenue Summary, B3 Internal Lookup/Quote Snapshot, and B4 Idempotent Closure Compensation. Set ownerPassword from .env (SMARTPARK_OWNER_PASSWORD) and passPlanId from OperationService 2.5 Publish response before running.",
+      "item": [
+        {
+          "name": "5.0 Login as Owner (UserService UserJwt)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Owner token captured\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"ownerToken\", json.data.accessToken);",
+                  "    pm.environment.set(\"ownerToken\", json.data.accessToken);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{userBaseUrl}}/api/auth/login",
+              "host": [
+                "{{userBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates against UserService (http://localhost:5035/api/auth/login) and stores ownerToken for A5 and A6 (UserJwt scheme).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerEmail}}\",\n  \"password\": \"{{ownerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.1 A5 Upsert Monthly Financial Terms (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const key = pm.variables.replaceIn(\"{{$guid}}\");",
+                  "pm.collectionVariables.set(\"passTermIdempotencyKey\", key);",
+                  "pm.environment.set(\"passTermIdempotencyKey\", key);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Financial term revision saved\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.financialTermId).to.be.a(\"string\").and.not.empty;",
+                  "    pm.collectionVariables.set(\"passFinancialTermId\", json.data.financialTermId);",
+                  "    pm.collectionVariables.set(\"passTermRevision\", String(json.data.financialTermRevision));",
+                  "    pm.environment.set(\"passFinancialTermId\", json.data.financialTermId);",
+                  "    pm.environment.set(\"passTermRevision\", String(json.data.financialTermRevision));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{passTermIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{passPlanId}}/financial-terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "lots",
+                "{{siteId}}",
+                "pass-plans",
+                "{{passPlanId}}",
+                "financial-terms"
+              ]
+            },
+            "description": "Configures full-period VND prices and M-05 refund policy for the published monthly passPlanId.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productType\": \"MONTHLY\",\n  \"planRevision\": {{passPlanRevision}},\n  \"currency\": \"VND\",\n  \"vehiclePrices\": [\n    { \"vehicleType\": \"CAR\", \"fullPeriodPrice\": 1500000 },\n    { \"vehicleType\": \"MOTORCYCLE\", \"fullPeriodPrice\": 180000 }\n  ],\n  \"refundPolicy\": {\n    \"voluntaryBeforeStartPercent\": 100,\n    \"voluntaryInPeriodPercent\": 50,\n    \"facilityClosurePercent\": 100,\n    \"roundingMode\": \"HALF_UP_THOUSAND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 A5 Upsert Idempotent Replay (200 OK + Idempotency-Replayed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Idempotency-Replayed header is true\", () => pm.response.to.have.header(\"Idempotency-Replayed\", \"true\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{passTermIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{passPlanId}}/financial-terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "lots",
+                "{{siteId}}",
+                "pass-plans",
+                "{{passPlanId}}",
+                "financial-terms"
+              ]
+            },
+            "description": "Replays 5.1 with identical passTermIdempotencyKey and payload.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productType\": \"MONTHLY\",\n  \"planRevision\": {{passPlanRevision}},\n  \"currency\": \"VND\",\n  \"vehiclePrices\": [\n    { \"vehicleType\": \"CAR\", \"fullPeriodPrice\": 1500000 },\n    { \"vehicleType\": \"MOTORCYCLE\", \"fullPeriodPrice\": 180000 }\n  ],\n  \"refundPolicy\": {\n    \"voluntaryBeforeStartPercent\": 100,\n    \"voluntaryInPeriodPercent\": 50,\n    \"facilityClosurePercent\": 100,\n    \"roundingMode\": \"HALF_UP_THOUSAND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 A5 Upsert Yearly Blocked by Q05 (422 YEARLY_POLICY_BLOCKED_Q05)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is YEARLY_POLICY_BLOCKED_Q05\", () => pm.expect(json.errorCode).to.eql(\"YEARLY_POLICY_BLOCKED_Q05\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{passPlanId}}/financial-terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "lots",
+                "{{siteId}}",
+                "pass-plans",
+                "{{passPlanId}}",
+                "financial-terms"
+              ]
+            },
+            "description": "Verifies YEARLY financial terms are blocked with 422 YEARLY_POLICY_BLOCKED_Q05.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productType\": \"YEARLY\",\n  \"planRevision\": {{passPlanRevision}},\n  \"currency\": \"VND\",\n  \"vehiclePrices\": [\n    { \"vehicleType\": \"CAR\", \"fullPeriodPrice\": 15000000 }\n  ],\n  \"refundPolicy\": {\n    \"voluntaryBeforeStartPercent\": 100,\n    \"voluntaryInPeriodPercent\": 50,\n    \"facilityClosurePercent\": 100,\n    \"roundingMode\": \"HALF_UP_THOUSAND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.4 A5 Validation Error - Zero Price & Non-M05 Refund (400 INVALID_FINANCIAL_TERMS)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is INVALID_FINANCIAL_TERMS\", () => pm.expect(json.errorCode).to.eql(\"INVALID_FINANCIAL_TERMS\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{passPlanId}}/financial-terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "lots",
+                "{{siteId}}",
+                "pass-plans",
+                "{{passPlanId}}",
+                "financial-terms"
+              ]
+            },
+            "description": "Rejects fullPeriodPrice <= 0 and non-M05 voluntaryInPeriodPercent != 50.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productType\": \"MONTHLY\",\n  \"planRevision\": {{passPlanRevision}},\n  \"currency\": \"VND\",\n  \"vehiclePrices\": [\n    { \"vehicleType\": \"CAR\", \"fullPeriodPrice\": 0 }\n  ],\n  \"refundPolicy\": {\n    \"voluntaryBeforeStartPercent\": 100,\n    \"voluntaryInPeriodPercent\": 70,\n    \"facilityClosurePercent\": 100,\n    \"roundingMode\": \"HALF_UP_THOUSAND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.5 A5 Auth Error - Missing Token (401 UNAUTHENTICATED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.errorCode).to.eql(\"UNAUTHENTICATED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pricing/lots/{{siteId}}/pass-plans/{{passPlanId}}/financial-terms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pricing",
+                "lots",
+                "{{siteId}}",
+                "pass-plans",
+                "{{passPlanId}}",
+                "financial-terms"
+              ]
+            },
+            "description": "Confirms UserJwt scheme rejects anonymous calls with 401 UNAUTHENTICATED.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productType\": \"MONTHLY\",\n  \"planRevision\": {{passPlanRevision}},\n  \"currency\": \"VND\",\n  \"vehiclePrices\": [\n    { \"vehicleType\": \"CAR\", \"fullPeriodPrice\": 1500000 }\n  ],\n  \"refundPolicy\": {\n    \"voluntaryBeforeStartPercent\": 100,\n    \"voluntaryInPeriodPercent\": 50,\n    \"facilityClosurePercent\": 100,\n    \"roundingMode\": \"HALF_UP_THOUSAND\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.6 A6 Owner Pass Revenue Summary - Monthly (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Summary shape valid\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.currency).to.eql(\"VND\");",
+                  "    pm.expect(json.data.counts).to.have.property(\"fulfilledPasses\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/owners/lots/{{siteId}}/pass-revenue-summary?productType=MONTHLY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "owners",
+                "lots",
+                "{{siteId}}",
+                "pass-revenue-summary"
+              ],
+              "query": [
+                {
+                  "key": "productType",
+                  "value": "MONTHLY"
+                }
+              ]
+            },
+            "description": "Reads pass revenue summary separating collectedGrantedAmount vs collectedAwaitingRefundAmount.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.7 A6 Owner Pass Revenue Summary - Yearly Zeroed (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Zeroed VND summary\", () => {",
+                  "    pm.expect(json.data.collectedAmount).to.eql(0);",
+                  "    pm.expect(json.data.netSettledRevenue).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/owners/lots/{{siteId}}/pass-revenue-summary?productType=YEARLY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "owners",
+                "lots",
+                "{{siteId}}",
+                "pass-revenue-summary"
+              ],
+              "query": [
+                {
+                  "key": "productType",
+                  "value": "YEARLY"
+                }
+              ]
+            },
+            "description": "Returns zeroed VND summary for blocked YEARLY productType.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.8 A6 Validation Error - Invalid ProductType (400 INVALID_PRODUCT_TYPE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is INVALID_PRODUCT_TYPE\", () => pm.expect(json.errorCode).to.eql(\"INVALID_PRODUCT_TYPE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/owners/lots/{{siteId}}/pass-revenue-summary?productType=WEEKLY",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "owners",
+                "lots",
+                "{{siteId}}",
+                "pass-revenue-summary"
+              ],
+              "query": [
+                {
+                  "key": "productType",
+                  "value": "WEEKLY"
+                }
+              ]
+            },
+            "description": "Rejects unknown productType query param.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.9 B3 Internal Get Financial Terms - Reject X-Service-Key (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is UNAUTHENTICATED\", () => pm.expect(json.errorCode).to.eql(\"UNAUTHENTICATED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Internal-Service-Key",
+                "value": "{{internalServiceKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-financial-terms?siteId={{siteId}}&planId={{passPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-financial-terms"
+              ],
+              "query": [
+                {
+                  "key": "siteId",
+                  "value": "{{siteId}}"
+                },
+                {
+                  "key": "planId",
+                  "value": "{{passPlanId}}"
+                }
+              ]
+            },
+            "description": "Verifies X-Service-Key is rejected on /internal/pass-financial-terms.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.10 B3 Internal Get Financial Terms - RS256 Service JWT (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK (requires valid passServiceReadToken)\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Returns array of financial terms\", () => pm.expect(json.data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-financial-terms?siteId={{siteId}}&planId={{passPlanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-financial-terms"
+              ],
+              "query": [
+                {
+                  "key": "siteId",
+                  "value": "{{siteId}}"
+                },
+                {
+                  "key": "planId",
+                  "value": "{{passPlanId}}"
+                }
+              ]
+            },
+            "description": "Set passServiceReadToken to RS256 Service JWT (aud=SmartParking.PaymentService, permission=pass:financial-terms:read).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{passServiceReadToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.11 B3 Internal Quote Snapshot - RS256 Service JWT (200 OK)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK (requires valid passServiceQuoteToken)\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Snapshot quote returned\", () => {",
+                  "    pm.expect(json.data.fullPeriodPrice).to.eql(1500000);",
+                  "    pm.expect(json.data.currency).to.eql(\"VND\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-financial-terms/quote-snapshot",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-financial-terms",
+                "quote-snapshot"
+              ]
+            },
+            "description": "Set passServiceQuoteToken to RS256 Service JWT (aud=SmartParking.PaymentService, permission=pass:financial-terms:quote).",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{passServiceQuoteToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteId\": \"{{siteId}}\",\n  \"planId\": \"{{passPlanId}}\",\n  \"planRevision\": {{passPlanRevision}},\n  \"expectedFinancialTermRevision\": {{passTermRevision}},\n  \"productType\": \"MONTHLY\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.12 B3 Internal Quote Snapshot - Stale Revision (409 FINANCIAL_TERMS_CHANGED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409 Conflict (requires valid passServiceQuoteToken)\", () => pm.response.to.have.status(409));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is FINANCIAL_TERMS_CHANGED\", () => pm.expect(json.errorCode).to.eql(\"FINANCIAL_TERMS_CHANGED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-financial-terms/quote-snapshot",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-financial-terms",
+                "quote-snapshot"
+              ]
+            },
+            "description": "Requires passServiceQuoteToken; verifies 409 FINANCIAL_TERMS_CHANGED when expectedFinancialTermRevision mismatches.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{passServiceQuoteToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteId\": \"{{siteId}}\",\n  \"planId\": \"{{passPlanId}}\",\n  \"planRevision\": {{passPlanRevision}},\n  \"expectedFinancialTermRevision\": 999,\n  \"productType\": \"MONTHLY\",\n  \"vehicleType\": \"CAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.13 B4 Internal Closure Compensation - Invalid Intervals (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 400 Bad Request (requires valid passServiceCompensateToken)\", () => pm.response.to.have.status(400));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Error code is INVALID_CLOSURE_INTERVALS\", () => pm.expect(json.errorCode).to.eql(\"INVALID_CLOSURE_INTERVALS\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-closures/compensate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-closures",
+                "compensate"
+              ]
+            },
+            "description": "Set passServiceCompensateToken (permission=pass:closures:compensate). Verifies 400 INVALID_CLOSURE_INTERVALS when paidPeriodEnd <= paidPeriodStart and unavailableIntervals is empty.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{passServiceCompensateToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotencyKey\": \"invalid-closure-1\",\n  \"closureId\": \"{{passClosureId}}\",\n  \"closureType\": \"TEMPORARY\",\n  \"siteId\": \"{{siteId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"passId\": \"{{passId}}\",\n  \"paymentOrderId\": \"{{passPaymentOrderId}}\",\n  \"paidPeriodStart\": \"2026-12-01T00:00:00Z\",\n  \"paidPeriodEnd\": \"2026-11-01T00:00:00Z\",\n  \"unavailableIntervals\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.14 B4 Internal Closure Compensation - RS256 Service JWT (200 OK)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const key = pm.variables.replaceIn(\"{{$guid}}\");",
+                  "pm.collectionVariables.set(\"passClosureIdempotencyKey\", key);",
+                  "pm.environment.set(\"passClosureIdempotencyKey\", key);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200 OK (requires passServiceCompensateToken & real PAID MONTHLY_PASS_FEE order)\", () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test(\"Compensation payload valid\", () => {",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.compensationId).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/internal/pass-closures/compensate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "internal",
+                "pass-closures",
+                "compensate"
+              ]
+            },
+            "description": "Requires passServiceCompensateToken AND a real PAID MONTHLY_PASS_FEE PaymentOrder matching passPaymentOrderId and passId in PaymentDb.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{passServiceCompensateToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idempotencyKey\": \"{{passClosureIdempotencyKey}}\",\n  \"closureId\": \"{{passClosureId}}\",\n  \"closureType\": \"TEMPORARY\",\n  \"siteId\": \"{{siteId}}\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"passId\": \"{{passId}}\",\n  \"paymentOrderId\": \"{{passPaymentOrderId}}\",\n  \"paidPeriodStart\": \"2026-11-01T00:00:00Z\",\n  \"paidPeriodEnd\": \"2026-12-01T00:00:00Z\",\n  \"unavailableIntervals\": [\n    {\n      \"start\": \"2026-11-10T00:00:00Z\",\n      \"end\": \"2026-11-15T00:00:00Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
         }
       ]
     }

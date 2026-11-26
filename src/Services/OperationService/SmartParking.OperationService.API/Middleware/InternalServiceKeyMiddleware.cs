@@ -7,7 +7,8 @@ public sealed class InternalServiceKeyMiddleware(RequestDelegate next, IConfigur
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        if (context.Request.Path.StartsWithSegments("/internal"))
+        if (context.Request.Path.StartsWithSegments("/internal") &&
+            !context.Request.Path.StartsWithSegments("/internal/pass-plans"))
         {
             var key = configuration["Services:Key"]
                 ?? throw new InvalidOperationException("Configure Services:Key.");

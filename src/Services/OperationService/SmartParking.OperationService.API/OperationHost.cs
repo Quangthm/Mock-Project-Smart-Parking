@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using SmartParking.OperationService.Application;
+using SmartParking.OperationService.API.Authentication;
 using SmartParking.OperationService.API.Controllers;
 using SmartParking.OperationService.API.Hubs;
 using SmartParking.OperationService.API.Middleware;
@@ -20,18 +21,22 @@ public static class OperationHost
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
-        builder.AddParkingSearch();
-        builder.AddOwnReservationReadDependencies();
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddApplicationServices();
         builder.Services.AddInfrastructureServices(builder.Configuration);
+        builder.AddParkingSearch();
+        builder.AddOwnReservationReadDependencies();
         var admissionEnabled = builder.Configuration.GetValue<bool>("ReservationAdmission:Enabled");
+        var consumerAuthEnabled = admissionEnabled || !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:JwksUri"]);
         builder.Services.AddAuthorization();
+        builder.Services.AddPassPlanOwnerPolicy();
         builder.Services.AddScoped<ICurrentActor, HttpCurrentActor>();
-        if (admissionEnabled)
+        if (consumerAuthEnabled)
         {
-            builder.Services.AddConsumerAuthentication(builder.Configuration);
+            builder.Services.AddConsumerAuthentication(
+                builder.Configuration,
+                allowLoopbackHttp: !admissionEnabled && builder.Environment.IsEnvironment("Testing"));
             builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
                 Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, options =>
                 {
@@ -52,6 +57,29 @@ public static class OperationHost
                     };
                 });
         }
+        else
+        {
+            builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                    {
+                        OnChallenge = async context =>
+                        {
+                            context.HandleResponse();
+                            context.Response.Headers.WWWAuthenticate = "Bearer";
+                            await ApiErrors.WriteAsync(context.HttpContext, 401, "UNAUTHENTICATED",
+                                "Authentication is required.", ct: context.HttpContext.RequestAborted);
+                        },
+                        OnForbidden = async context =>
+                        {
+                            await ApiErrors.WriteAsync(context.HttpContext, 403, "FORBIDDEN", "Access is denied.",
+                                ct: context.HttpContext.RequestAborted);
+                        }
+                    };
+                });
+        }
+        builder.Services.AddPassPlanServiceAuthentication(builder.Configuration);
         builder.Services.AddSingleton<IReservationProgressRelay, ReservationProgressRelay>();
         builder.Services.AddReservationMessaging(builder.Configuration);
         builder.Services.AddExceptionHandler<ReservationExceptionHandler>();
@@ -111,7 +139,7 @@ public static class OperationHost
             await next(context);
         });
         app.UseMiddleware<InternalServiceKeyMiddleware>();
-        if (admissionEnabled) app.UseAuthentication();
+        app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
         app.MapParkingSearch();
