@@ -10,12 +10,11 @@
 > [!IMPORTANT]
 > **LƯU Ý ĐẶC BIỆT VỀ CÁC TEST CASE LIÊN QUAN ĐẾN RESERVATION (`TC-08`, `TC-12`):**
 >
-> Hiện tại trên branch này, luồng đặt chỗ & thanh toán **Reservation (`SPARK-273`)** chưa hoàn thiện (chỉ mới tới bước thanh toán; chưa cấu hình đầy đủ settlement/confirm booking & cặp khóa RSA nội bộ Operations ↔ Facility/Payment trong môi trường Docker mặc định).
+> Hiện tại trên branch này, phần **Consumer, Local Projection và Đối soát Reservation/Payment trên `OperationService`** thuộc phạm vi sở hữu của **`SPARK-273`** (chỉ giữ phần **Producer phát event** `FacilityMaintenanceChangedV1`, `FacilityCapacityRestrictedV1`, `FacilityCapacityRestrictionReleasedV1` bên `FacilityService` theo đúng SPARK-273 handoff ownership boundary).
 >
-> Vì vậy, khi chạy kiểm thử E2E trên UI/Docker Compose:
-> 1. **KHÔNG đánh `FAIL`** cho các kịch bản phụ thuộc dữ liệu Reservation live (`TC-08`, `TC-12`); hãy ghi rõ trạng thái **`BLOCKED (Chờ hoàn thiện luồng thanh toán Reservation SPARK-273)`**.
-> 2. **Phạm vi đã kiểm chứng thay thế (Automated Verification):** Toàn bộ logic nghiệp vụ trên `OperationService` liên quan đến xử lý event `FacilityMaintenanceChangedV1` (`UPSERTED`/`CLEARED`, revision fencing, `EndAtUtc = null`), chặn nhận đơn mới trong `[start, end)` (kể cả open-ended `WindowEnd = null`), consumer nhận `FacilityCapacityRestrictedV1`, bảo toàn xe `PARKING`, dời slot khi khả dụng hoặc hủy đơn `FACILITY_FAILURE` và gọi `PaymentService` (`POST /internal/reservation-reconciliations`) tạo `RefundRequest (REFUND_REQUESTED)` đã được kiểm chứng đầy đủ bằng unit tests trong `SmartParking.OperationService.Tests` (`MaintenanceClosureEnforcementTests`, `MaintenanceAdmissionEnforcementTests`, `EmergencyRestrictionReconciliationTests`, `ReservationCommercialReconcileTests`).
-> 3. **Hạng mục hoãn có chủ đích (`FacilityEmergencySlotCandidateProvider`):** `FacilityService` chưa mở endpoint nội bộ danh mục multi-slot cho service-to-service, nên khi chạy live, đối soát khẩn cấp sẽ đi theo nhánh an toàn là hủy `FACILITY_FAILURE` + gửi yêu cầu hoàn tiền sang `PaymentService` (logic dời slot đã có unit test phủ qua `IEmergencyReallocationSlotProvider` và được ghi rõ ở mục *Deferred follow-up (Slice 3B)* trong `parking-structure-api-design.md`).
+> Vì vậy, khi chạy kiểm thử:
+> 1. **KHÔNG đánh `FAIL`** cho các kịch bản phụ thuộc consumer/reconciliation trên `OperationService` (`TC-08`, `TC-12`); hãy ghi rõ trạng thái **`BLOCKED (Thuộc phạm vi SPARK-273 — OperationService consumer/reconciliation giao lại cho owner SPARK-273)`**.
+> 2. **Phạm vi đã kiểm chứng ở nhánh này:** Toàn bộ vòng đời Maintenance (`acknowledged`, `revision`, `EndAtUtc = null`), Emergency Restriction, auto-expiry `effectiveUntil`, overlay `FacilityService` và khả năng phát event outbox (`FacilityMaintenanceChangedV1`, `FacilityCapacityRestrictedV1`/`ReleasedV1`) đã được kiểm chứng đầy đủ bằng unit tests trong `SmartParking.FacilityService.Tests` (`EmergencyRestrictionTests`, `MaintenanceEnforcementFlowTests`, `OperationalLayoutMaintenanceProjectionTests`), cùng `DisabledReservationFactsPublisherTests` cho `SPARK-393`.
 
 ---
 
@@ -66,11 +65,11 @@ Tài khoản demo đọc từ `.env` (`SMARTPARK_OWNER_EMAIL`, `SMARTPARK_OPERAT
 | **TC-05** | `2b` · Max Floors | Chặn sửa `floors` / `+ Floor` vượt trần trong `SiteForm` & `UnitDialog` (`MAX_FLOORS_EXCEEDED`) | `READY FOR QA` | Lỗi hiển thị rõ ràng từ BE & FE |
 | **TC-06** | `2a` / `2c` · Maintenance | Tạo Maintenance (`SITE`/`UNIT`/`SLOT`) → `acknowledged` (`revision = 1`) → phát `FacilityMaintenanceChangedV1` & tự cập nhật qua `start`/`end` sang Operator 3D/2D & tab Maintenance | `READY FOR QA` | Không cần F5; Facility commit độc lập không chờ HTTP ack |
 | **TC-07** | `2a` / `2c` · Maintenance | Bảo toàn xe đang đỗ (`OCCUPIED`) khi slot/zone vào giờ bảo trì | `READY FOR QA` | Slot `OCCUPIED` giữ nguyên trạng thái xe & checkout bình thường |
-| **TC-08** | `2a` · Maintenance + Reservation | Booking trùng lịch khi Facility phát `FacilityMaintenanceChangedV1` (`UPSERTED`) → Operation chặn đơn mới trong `[start, end)` và tự dời slot / hủy `FACILITY_FAILURE` + `RefundRequest`; `CLEARED` tạo tombstone chống event cũ | **`BLOCKED`** *(SPARK-273)* | **Chờ luồng thanh toán Reservation hoàn thiện.** Đã pass unit test BE (`MaintenanceClosureEnforcementTests`, `MaintenanceAdmissionEnforcementTests`) |
+| **TC-08** | `2a` · Maintenance + Reservation | Booking trùng lịch khi Facility phát `FacilityMaintenanceChangedV1` (`UPSERTED`) → phía Operation chặn đơn & đối soát | **`BLOCKED`** *(SPARK-273)* | **Consumer/reconciliation phía `OperationService` thuộc sở hữu `SPARK-273`.** Đầu phát `FacilityMaintenanceChangedV1` bên `FacilityService` đã pass (`MaintenanceEnforcementFlowTests`) |
 | **TC-09** | `2d` · Emergency | Operator bật `EMERGENCY` / `FORCED_MAINTENANCE` ở `SLOT`/`UNIT`/`SITE` + giữ nguyên Incident Logbook + xác nhận 2 bước cho `SITE` | `READY FOR QA` | Slot trống đổi sang `UNAVAILABLE`/`MAINTENANCE`; slot `OCCUPIED` giữ nguyên |
 | **TC-10** | `2d` · Auto-Expiry | Đặt Emergency/Forced Maintenance có `effectiveUntil` (vd +1–2 phút) → hết giờ tự nhả slot & tự đồng bộ UI | `READY FOR QA` | Ticker BE quét mỗi 15s (`MaintenanceBoundaryTickerWorker.ExpireDueAsync`), FE dùng single-shot `setTimeout` |
 | **TC-11** | `2d` · Manual Release | Bấm Release thủ công trước `effectiveUntil` | `READY FOR QA` | Slot hồi `AVAILABLE` (nếu không bị cửa sổ bảo trì/phong tỏa khác che phủ) |
-| **TC-12** | `2d` · Emergency + Reservation | Emergency Closure phát `FacilityCapacityRestrictedV1` → Operation giữ `PARKING`, hủy đơn `CONFIRMED`/`PENDING_PAYMENT` (`FACILITY_FAILURE`) & tạo `RefundRequest` tại PaymentService | **`BLOCKED`** *(SPARK-273)* | **Chờ luồng thanh toán Reservation hoàn thiện + RSA key.** Đã pass unit test BE (`EmergencyRestrictionReconciliationTests`, `ReservationCommercialReconcileTests`) |
+| **TC-12** | `2d` · Emergency + Reservation | Emergency Closure phát `FacilityCapacityRestrictedV1` → phía Operation giữ `PARKING`, hủy đơn & hoàn tiền | **`BLOCKED`** *(SPARK-273)* | **Consumer/reconciliation phía `OperationService` & Payment thuộc sở hữu `SPARK-273`.** Đầu phát bên `FacilityService` đã pass (`EmergencyRestrictionTests`) |
 | **TC-13** | Refresh · Owner | Owner `OperatorManagement`: đăng ký/verify account Operator mới rồi bấm nút **Refresh** | `READY FOR QA` | Danh sách Operator cập nhật ngay không cần hard-refresh F5 |
 | **TC-14** | Refresh · Operator | Nút **Refresh** / **Retry now** tại `OperatorDashboard` (sites & slots), `LotStatus`, và `EmergencyPanel` | `READY FOR QA` | Dữ liệu site, slots và danh sách restrictions tải mới ngay |
 
@@ -97,7 +96,7 @@ Tài khoản demo đọc từ `.env` (`SMARTPARK_OWNER_EMAIL`, `SMARTPARK_OPERAT
    - **Kỳ vọng:** Lưu thành công ngay (`Active schedule` / `acknowledged`, `revision = 1`) và phát event `FacilityMaintenanceChangedV1` qua outbox mà không phụ thuộc Operations online. Mở tab Operator **Lot Status & 3D Map** (không bấm F5): qua mốc `start`, slot chưa có xe tự chuyển `MAINTENANCE` trên 3D/2D và xuất hiện trong tab Maintenance; qua mốc `end`, tự hồi về `AVAILABLE`.
 2. **TC-07:** Trước mốc `start`, cho 1 xe walk-in vào đỗ (`OCCUPIED`). Qua mốc `start`:
    - **Kỳ vọng:** Slot đang `OCCUPIED` **không bị ghi đè** thành `MAINTENANCE`, xe vẫn check-out bình thường; sau khi check-out mới phản ánh trạng thái trống/bảo trì còn hiệu lực.
-3. **TC-08 (`BLOCKED` — Reservation):** Chờ hoàn thiện `SPARK-273` để test tạo booking `CONFIRMED` trước rồi Owner đặt bảo trì trùng giờ → verify `OperationService` nhận `FacilityMaintenanceChangedV1` (`UPSERTED`) qua RabbitMQ, tự động dời slot hoặc hủy `FACILITY_FAILURE` + tạo `RefundRequest`, đồng thời chặn booking mới trong `[start, end)` (và test `CLEARED` tạo tombstone chống event cũ).
+3. **TC-08 (`BLOCKED` — `SPARK-273`):** Đầu phát `FacilityMaintenanceChangedV1` bên `FacilityService` đã sẵn sàng; phần consumer, local projection & đối soát trên `OperationService` giao lại cho owner `SPARK-273` triển khai theo handoff.
 
 ### Nhóm 4 — Khóa Khẩn Cấp (Emergency Closure), Auto-Expiry & Hoàn tiền (`TC-09`..`TC-12`)
 1. **TC-09:** Vào Operator **Emergency & Incidents**, xác nhận mục Incident Logbook vẫn hoạt động bình thường. Tạo mới ở mục **Emergency Closure / Slot Restrictions**:
@@ -107,7 +106,7 @@ Tài khoản demo đọc từ `.env` (`SMARTPARK_OWNER_EMAIL`, `SMARTPARK_OPERAT
    - **Kỳ vọng:** Sau khi qua `effectiveUntil` tối đa ~15 giây (`MaintenanceBoundaryTickerWorker`), restriction tự đóng (`released_at != NULL`), slot hồi `AVAILABLE` và danh sách UI tự cập nhật.
 3. **TC-11:** Tạo restriction không đặt hạn (hoặc hạn dài), sau đó bấm **Release**.
    - **Kỳ vọng:** Slot hồi `AVAILABLE` ngay lập tức.
-4. **TC-12 (`BLOCKED` — Reservation):** Chờ hoàn thiện `SPARK-273` + cấu hình RSA keys Operations↔Facility/Payment để chạy luồng end-to-end: Booking đã thanh toán (`CONFIRMED`) → Operator bật Emergency Closure → kiểm tra `PARKING` giữ nguyên, `CONFIRMED` chuyển `CANCELLED` (`FACILITY_FAILURE`) và tạo `RefundRequest (REFUND_REQUESTED)` ở `PaymentService`.
+4. **TC-12 (`BLOCKED` — `SPARK-273`):** Đầu phát `FacilityCapacityRestrictedV1`/`ReleasedV1` bên `FacilityService` đã sẵn sàng; phần consumer trên `OperationService` & đối soát Payment giao lại cho owner `SPARK-273` triển khai.
 
 ### Nhóm 5 — Kiểm tra toàn bộ nút Refresh (`TC-13`..`TC-14`)
 1. **TC-13:** Mở sẵn màn hình Owner **Business → Operators**; dùng một cửa sổ khác đăng ký & verify tài khoản Operator mới → quay lại tab Owner bấm **Refresh** (không F5 cả trang).
@@ -132,19 +131,19 @@ dotnet test tests/Services/SmartParking.UserService.Tests/SmartParking.UserServi
 dotnet test tests/Services/SmartParking.PaymentService.Tests/SmartParking.PaymentService.Tests.csproj --nologo
 dotnet test scripts/architecture/SmartParking.Architecture.Tests/SmartParking.Architecture.Tests.csproj --nologo
 
-# 3. Chạy riêng nhóm test Reservation Maintenance & Emergency Reconciliation / Refund
-dotnet test tests/Services/SmartParking.OperationService.Tests/SmartParking.OperationService.Tests.csproj --nologo --filter "FullyQualifiedName~MaintenanceClosureEnforcementTests|FullyQualifiedName~MaintenanceAdmissionEnforcementTests|FullyQualifiedName~EmergencyRestrictionReconciliationTests|FullyQualifiedName~ReservationCommercialReconcileTests"
+# 3. Chạy riêng nhóm test Maintenance & Emergency Producer trên FacilityService
+dotnet test tests/Services/SmartParking.FacilityService.Tests/SmartParking.FacilityService.Tests.csproj --nologo --filter "FullyQualifiedName~MaintenanceEnforcementFlowTests|FullyQualifiedName~EmergencyRestrictionTests|FullyQualifiedName~OperationalLayoutMaintenanceProjectionTests"
 
 # 4. Frontend unit tests & Vite production build
 node --test tests/frontend/maintenance-lifecycle-and-operator-sync.test.cjs tests/frontend/max-floors-rules.test.cjs tests/frontend/spark-395-zone-search.test.cjs tests/frontend/emergency-restrictions.test.cjs tests/frontend/refresh-and-expiry.test.cjs tests/frontend/parking-structure-rules.test.cjs
 npm --prefix FE run build
 ```
 
-**Kết quả ghi nhận (sau khi chuyển sang Option B Event-Driven Maintenance):**
+**Kết quả ghi nhận (sau khi tách phần `OperationService` consumer/reconciliation về `SPARK-273` và merge `develop`):**
 - `dotnet build SmartParking.slnx --nologo`: **0 errors**
-- `SmartParking.FacilityService.Tests`: **273 passed / 0 failed / 36 DB-gated skipped** (30/30 `EmergencyRestrictionTests`, 9/9 `MaintenanceEnforcementFlowTests`)
-- `SmartParking.OperationService.Tests`: **118 passed / 0 failed** (39/39 across Maintenance & Emergency Reservation/Refund suites, 5/5 `DisabledReservationFactsPublisherTests`)
-- `SmartParking.UserService.Tests`: **358 passed / 0 failed / 70 skipped**
-- `SmartParking.PaymentService.Tests`: **247 passed / 0 failed / 3 skipped**
+- `SmartParking.FacilityService.Tests`: **289 passed / 0 failed / 36 DB-gated skipped** (30/30 `EmergencyRestrictionTests`, 9/9 `MaintenanceEnforcementFlowTests`)
+- `SmartParking.OperationService.Tests`: **81 passed / 0 failed** (5/5 `DisabledReservationFactsPublisherTests`)
+- `SmartParking.UserService.Tests`: **415 passed / 0 failed / 70 skipped**
+- `SmartParking.PaymentService.Tests`: **255 passed / 0 failed / 3 skipped**
 - `SmartParking.Architecture.Tests`: **12 passed / 0 failed**
 - Frontend `node --test` (6 suites): **73/73 passed / 0 failed**; `npm --prefix FE run build`: **exit 0**
