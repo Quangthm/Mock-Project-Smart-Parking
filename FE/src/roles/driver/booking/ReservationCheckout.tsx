@@ -348,7 +348,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
       </div>}
   </section>
 
-  {attempt && <dialog ref={progressDialog} className="reservation-progress-dialog" aria-labelledby="reservation-progress-title"
+  {attempt && <dialog ref={progressDialog} className="reservation-progress-dialog" data-payment-ready={Boolean(orderId)} aria-labelledby="reservation-progress-title"
     onCancel={event => { event.preventDefault(); setProgressHidden(true) }}>
     <header className="reservation-progress-header">
       <h3 id="reservation-progress-title">Reservation progress</h3>
