@@ -39,6 +39,8 @@ public class AuditProjectionConsumerIntegrationTests
 
         var provider = services.BuildServiceProvider();
         var harness = provider.GetRequiredService<ITestHarness>();
+        harness.TestTimeout = TimeSpan.FromSeconds(30);
+        harness.TestInactivityTimeout = TimeSpan.FromSeconds(10);
 
         await harness.Start();
         try
@@ -100,6 +102,8 @@ public class AuditProjectionConsumerIntegrationTests
 
         var provider = services.BuildServiceProvider();
         var harness = provider.GetRequiredService<ITestHarness>();
+        harness.TestTimeout = TimeSpan.FromSeconds(30);
+        harness.TestInactivityTimeout = TimeSpan.FromSeconds(10);
 
         await harness.Start();
         try

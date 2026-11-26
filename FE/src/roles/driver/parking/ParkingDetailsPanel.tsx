@@ -4,6 +4,7 @@ import { useState } from "react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { LotPolicyModal } from "../../../components/modals/LotPolicyModal"
 import { buildExternalDirectionsUrl } from "../../../lib/driverDiscoveryApi"
+import { PassOffersDialog } from "../subcriptions/PassOffers"
 
 type RouteStatus = "idle" | "locating" | "loading" | "ready" | "error"
 export type VehicleCapacityInfo = { status: "loading" | "ready" | "unavailable"; car: number | null; motorcycle: number | null }
@@ -27,6 +28,7 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
   onClose: () => void
 }) {
   const [policyOpen, setPolicyOpen] = useState(false)
+  const [passOffersOpen, setPassOffersOpen] = useState(false)
   const hasSlots = Array.isArray(lot.slots)
   const available = hasSlots ? lot.slots.filter((slot) => slot.status === "available").length : null
   const canBook = lot.status === "active" && available !== null && available > 0
@@ -107,12 +109,16 @@ export function ParkingDetailsPanel({ lot, vehicleCapacity, route, routeStatus, 
           <UntitledIcon name="map-pin" size={16} />{routeStatus === "idle" ? "Direction" : "Close directions"}
         </button>
         <button type="button" className="btn-primary" onClick={onBook} disabled={!canBook}>Book Now</button>
+        <button type="button" className="btn-outline col-span-2" aria-haspopup="dialog" onClick={() => setPassOffersOpen(true)}>
+          <UntitledIcon name="ticket" size={16} />View parking passes
+        </button>
         <button type="button" className="btn-outline col-span-2" onClick={openExternalDirections} disabled={!!coordinateError || !hasCoordinates}>
           <UntitledIcon name="map" size={16} />Open in Google Maps
         </button>
         {!canBook && <p>{available === null ? "Booking is unavailable while availability is unknown." : lot.status !== "active" ? "This parking lot is unavailable." : "No spaces are currently available."}</p>}
       </div>
       {policyOpen && <LotPolicyModal lot={lot} onClose={() => setPolicyOpen(false)} />}
+      {passOffersOpen && <PassOffersDialog siteId={lot.id} name={lot.name} address={lot.address} onClose={() => setPassOffersOpen(false)} />}
     </aside>
   )
 }

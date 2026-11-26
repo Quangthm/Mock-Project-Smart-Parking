@@ -18,6 +18,9 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<ReservationRequest> ReservationRequests => Set<ReservationRequest>();
     public DbSet<OperationalPolicyDraftRow> OperationalPolicyDrafts => Set<OperationalPolicyDraftRow>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
+    public DbSet<ParkingPassPlanRow> ParkingPassPlans => Set<ParkingPassPlanRow>();
+    public DbSet<ParkingPassPlanRevisionRow> ParkingPassPlanRevisions => Set<ParkingPassPlanRevisionRow>();
+    public DbSet<SearchFacilityProjectionRow> SearchFacilityProjections => Set<SearchFacilityProjectionRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +68,20 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<OutboxEventRow>().Property(x => x.Payload).HasColumnType("jsonb");
         modelBuilder.Entity<OutboxEventRow>().HasIndex(x => x.SequenceNumber);
         modelBuilder.Entity<OutboxEventRow>().HasIndex(x => new { x.SiteId, x.SequenceNumber });
+
+        Map<ParkingPassPlanRow>(modelBuilder, "parking_pass_plans");
+        modelBuilder.Entity<ParkingPassPlanRow>().Property(x => x.DraftPayload).HasColumnType("jsonb");
+        modelBuilder.Entity<ParkingPassPlanRow>().HasIndex(x => new { x.SiteId, x.ProductType }).IsUnique();
+
+        Map<ParkingPassPlanRevisionRow>(modelBuilder, "parking_pass_plan_revisions");
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().Property(x => x.VehicleTypes).HasColumnType("jsonb");
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().Property(x => x.OrdinaryCoverageRules).HasColumnType("jsonb");
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().HasIndex(x => new { x.PlanId, x.RevisionNumber }).IsUnique();
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().HasIndex(x => new { x.PlanId, x.IdempotencyKey }).IsUnique()
+            .HasFilter("idempotency_key IS NOT NULL");
+
+        Map<SearchFacilityProjectionRow>(modelBuilder, "search_facility_projections");
+        modelBuilder.Entity<SearchFacilityProjectionRow>().HasKey(x => x.SiteId);
     }
 
     private static void Map<TEntity>(ModelBuilder modelBuilder, string table) where TEntity : class

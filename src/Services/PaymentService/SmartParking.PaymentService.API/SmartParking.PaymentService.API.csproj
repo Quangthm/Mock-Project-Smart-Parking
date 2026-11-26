@@ -19,4 +19,12 @@
     <ProjectReference Include="..\SmartParking.PaymentService.Persistence\SmartParking.PaymentService.Persistence.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <Target Name="CopyLocalDevSettings" AfterTargets="Build" Condition="Exists('appsettings.Development.json')">
+    <Copy SourceFiles="appsettings.Development.json" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>
