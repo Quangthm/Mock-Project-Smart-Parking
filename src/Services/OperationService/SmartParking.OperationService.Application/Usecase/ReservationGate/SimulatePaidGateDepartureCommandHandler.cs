@@ -14,7 +14,7 @@ public sealed class SimulatePaidGateDepartureCommandHandler(
     IOperationsConcurrency guards,
     IUnitOfWork work,
     IOperatorGateSlotClaims gateSlots,
-    IRealtimeCheckoutNotifier realtime) : IRequestHandler<SimulatePaidGateDepartureCommand>
+    IOccupancyOutboxStore realtimeOutbox) : IRequestHandler<SimulatePaidGateDepartureCommand>
 {
     public async Task Handle(SimulatePaidGateDepartureCommand request, CancellationToken ct)
     {
@@ -45,10 +45,10 @@ public sealed class SimulatePaidGateDepartureCommandHandler(
             }
             await GateDeparture.RecordAsync(session, allocations, session.CheckoutPaidAt!.Value, null, ct);
         }
+        // The consumer may own the outer transaction; the existing outbox broadcasts after its commit.
+        realtimeOutbox.AddSnapshotRequired(request.SiteId, request.OccurredAt);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         await GateDeparture.ReleaseScannedSlotAsync(session, gateSlots, ct);
-        await realtime.CheckoutCompletedAsync(
-            session.SiteId, session.Id, session.ReservationId, request.PaymentOrderId, ct);
     }
 }

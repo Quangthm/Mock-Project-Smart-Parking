@@ -163,6 +163,8 @@ services:
       <<: [*backend-env, *jwt-validation]
       ConnectionStrings__Payment: "Host=payment-db;Port=5432;Database=smartpark_payment;Username=smartpark_payment;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
       Services__OperationService__BaseUrl: http://operation-service:8080/
+      ReservationIntegration__Enabled: ${SMARTPARK_RESERVATION_FACILITY_ENABLED:-false}
+      ReservationIntegration__OperationsPublicKeyPem: ${SMARTPARK_FACILITY_OPERATION_PUBLIC_KEY_PEM:-}
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: "5672"
       RabbitMQ__VirtualHost: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
@@ -217,7 +219,9 @@ services:
       VITE_NOTIFICATION_API_BASE_URL: http://localhost:5068
       VITE_AI_API_BASE_URL: http://localhost:5001
       VITE_AI_LIVE_API_BASE_URL: http://localhost:5002
+      VITE_TURNSTILE_ENABLED: ${SMARTPARK_TURNSTILE_ENABLED:-true}
       VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+      VITE_ASSISTANT_API_BASE_URL:
       CHOKIDAR_USEPOLLING: "true"
     ports:
       - "127.0.0.1:5173:5173"

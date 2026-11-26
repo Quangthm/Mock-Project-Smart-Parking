@@ -440,9 +440,31 @@ public class AuthenticationEmpiricalChallengeTests
 
         Assert.True(actor.IsAuthenticated);
         Assert.Equal(expectedUserId, actor.UserId);
+        Assert.Equal(expectedUserId, actor.AccountId);
         Assert.Equal("DRIVER", actor.Role);
         Assert.Equal(expectedTenantId, actor.TenantId);
         Assert.Equal(expectedSiteId, actor.SiteId);
         Assert.False(actor.IsInternalService);
+    }
+
+    [Fact]
+    public void CurrentActorAdapter_ExtractsAccountIdClaim_WhenSubIsMissingOrMatches()
+    {
+        var expectedAccountId = Guid.NewGuid();
+        var claims = new[]
+        {
+            new Claim("account_id", expectedAccountId.ToString()),
+            new Claim("role", "DRIVER")
+        };
+        var identity = new ClaimsIdentity(claims, "Bearer");
+        var principal = new ClaimsPrincipal(identity);
+        var httpContext = new DefaultHttpContext { User = principal };
+        var accessor = new HttpContextAccessor { HttpContext = httpContext };
+
+        var actor = new SmartParking.PaymentService.Infrastructure.Adapters.CurrentActorAdapter(accessor);
+
+        Assert.True(actor.IsAuthenticated);
+        Assert.Equal(expectedAccountId, actor.AccountId);
+        Assert.Equal(expectedAccountId, actor.UserId);
     }
 }

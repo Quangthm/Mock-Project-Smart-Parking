@@ -11,7 +11,7 @@ public sealed class RecordReservationWorkFailureHandler(IReservationRequestRepos
     {
         await using var transaction = await work.BeginTransactionAsync(ct);
         var request = await requests.LockAsync(command.RequestId, ct);
-        if (request is null || request.State is not ("PREPARING" or "BOOKING")) return;
+        if (request is null || request.State != "PREPARING") return;
         // Advance the existing worker cadence so a poisoned first page cannot starve later work.
         // This is scheduling, not a claim that an unknown remote effect failed or a new attempt.
         request.Defer((await bookings.DatabaseNowAsync(ct)).AddSeconds(1), "WORKFLOW_RECOVERY_PENDING");

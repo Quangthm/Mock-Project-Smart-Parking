@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $filters = @{
-    Offline = 'Category!=Postgres&Category!=PostgresRabbitMQ&Category!=LiveBroker&Category!=Architecture'
+    Offline = 'Category!=Postgres&Category!=PostgresRabbitMQ&Category!=LiveBroker&Category!=Architecture&Category!=AssistantPostgres'
     Postgres = 'Category=Postgres'
     PostgresRabbitMQ = 'Category=PostgresRabbitMQ'
     LiveBroker = 'Category=LiveBroker'

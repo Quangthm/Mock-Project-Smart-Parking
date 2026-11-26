@@ -241,4 +241,146 @@ public class ProcessPayOsWebhookCommandHandlerTests
         Assert.Equal(50000, evt.Amount);
         Assert.Equal("29A-888.88", evt.PlateNumber);
     }
+
+    [Fact]
+    public async Task Handle_PaidOrder_ReceivesDuplicateSameTransaction_ReplaysSuccessWithoutDuplicateProcessing()
+    {
+        var orderId = Guid.NewGuid();
+        var order = new PaymentOrder
+        {
+            Id = orderId,
+            OrderCode = "555111",
+            FinalAmount = 30000,
+            Status = PaymentOrderStatus.PAID
+        };
+        var settledTx = new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            PaymentOrderId = orderId,
+            Amount = 30000,
+            Status = PaymentStatus.SUCCESS,
+            GatewayTransactionId = "FT-SAME-111"
+        };
+        order.Transactions.Add(settledTx);
+        _orderRepo.Orders.Add(order);
+        _txRepo.Transactions.Add(settledTx);
+
+        _gatewayPort.CallbackResult = new PaymentCallbackResult(
+            IsValidSignature: true,
+            OrderCode: 555111,
+            AmountVnd: 30000,
+            GatewayTransactionId: "FT-SAME-111",
+            BankReference: "REF-555111",
+            PaymentStatus: "SUCCESS",
+            TransactionTime: DateTimeOffset.UtcNow,
+            RawPayload: "{}"
+        );
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(new ProcessPayOsWebhookCommand("{}", "valid-sig"), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("already settled", result.Message);
+        Assert.Empty(_eventPublisher.PublishedEvents); // No duplicate outbox event
+    }
+
+    [Fact]
+    public async Task Handle_PaidOrder_ReceivesNewSecondTransaction_CreatesNewTransactionAndPublishesEvent_NoSilentDrop()
+    {
+        var orderId = Guid.NewGuid();
+        var order = new PaymentOrder
+        {
+            Id = orderId,
+            OrderCode = "555222",
+            FinalAmount = 30000,
+            Status = PaymentOrderStatus.PAID
+        };
+        var firstTx = new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            PaymentOrderId = orderId,
+            Amount = 30000,
+            Status = PaymentStatus.SUCCESS,
+            GatewayTransactionId = "FT-FIRST-TX"
+        };
+        order.Transactions.Add(firstTx);
+        _orderRepo.Orders.Add(order);
+        _txRepo.Transactions.Add(firstTx);
+
+        // A second payment callback arrives with a DIFFERENT gateway transaction ID (e.g. customer paid twice)
+        _gatewayPort.CallbackResult = new PaymentCallbackResult(
+            IsValidSignature: true,
+            OrderCode: 555222,
+            AmountVnd: 30000,
+            GatewayTransactionId: "FT-SECOND-TX",
+            BankReference: "REF-555222-SECOND",
+            PaymentStatus: "SUCCESS",
+            TransactionTime: DateTimeOffset.UtcNow,
+            RawPayload: "{}"
+        );
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(new ProcessPayOsWebhookCommand("{}", "valid-sig"), CancellationToken.None);
+
+        Assert.True(result.Success);
+        // Ensure a second transaction is recorded and not silently dropped!
+        Assert.Equal(2, _txRepo.Transactions.Count); // firstTx + new secondTx
+        Assert.Single(_eventPublisher.PublishedEvents); // event published for the extra collection
+        var evt = Assert.IsType<SmartParking.PaymentService.Domain.Events.PaymentSucceededV1>(_eventPublisher.PublishedEvents[0]);
+        Assert.Equal("FT-SECOND-TX", evt.GatewayReference);
+    }
+
+    [Fact]
+    public async Task Handle_ReservationDepositOrder_PublishesPaymentSucceededV1WithReservationMetadata()
+    {
+        var orderId = Guid.NewGuid();
+        var reservationId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+
+        var order = new PaymentOrder
+        {
+            Id = orderId,
+            OrderCode = "777888",
+            Amount = 50000,
+            FinalAmount = 50000,
+            Status = PaymentOrderStatus.PENDING,
+            OrderType = OrderType.RESERVATION_FEE,
+            ReferenceType = ReferenceType.RESERVATION,
+            ReferenceId = reservationId,
+            AccountId = accountId,
+            TenantId = tenantId,
+            SiteId = siteId,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10)
+        };
+        _orderRepo.Orders.Add(order);
+
+        _gatewayPort.CallbackResult = new PaymentCallbackResult(
+            IsValidSignature: true,
+            OrderCode: 777888,
+            AmountVnd: 50000,
+            GatewayTransactionId: "FT-RESERVATION-TX",
+            BankReference: "REF-777888",
+            PaymentStatus: "SUCCESS",
+            TransactionTime: DateTimeOffset.UtcNow,
+            RawPayload: "{}"
+        );
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(new ProcessPayOsWebhookCommand("{}", "valid-sig"), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(PaymentOrderStatus.PAID, order.Status);
+        Assert.Single(_eventPublisher.PublishedEvents);
+
+        var evt = Assert.IsType<SmartParking.PaymentService.Domain.Events.PaymentSucceededV1>(_eventPublisher.PublishedEvents[0]);
+        Assert.Equal(orderId, evt.PaymentOrderId);
+        Assert.Equal("RESERVATION", evt.ReferenceType);
+        Assert.Equal(reservationId, evt.ReferenceId);
+        Assert.Equal(accountId, evt.AccountId);
+        Assert.Equal(50000m, evt.Amount);
+        Assert.Equal(50000m, evt.ParkingFee);
+        Assert.Equal("FT-RESERVATION-TX", evt.GatewayReference);
+    }
 }

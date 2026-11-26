@@ -22,7 +22,14 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
                 return (gate.StatusCode, gate.Code, gate.Message);
             },
             [typeof(GateTransitionException)] = error => (409, ((GateTransitionException)error).Code, error.Message),
-            [typeof(HoldConflictException)] = _ => (409, "STRUCTURE_BUSY", "Another request is managing this site.")
+            [typeof(HoldConflictException)] = _ => (409, "STRUCTURE_BUSY", "Another request is managing this site."),
+            [typeof(SmartParking.OperationService.Domain.Policies.PolicyOutOfBoundsException)] = error => (400, "POLICY_OUT_OF_BOUNDS", error.Message),
+            [typeof(SmartParking.OperationService.Domain.Policies.InvalidPolicyDurationException)] = error => (400, "INVALID_TIME_DURATION", error.Message),
+            [typeof(SmartParking.OperationService.Domain.Policies.CrossLotAccessException)] = error => (403, "CROSS_LOT_ACCESS_DENIED", error.Message),
+            [typeof(SmartParking.OperationService.Domain.Policies.LotPolicyNotFoundException)] = error => (404, ((SmartParking.OperationService.Domain.Policies.LotPolicyNotFoundException)error).Code, error.Message),
+            [typeof(SmartParking.OperationService.Domain.Policies.NoDraftToPublishException)] = error => (409, "NO_DRAFT_TO_PUBLISH", error.Message),
+            [typeof(SmartParking.OperationService.Domain.Policies.IdempotencyPayloadMismatchException)] = error => (409, "IDEMPOTENCY_PAYLOAD_MISMATCH", error.Message),
+            [typeof(SmartParking.OperationService.Domain.Policies.PolicyOperationInProgressException)] = error => (409, "OPERATION_IN_PROGRESS", error.Message)
         };
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
@@ -33,7 +40,21 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         object? errors = null;
         if (exception is ValidationException validation)
         {
-            result = (400, context.Request.Path.StartsWithSegments("/internal/structure") ? "INVALID_STRUCTURE" : "INVALID_REQUEST", "Request validation failed.");
+            var primaryError = validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_TIME_DURATION")
+                ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_ACTIVATION_SCHEDULE")
+                ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "POLICY_OUT_OF_BOUNDS")
+                ?? validation.Errors.FirstOrDefault();
+
+            var errorCode = primaryError?.ErrorCode;
+            var machineCode = errorCode switch
+            {
+                "POLICY_OUT_OF_BOUNDS" => "POLICY_OUT_OF_BOUNDS",
+                "INVALID_TIME_DURATION" => "INVALID_TIME_DURATION",
+                "INVALID_ACTIVATION_SCHEDULE" => "INVALID_ACTIVATION_SCHEDULE",
+                _ => context.Request.Path.StartsWithSegments("/internal/structure") ? "INVALID_STRUCTURE" : "INVALID_REQUEST"
+            };
+
+            result = (400, machineCode, primaryError?.ErrorMessage ?? "Request validation failed.");
             errors = validation.Errors.Select(e => new { property = e.PropertyName, message = e.ErrorMessage });
         }
         else if (exception is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn }

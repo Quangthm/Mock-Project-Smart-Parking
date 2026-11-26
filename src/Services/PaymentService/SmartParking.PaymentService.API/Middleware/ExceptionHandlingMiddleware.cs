@@ -57,30 +57,54 @@ public sealed class ExceptionHandlingMiddleware
                 }
                 break;
 
+            case KeyNotFoundException keyNotFoundEx:
+                statusCode = (int)HttpStatusCode.NotFound;
+                errorCode = "RESOURCE_NOT_FOUND";
+                message = keyNotFoundEx.Message;
+                break;
+
+            case UnauthorizedAccessException unauthEx:
+                statusCode = (int)HttpStatusCode.Unauthorized;
+                errorCode = "UNAUTHORIZED";
+                message = unauthEx.Message;
+                break;
+
             case PaymentDomainException paymentEx:
                 statusCode = paymentEx.Code switch
                 {
                     PaymentDomainException.InvoiceNotFound or
                     PaymentDomainException.OrderNotFound or
                     PaymentDomainException.TariffNotFound or
-                    "TRANSACTION_NOT_FOUND" => (int)HttpStatusCode.NotFound,
+                    "TRANSACTION_NOT_FOUND" or
+                    "QUOTE_NOT_FOUND" or
+                    "COLLECTION_NOT_FOUND" => (int)HttpStatusCode.NotFound,
 
                     PaymentDomainException.ForbiddenInvoiceAccess or
                     PaymentDomainException.OperatorSiteMismatch or
-                    PaymentDomainException.CrossTenantAccessDenied => (int)HttpStatusCode.Forbidden,
+                    PaymentDomainException.CrossTenantAccessDenied or
+                    "FORBIDDEN_ORDER_ACCESS" or
+                    "FORBIDDEN_RESERVATION_DEPOSIT_CREATION" => (int)HttpStatusCode.Forbidden,
 
                     PaymentDomainException.Unauthorized => (int)HttpStatusCode.Unauthorized,
 
                     PaymentDomainException.OrderAlreadyPaid or
                     PaymentDomainException.IdempotencyPayloadMismatch or
                     "IDEMPOTENCY_CONFLICT" or
-                    "PAYMENT_RETRY_LIMIT_EXCEEDED" => (int)HttpStatusCode.Conflict,
+                    "IDEMPOTENCY_PAYLOAD_MISMATCH" or
+                    "PAYMENT_RETRY_LIMIT_EXCEEDED" or
+                    "UNKNOWN_TRANSACTION_EXISTS" or
+                    "TERMS_STALE" or
+                    "QUOTE_EXPIRED" or
+                    "QUOTE_STATUS_INVALID" or
+                    "TRANSACTION_NOT_SETTLED" => (int)HttpStatusCode.Conflict,
 
                     PaymentDomainException.UnsettledPaymentOrder or
                     PaymentDomainException.OrderExpired => (int)HttpStatusCode.UnprocessableEntity,
 
                     PaymentDomainException.InvalidCutoffTime or
-                    "INVALID_WEBHOOK_SIGNATURE" => (int)HttpStatusCode.BadRequest,
+                    "INVALID_WEBHOOK_SIGNATURE" or
+                    "QUOTE_ACCOUNT_MISMATCH" or
+                    "QUOTE_AMOUNT_MISMATCH" => (int)HttpStatusCode.BadRequest,
 
                     "GATEWAY_TIMEOUT" => (int)HttpStatusCode.GatewayTimeout,
                     _ => (int)HttpStatusCode.BadRequest

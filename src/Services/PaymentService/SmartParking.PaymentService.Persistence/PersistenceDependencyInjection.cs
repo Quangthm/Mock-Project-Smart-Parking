@@ -54,10 +54,13 @@ public static class PersistenceDependencyInjection
         });
 
         services.AddScoped<IParkingTariffPort, TariffPersistenceAdapter>();
+        services.AddScoped<Application.IDiscoveryPriceSource, DiscoveryPriceSource>();
         services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
         services.AddScoped<IPaymentTransactionRepository, PaymentTransactionRepository>();
         services.AddScoped<IProviderWebhookRepository, ProviderWebhookRepository>();
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<IReservationQuoteRepository, ReservationQuoteRepository>();
+        services.AddScoped<IRefundRequestRepository, RefundRequestRepository>();
         services.AddScoped<IEventPublisher, OutboxEventPublisher>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 

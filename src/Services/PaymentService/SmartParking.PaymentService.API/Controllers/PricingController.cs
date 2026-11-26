@@ -2,7 +2,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.PaymentService.Application.DTOs;
+using SmartParking.PaymentService.Application.DTOs.Reservations;
 using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
+using SmartParking.PaymentService.Application.Usecase.Reservations.Commands.CreateReservationQuote;
+using SmartParking.PaymentService.Application.Usecase.Reservations.Queries.PreviewReservationPrice;
 
 namespace SmartParking.PaymentService.API.Controllers;
 
@@ -16,6 +19,42 @@ public sealed class PricingController : ControllerBase
     public PricingController(IMediator mediator)
     {
         _mediator = mediator;
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reservations/preview")]
+    [ProducesResponseType(typeof(ReservationPricePreviewResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PreviewReservationPrice(
+        [FromBody] ReservationPricePreviewRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var query = new PreviewReservationPriceQuery(request);
+        var result = await _mediator.Send(query, cancellationToken);
+        return Ok(new
+        {
+            success = true,
+            data = result
+        });
+    }
+
+    [HttpPost("reservations/quote")]
+    [ProducesResponseType(typeof(CommercialTermsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CreateReservationQuote(
+        [FromBody] CreateReservationQuoteRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var command = new CreateReservationQuoteCommand(request);
+        var result = await _mediator.Send(command, cancellationToken);
+        return Ok(new
+        {
+            success = true,
+            data = result
+        });
     }
 
     [HttpPost("calculate")]

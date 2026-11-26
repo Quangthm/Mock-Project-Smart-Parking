@@ -20,6 +20,7 @@
 - User explicitly selected implementation of the attached reservation first slice after the branch/session mismatch was surfaced.
 - Inspected Operations host, entities/mapping, repository/UoW interfaces, gate handlers, structure store, UserService outbox precedent and authorization retry policy.
 - Existing Operations has no Driver JWT authentication or reservation admission Saga. Legacy gate handlers call a workflow-owning store. The structure store relies on database triggers for its site guard.
+- Removed the separate commercial quote-acceptance round trip from the reservation preparation path; accepted terms are retained in the durable booking snapshot and the real Payment order is provisioned only after the hold is committed. This keeps the workflow aligned with the approved short creation flow and event-driven confirmation design.
 
 ## 4. Technical Decisions
 - User's current schema/architecture instructions supersede the handoff's proposed overlays, trigger retention and additive-upgrade mechanism. No new database trigger/function or noncircular ALTER is authorized.
@@ -209,6 +210,42 @@ Local setup follow-up: documented a Windows PowerShell OpenSSL fallback and manu
 
 **Next steps:** owners agree OpenAPI/event DTOs, compensation/coverage handshake and topology; implement under the shared coding skill, verify test cases in the updated SPARK-273 deployment checklist, and only then consider replacing the Facility confirmation dependency with the fast path. This session appendix does not erase earlier working history.
 
+## Continuation checkpoint — 11 November 2026 (implementation)
+
+The earlier four-file change was preparatory only: it removed the standalone quote-acceptance call but did not make creation short, provision orders independently, add verified-event confirmation, or provide the required Postman deliverables. This continuation adds the Operations-side workflow stages that can be implemented without inventing Payment's missing wire contracts.
+
+### Implemented in source
+
+- `ReservationRequest.AttachBooking` now terminates the receipt as `HOLD_CREATED`; admission responses expose `contractVersion: 2`. The same guarded Operations UoW commits the `PENDING_PAYMENT` reservation, accepted review, dependency completion and hold fact. `ReservationRow.Status` remains `PENDING_PAYMENT`. `ProgressReservationHandler` no longer looks up collections or confirms paid reservations.
+- `ReservationRow` persists order provisioning, zero-price acceptance, hold expiry and confirmation recovery state. A distinct background worker dispatches order, expiry and guarded zero-price handlers. Stable operation identity is the original reservation request ID. The worker persists exact accepted terms and H; `EnsureOrderAsync` runs only after its intent transaction commits. Unknown outcomes retry the same operation; created order IDs and closed-no-order outcomes are persisted. Terms are not silently repriced.
+- Known no-effect `PENDING` order/zero-price acceptance work is closed when its accepted terms or H expire; an `UNKNOWN` outcome is not misrepresented as absence and remains available for same-ID owner recovery.
+- Genuine zero-price terms use a separate owner acceptance operation and no synthetic order. Confirmation still requires owner acceptance and the existing Facility confirmation dependency, availability/plate guards, and the strict database evaluation timestamp before reservation start. Paid confirmation remains unavailable without a verified collection consumer.
+- The Operations commercial adapter still returns `OWNER_UNAVAILABLE` for preview, review and order/zero-price acceptance. This is deliberately fail-closed; there is no fabricated quote/order or successful Payment result.
+- Created the SPARK-273 Postman Collection v2.1, blank local environment, and manual guide. The collection covers actual Operations routes, stable create replay, exact hold deadline/order state, conditional real Payment checkout/status, overlapping-capacity conflict and expiry checks. It does not invent an event or API endpoint.
+- Updated the API design, deployment checklist and testing index. Existing schema SQL is the original owning Operations schema script; no database was changed. A reviewed migration/reconciliation is still required for already-created databases.
+
+### Remaining requirements and blockers
+
+- Payment's authenticated reservation `EnsureOrder`/zero-price producer contracts and implementation are unavailable. The adapter therefore blocks live preview/review and prevents end-to-end order provisioning.
+- The November 11 decision leaves the versioned verified-collection event schema, identity, topology and trust contract for cross-owner agreement. No paid reservation consumer, durable collection inbox/deduplication, paid confirmation command, late-money recovery or targeted reconciliation dispatcher has been added. Do not repurpose legacy `PaymentSucceededV1` (gate settlement) as collection evidence. `CollectionsAsync` remains a port for future targeted recovery and is not polled in normal creation.
+- Preserve Facility confirmation and fresh capacity/plate/site checks. Writer-safety evidence for aggregate-only confirmation has not been produced; optimization remains pending. Paid expired-hold reacquisition/reconciliation depends on the event/recovery contract.
+- `OWNER_UNAVAILABLE` means the current Postman run is blocked at preview/review; it is not evidence that the later flows passed. No PostgreSQL, RabbitMQ, provider or browser acceptance was run.
+
+### Files created for this continuation
+
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationOrderProvisioning.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Application/Reservations/ReservationConfirmationHandlers.cs`
+- `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationOrderProvisioningWorker.cs`
+- `tests/Services/SmartParking.FacilityService.Tests/ReservationCreationLifecycleTests.cs`
+- `docs/04-testing/postman/SPARK-273-Reservation-Flow.postman_collection.json`
+- `docs/04-testing/postman/SPARK-273-Local.postman_environment.example.json`
+- `docs/04-testing/postman/SPARK-273-manual-test-guide.md`
+
+### Validation
+
+- **PASSED:** focused `ReservationCreationLifecycleTests` plus `ReservationEvaluationCheckpointTests` (9 tests total); Operations API project build; Postman collection and environment JSON parsing; `git diff --check`.
+- **NOT RUN:** PostgreSQL/RabbitMQ integration, provider checkout/webhook, cross-service contract tests, collection confirmation/reconciliation, and Postman live run. The current fail-closed adapter blocks the last group.
+
 ## Develop merge checkpoint — 11 November 2026
 
 - Resolved the six conflict files in the working tree against develop at `0cc18fa6`. Preserved the SPARK-273 MediatR/repository/UoW architecture and removed the incoming legacy gate stores. Consolidated the checkout consumer into the existing Operations bus registration.
@@ -216,3 +253,65 @@ Local setup follow-up: documented a Windows PowerShell OpenSSL fallback and manu
 - User deferred Facility claim-scoped release. A retry after a lost Facility release response can release a newer occupant. The Facility claim and release contract and schema were left unchanged. Existing Operations databases need a reviewed schema transition for the scan and checkout columns.
 - Solution build succeeded with `dotnet build SmartParking.slnx --nologo -m:1 --no-restore -v:q`. Frontend regression suite passed. Backend tests remain [UNVERIFIED] because VSTest could not connect to its local test host, and the focused out-of-sandbox run was declined. No live database, broker, or provider validation ran.
 - The sandbox blocked writing the Git index and staging approval was declined. Git still lists six unmerged paths. Next step is to review and stage the working-tree resolution and its supporting changes, then complete the merge. No commit or push was made.
+
+## SPARK-273 reservation-slice finalization checkpoint — 12 November 2026
+
+### Source review and current integration state
+
+- Reviewed current local versions of `BookingProgressHandler`, `ReservationOrderProvisioning`, `ReservationConfirmationHandlers`, `BookingContracts`, `ReservationBooking`, `ReservationMessaging`, `ReservationOwners`, `ReservationLifecycleEvents` and `ReservationBookingRepository`, plus the application/infrastructure/persistence registrations and the existing architecture/API/Payment handoffs.
+- Confirmed the source path preserves committed `PENDING_PAYMENT` hold → terminal `HOLD_CREATED` receipt → same-context outbox hold fact → hold consumer dispatch to positive-price order provisioning or zero-price acceptance. The order request is made outside the guarded Operations transaction and records Payment's returned `OrderId`; it does not manufacture an order.
+- Confirmed `ReservationDepositCollectedV1` is consumed by the existing MassTransit registration and dispatched to guarded binding validation/confirmation. The pre-T evaluation, Facility dependency, plate/capacity guards and committed-only `CONFIRMED` behavior remain. Payment's generic `PaymentSucceededV1` consumer remains the separate Gate-settlement path.
+- Operations owns the local `IReservationCommercialOwner` port, but the registered `UnavailableReservationCommercialOwner` still blocks preview, quote, order, zero-price acceptance, collection lookup and reconciliation. The local Payment event consumer has booking-state/`CollectionId` idempotency but no EF Inbox middleware; reliable Payment-side outcome delivery remains blocked. Facility/vehicle adapters and the Operations MassTransit Bus Outbox are real source registrations; deployment readiness is not established.
+- Reviewed/updated the existing API design, 11 November implementation-alignment handoff, Payment producer handoff and deployment checklist. Added the four-item **Deferred Implementation Backlog — Post Reservation/Payment Integration**. No architecture decision, Payment implementation, Jira item, scheduler, worker, schema, or test artifact was added.
+- The pre-existing worktree edit to `ReservationMessaging.cs` (hold consumer/endpoint registration) and other unrelated dirty files were preserved and not staged or committed. `ReservationOrderProvisioningWorker.cs` remains unchanged.
+
+### Validation and status
+
+- **PASS:** `dotnet build SmartParking.slnx --nologo -m:1 --no-restore` — build succeeded, 0 errors, 4 warnings, all pre-existing NuGet advisories: NU1902 MessagePack 2.5.302 and NU1903 SignalR StackExchangeRedis 10.0.12. No dependency or unrelated source changes were made.
+- **PASS:** `git diff --check` — no whitespace errors; Git reported the existing LF-to-CRLF working-copy warning for the alignment handoff.
+- Unit, integration, smoke, Postman, Docker and manual verification: **NOT RUN — USER VERIFICATION REQUIRED**, per user instruction.
+- PaymentService/Facility live integration and end-to-end reservation/payment flow: **blocked/unverified**; do not claim readiness until the Payment team implementation and cross-owner contracts are reviewed.
+
+### Git checkpoint
+
+- Branch: `feature/SPARK-273-driver-book-parking-ahead-of-arrival`; HEAD at start: `532b09eaf89a2bfa43b00492a16e79cde5160e02`.
+- The existing worktree contained unrelated instructions/session/test changes and an uncommitted `ReservationMessaging.cs` hold-consumer change. They remain unstaged and untouched by this documentation slice. No stage, commit, push, merge, Jira or deployment operation was performed.
+
+### Next actionable step
+
+- User reviews the source-level integration handoff and backlog. When the PaymentService implementation is available (including the user's review of PR #98 / SPARK-391), agree the exact producer DTO, topology/authentication, immutable binding, and durable outcome behavior before wiring a real adapter. Scheduler, worker removal and additional recovery remain deferred.
+
+## PaymentService integration checkpoint — 12 November 2026
+
+This checkpoint supersedes the preceding statement that the registered commercial adapter is entirely unavailable. The Operations→Payment adapter is now real for preview, quote and post-hold order provisioning. Zero-price acceptance and reconciliation remain deliberately fail-closed, and the current paid-confirmation path consumes the existing generic `PaymentSucceededV1` rather than the separately proposed `ReservationDepositCollectedV1`. No live cross-service, database, broker, provider or browser verification was run.
+
+### Implemented source changes
+
+- Replaced `UnavailableReservationCommercialOwner` with `ReservationCommercialClient` as the registered `IReservationCommercialOwner`. It calls Payment's `POST /api/v1/pricing/reservations/preview`, `POST /api/v1/pricing/reservations/quote` and `PUT /internal/reservation-deposit-orders/{operationId}`; it validates the success/data envelope, Payment `errorCode` responses, echoed order request fields and the returned authoritative order ID.
+- `AcceptZeroPriceAsync` remains `503 OWNER_UNAVAILABLE` because Payment has no zero-price acceptance endpoint. `ReconcileAsync` remains `503 OWNER_UNAVAILABLE` under the no-refund-infrastructure scope. `CollectionsAsync` maps Payment's lookup, but fails `OWNER_CONTRACT_INVALID` when Payment omits the quote/terms binding (`QuoteId` empty or terms version blank), which the current `PaymentOrder` does not persist.
+- `IReservationCommercialOwner.QuoteAsync` now takes the authenticated tenant ID; `ReviewReservationTermsHandler` supplies the persisted reservation tenant so the quote is issued for the correct tenant. The client also forwards the incoming bearer plus actor Account/tenant/site headers and the configured `Services:Key` as `X-Internal-Service-Key`.
+- Added `ReservationPaymentEvidence`, `RecordReservationPaymentCommand` and `RecordReservationPaymentHandler`. The handler resolves the locked reservation, validates Payment order/transaction identity, amount, currency and accepted order/quote terms against persisted state, then dispatches `RecordReservationDepositCollectedCommand` for the existing guarded confirmation path.
+- Added a dedicated `ReservationPaymentSucceededConsumer` registered only when reservation admission is enabled. It consumes the existing `PaymentSucceededV1` from queue `smartpark-operation-reservation-payment-succeeded-v1` and filters `ReferenceType=RESERVATION`; the existing Gate consumer now filters `PARKING_SESSION`. `ReservationDepositCollectedV1` and its consumer registration remain present but are not the active reservation-confirmation path.
+- Confirmed the local `PaymentSucceededV1` URN with MassTransit 8.5.7: `MessageUrnAttribute` prepends `urn:message:`, so `[MessageUrn("SmartParking.PaymentService.Domain.Events:PaymentSucceededV1")]` matches Payment's default message identity. Payment publishes this event for reservation webhook settlement and for the demo/cash confirmation path.
+- Payment compatibility fixes only: reservation preview/quote now fall back to `Guid.Empty` when tenant is absent instead of rejecting the request; `EnsureReservationDepositOrder` idempotency comparison now includes tenant/site/reference type/order type/expiry/final amount; quote binding validates tenant, site, currency and terms version. Existing Payment handler tests were checked for payload compatibility; they were not executed.
+
+### Deliberate deviation and open contract review
+
+- The 11 November decision says not to repurpose `PaymentSucceededV1` as collection evidence and proposes `ReservationDepositCollectedV1` with accepted quote/terms binding. The implementation uses `PaymentSucceededV1` because it is the producer actually available and because Operations already has the immutable accepted quote/order snapshot persisted. The event itself still lacks `QuoteId`, Operations terms ID/version and collection ID; those are derived/validated against the persisted reservation/order after delivery.
+- This is an implementation integration choice, **not** an amendment to the approved event contract. The decision log now records the deviation and required owner review. A future dedicated event may close the schema gap without changing the guarded confirmation semantics.
+- `PaymentSucceededV1` delivery has no Payment-side EF Inbox and the Operations endpoint has no general event-ID inbox; business idempotency still relies on Payment order/transaction identity plus locked reservation state. Reliable confirmation/decline outcome delivery, late/additional-collection reconciliation and production machine authentication remain open.
+- Production Operations→Payment authentication is unresolved: the `X-Internal-Service-Key` shortcut is honored only by Payment's Development authentication handler. A production machine JWT/key contract is still required.
+
+### Validation and repository state
+
+- **PASS:** `dotnet build SmartParking.slnx --nologo -m:1 --no-restore` — 0 errors, 6 warnings: `NU1902` ×2, `NU1903` ×2 and `CS9107` ×2.
+- **PASS:** `git diff --check` — no whitespace errors.
+- Unit/integration/manual/Postman/PostgreSQL/RabbitMQ/payOS/Facility verification: **NOT RUN — USER VERIFICATION REQUIRED**.
+- Branch `feature/SPARK-273-driver-book-parking-ahead-of-arrival`; entry HEAD `063d9a7e94ff3b23662c4029f81a73f9f9e260d3`. Existing unrelated worktree changes remain unstaged and preserved. No stage, commit, push, merge, deployment or database/broker action was performed.
+
+### Documentation follow-up completed
+
+- Updated the 11 November alignment handoff, producer handoff, API design, deployment checklist, Postman manual guide/collection and decision log to distinguish the real preview/quote/order adapter from the fail-closed zero-price, collection-recovery and reconciliation paths.
+- Added current-status notes to the 10 November completion checklist and events/Facility handoff, and corrected the stale facility-dependency statement that the unavailable commercial adapter prevents live sales.
+- Final validation after documentation edits: **PASS** `git diff --check` (only the existing LF-to-CRLF working-copy warnings); Postman collection and environment JSON parse successfully.
+- Tests/live integration remain **NOT RUN — USER VERIFICATION REQUIRED**. Open blockers are production Operations→Payment authentication, quote-bound collection lookup, zero-price acceptance, reconciliation, and architecture-owner review of the generic `PaymentSucceededV1` deviation.

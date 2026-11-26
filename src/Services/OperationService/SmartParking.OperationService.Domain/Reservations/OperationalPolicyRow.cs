@@ -29,5 +29,11 @@ public sealed class OperationalPolicyRow
     public int? DailyCancellationLimit { get; set; }
     public string? OverrideBounds { get; set; }
     public string? CancellationTimezone { get; set; }
+    public Guid? PublishedBy { get; set; }
+    public string? PublishNote { get; set; }
+    public int? DriverReallocationRequestLimit { get; set; }
+    public string? ParkingProductEnabled { get; set; }
+    public string? IdempotencyKey { get; set; }
+    public string? IdempotencyPayloadHash { get; set; }
 }
 

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 
 namespace SmartParking.PaymentService.Infrastructure.Adapters;
@@ -7,14 +8,17 @@ namespace SmartParking.PaymentService.Infrastructure.Adapters;
 public sealed class CurrentActorAdapter : ICurrentActor
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IHostEnvironment? _environment;
 
-    public CurrentActorAdapter(IHttpContextAccessor httpContextAccessor)
+    public CurrentActorAdapter(IHttpContextAccessor httpContextAccessor, IHostEnvironment? environment = null)
     {
         _httpContextAccessor = httpContextAccessor;
+        _environment = environment;
     }
 
     private HttpContext? Context => _httpContextAccessor.HttpContext;
     private ClaimsPrincipal? User => Context?.User;
+    private bool AllowDevHeaderFallback => _environment == null || _environment.IsDevelopment();
 
     public bool IsAuthenticated => User?.Identity?.IsAuthenticated == true || IsInternalService;
 
@@ -24,7 +28,8 @@ public sealed class CurrentActorAdapter : ICurrentActor
         {
             if (Context == null) return false;
 
-            if (Context.Request.Headers.TryGetValue("X-Internal-Service-Key", out var key) && !string.IsNullOrWhiteSpace(key))
+            if (AllowDevHeaderFallback &&
+                Context.Request.Headers.TryGetValue("X-Internal-Service-Key", out var key) && !string.IsNullOrWhiteSpace(key))
             {
                 return true;
             }
@@ -43,25 +48,37 @@ public sealed class CurrentActorAdapter : ICurrentActor
     {
         get
         {
-            if (Context?.Request.Headers.TryGetValue("X-Actor-UserId", out var customUserId) == true &&
-                Guid.TryParse(customUserId, out var parsedCustomId))
+            if (AllowDevHeaderFallback)
             {
-                return parsedCustomId;
+                if (Context?.Request.Headers.TryGetValue("X-Actor-UserId", out var customUserId) == true &&
+                    Guid.TryParse(customUserId, out var parsedCustomId))
+                {
+                    return parsedCustomId;
+                }
+
+                if (Context?.Request.Headers.TryGetValue("X-Actor-AccountId", out var customAccountId) == true &&
+                    Guid.TryParse(customAccountId, out var parsedCustomAccountId))
+                {
+                    return parsedCustomAccountId;
+                }
             }
 
-            var sub = User?.FindFirstValue(ClaimTypes.NameIdentifier) ??
-                      User?.FindFirstValue("account_id") ??
+            var sub = User?.FindFirstValue("account_id") ??
+                      User?.FindFirstValue(ClaimTypes.NameIdentifier) ??
                       User?.FindFirstValue("sub");
 
             return Guid.TryParse(sub, out var parsed) ? parsed : null;
         }
     }
 
+    public Guid? AccountId => UserId;
+
     public string? Role
     {
         get
         {
-            if (Context?.Request.Headers.TryGetValue("X-Actor-Role", out var customRole) == true &&
+            if (AllowDevHeaderFallback &&
+                Context?.Request.Headers.TryGetValue("X-Actor-Role", out var customRole) == true &&
                 !string.IsNullOrWhiteSpace(customRole))
             {
                 return customRole.ToString().ToUpperInvariant();
@@ -78,7 +95,8 @@ public sealed class CurrentActorAdapter : ICurrentActor
     {
         get
         {
-            if (Context?.Request.Headers.TryGetValue("X-Actor-TenantId", out var customTenant) == true &&
+            if (AllowDevHeaderFallback &&
+                Context?.Request.Headers.TryGetValue("X-Actor-TenantId", out var customTenant) == true &&
                 Guid.TryParse(customTenant, out var parsedCustomTenant))
             {
                 return parsedCustomTenant;

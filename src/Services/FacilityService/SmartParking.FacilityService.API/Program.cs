@@ -19,6 +19,7 @@ public static class FacilityHost
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
+        builder.AddDiscoveryCatalogue();
         var key = builder.Configuration["Services:Key"];
         if (string.IsNullOrWhiteSpace(key) || key.Length < 32) throw new InvalidOperationException("Configure Services:Key (at least 32 characters).");
         builder.Services.AddDbContext<ParkingDbContext>(options =>
@@ -108,11 +109,19 @@ public static class FacilityHost
                 !context.Request.Path.StartsWithSegments("/internal/reservation-dependencies") && !CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
-            await next(context);
+            try { await next(context); }
+            catch (BadHttpRequestException e) when (DiscoveryCatalogueEndpoints.IsDiscoveryPath(context.Request.Path))
+            {
+                context.Response.StatusCode = e.StatusCode;
+                context.Response.Headers.CacheControl = "no-store";
+                await context.Response.WriteAsJsonAsync(new { success=false, code="VALIDATION_FAILED",
+                    message="Discovery request could not complete.", errors=Array.Empty<string>(), traceId=context.TraceIdentifier });
+            }
         });
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
+        app.MapDiscoveryCatalogue();
         return app;
     }
 }

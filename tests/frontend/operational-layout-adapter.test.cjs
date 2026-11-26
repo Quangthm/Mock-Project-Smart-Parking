@@ -283,6 +283,23 @@ const operatorApiReplacements = {
   'import.meta.env.VITE_PARKING_API_BASE_URL': 'undefined',
 };
 
+test('a layout event refreshes only its site and preserves the imported model and permissions', async () => {
+  const calls = [];
+  const operatorApi = load('lib/operatorApi.ts', {
+    ...operatorApiImports,
+    './parkingApi': {
+      operatorsApi: { assignments: async () => { throw new Error('must not reload assignments'); } },
+      parkingApi: { operationalLayout: async id => { calls.push(id); return fresh; } },
+    },
+  }, operatorApiReplacements);
+  const site = await operatorApi.refreshOperatorSite({
+    id: fresh.siteId, tenantId: 'tenant-1', modelUrl: 'blob:owner-imported-model', assignmentPermissions: ['SLOT_OVERRIDE'],
+  });
+  assert.deepEqual(calls, [fresh.siteId]);
+  assert.equal(site.modelUrl, 'blob:owner-imported-model');
+  assert.deepEqual(Array.from(site.assignmentPermissions), ['SLOT_OVERRIDE']);
+});
+
 test('operator sites map the authoritative projection and keep both axes on OCCUPIED + PROTECTED', async () => {
   const operatorApi = load('lib/operatorApi.ts', {
     ...operatorApiImports,

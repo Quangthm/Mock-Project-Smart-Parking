@@ -1,6 +1,6 @@
 import { request, AuthApiError } from "./authApi"
 
-const server = (import.meta.env.VITE_VEHICLE_LOCATION_API_BASE_URL ?? "http://localhost:5045").replace(/\/$/, "")
+const server = (import.meta.env.VITE_VEHICLE_LOCATION_API_BASE_URL ?? import.meta.env.VITE_RESERVATION_API_BASE_URL ?? "http://localhost:5055").replace(/\/$/, "")
 
 export type LocationPrecision = "SLOT" | "ZONE" | "UNKNOWN"
 export type AllocationStatus = "RESERVED" | "OCCUPIED"

@@ -15,6 +15,8 @@ public class PaymentOrder
     public OrderType OrderType { get; set; } = OrderType.PARKING_FEE;
     public ReferenceType ReferenceType { get; set; } = ReferenceType.PARKING_SESSION;
     public Guid ReferenceId { get; set; }
+    public Guid? QuoteId { get; set; }
+    public string? TermsVersion { get; set; }
 
     public decimal Amount { get; set; }
     public decimal DiscountAmount { get; set; }

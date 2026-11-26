@@ -30,7 +30,7 @@ public class TariffPersistenceAdapter : IParkingTariffPort
 
         var tariff = await _dbContext.Tariffs
             .AsNoTracking()
-            .Where(t => t.TenantId == tenantId &&
+            .Where(t => (tenantId == Guid.Empty || t.TenantId == tenantId) &&
                         t.SiteId == siteId &&
                         t.VehicleType == vehicleTypeStr &&
                         t.IsActive &&

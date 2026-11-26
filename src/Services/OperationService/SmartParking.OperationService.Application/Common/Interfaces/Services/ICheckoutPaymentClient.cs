@@ -25,7 +25,8 @@ public interface ICheckoutPaymentClient
         CancellationToken ct,
         decimal? developmentTestAmount = null);
 
-    Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, string returnUrl, string cancelUrl, CancellationToken ct);
+    Task<CheckoutPaymentCheckout> InitiateAsync(Guid orderId, string idempotencyKey, CancellationToken ct,
+        string? returnUrl = null, string? cancelUrl = null);
     Task<CheckoutPaymentStatus> ConfirmCashAsync(Guid orderId, string idempotencyKey, CancellationToken ct);
     Task<CheckoutPaymentStatus> DemoPayAsync(Guid orderId, CancellationToken ct);
     Task<CheckoutPaymentStatus> GetStatusAsync(Guid transactionId, CancellationToken ct);

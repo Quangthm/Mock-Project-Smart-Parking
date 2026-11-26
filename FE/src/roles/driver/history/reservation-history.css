@@ -1,0 +1,74 @@
+.reservation-history { min-width: 0; }
+.driver-history-list.reservation-history .parking-history-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 17rem; }
+.reservation-history .parking-history-card-top > div { display: grid; gap: 6px; min-width: 0; }
+.reservation-history .parking-history-card-top span { overflow-wrap: anywhere; }
+.reservation-history .parking-history-card dl { grid-template-columns: minmax(100px, .7fr) minmax(0, 1.5fr); gap: 18px; }
+.reservation-history .parking-history-card dl > div { min-width: 0; }
+.reservation-history .parking-history-card dd { overflow-wrap: anywhere; white-space: normal; }
+.reservation-history .btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
+.reservation-history-hint { margin: 0; color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.reservation-history-modal { max-width: 780px; }
+.reservation-history-detail { display: grid; gap: 24px; }
+.reservation-history .parking-history-card, .reservation-history-detail > header, .reservation-history-detail > section { animation: reservation-content-enter 240ms cubic-bezier(.23, 1, .32, 1) both; }
+.reservation-history .parking-history-card:nth-child(2), .reservation-history-detail > section:nth-child(2) { animation-delay: 25ms; }
+.reservation-history .parking-history-card:nth-child(3), .reservation-history-detail > section:nth-child(3) { animation-delay: 50ms; }
+.reservation-history .parking-history-card:nth-child(n+4), .reservation-history-detail > section:nth-child(n+4) { animation-delay: 75ms; }
+@keyframes reservation-content-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.reservation-history-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px; border-radius: 14px; background: var(--bg); }
+.reservation-history-detail-header p { margin: 0 0 5px; color: var(--muted); font-size: .8125rem; }
+.reservation-history-detail-header h3 { margin: 0 0 6px; font-size: 1.125rem; overflow-wrap: anywhere; }
+.reservation-history-detail-header > div > span { font-size: .875rem; color: var(--muted); }
+.reservation-history-detail section h3 { margin: 0 0 12px; font-size: 1rem; font-weight: 650; }
+.reservation-history-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; margin: 0; }
+.reservation-history-fields div { min-width: 0; }
+.reservation-history-fields dt { color: var(--muted); font-size: .8125rem; line-height: 1.5; }
+.reservation-history-fields dd { margin: 5px 0 0; font-size: .9375rem; line-height: 1.55; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.reservation-history-detail section + section { padding-top: 20px; border-top: 1px solid var(--border); }
+.reservation-history-detail section .reservation-history-hint { margin-top: 16px; }
+.reservation-history-loading { padding: 20px 0; color: var(--muted); }
+.reservation-history .parking-history-card-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.reservation-history .parking-history-card-actions .parking-history-details { width: auto; margin: 0; }
+.reservation-invoice-preview { display: block; width: 100%; height: 55dvh; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.reservation-history-scans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.reservation-history-scan { min-width: 0; margin: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.reservation-history-scan figcaption { padding: 12px 14px; font-size: .9375rem; font-weight: 600; border-bottom: 1px solid var(--border); }
+.reservation-history-scan img { display: block; width: 100%; height: auto; aspect-ratio: 8 / 5; object-fit: contain; background: var(--bg); }
+.reservation-history-scan { transition: border-color 180ms ease-out; }
+.reservation-history-scan img { animation: reservation-content-enter 220ms ease-out both; transition: transform 220ms cubic-bezier(.23, 1, .32, 1); }
+.reservation-history-scan a > span svg { transition: transform 180ms ease-out; }
+.reservation-history .btn-outline, .reservation-history .parking-history-pagination button { transition: transform 160ms ease-out, background-color 160ms ease-out; }
+.reservation-history .btn-outline:active, .reservation-history .parking-history-pagination button:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) {
+  .reservation-history-scan:has(a):hover { border-color: var(--muted); }
+  .reservation-history-scan a:hover img { transform: scale(1.015); }
+  .reservation-history-scan a:hover > span svg { transform: translateX(3px); }
+  .reservation-history .btn-outline:not(:disabled):hover { transform: translateY(-1px); }
+}
+.reservation-history-scan a { display: block; color: var(--fg); text-decoration: none; }
+.reservation-history-scan a > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; font-size: .875rem; }
+.reservation-history-scan a:focus-visible { outline: 2px solid var(--fg); outline-offset: -3px; }
+.reservation-history-scan p { display: grid; align-content: center; min-height: 150px; margin: 0; padding: 20px; background: var(--bg); color: var(--muted); font-size: .9375rem; line-height: 1.6; }
+.reservation-history-error { display: grid; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.reservation-history-error p { margin: 0; overflow-wrap: anywhere; }
+.reservation-history .parking-history-details { transition: background-color 160ms ease-out, border-color 160ms ease-out; }
+.reservation-history .parking-history-details svg { transition: transform 160ms ease-out; }
+.reservation-history .parking-history-details:hover svg { transform: translateX(2px); }
+.reservation-history .parking-history-details:active { transform: scale(.98); }
+@media (max-width: 1050px) {
+  .driver-history-list.reservation-history .parking-history-card { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .reservation-history .parking-history-card .parking-history-details { width: 100%; }
+}
+@media (max-width: 640px) {
+  .reservation-history-scans { grid-template-columns: minmax(0, 1fr); }
+  .reservation-history-fields { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .reservation-history-detail-header { flex-wrap: wrap; }
+  .reservation-history-fields dd, .reservation-history .parking-history-search input,
+  .reservation-history .parking-history-card dd, .reservation-history .parking-history-details { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reservation-history .parking-history-card, .reservation-history-detail > header, .reservation-history-detail > section, .reservation-history-scan img { animation: none; }
+  .reservation-history-scan, .reservation-history-scan img, .reservation-history-scan a > span svg, .reservation-history .btn-outline, .reservation-history .parking-history-pagination button { transition: none; }
+  .reservation-history-scan a:hover img, .reservation-history-scan a:hover > span svg, .reservation-history .btn-outline:not(:disabled):hover, .reservation-history .btn-outline:active, .reservation-history .parking-history-pagination button:active { transform: none; }
+  .reservation-history .parking-history-details, .reservation-history .parking-history-details svg { transition: none; transform: none; }
+  .reservation-history .parking-history-details:hover svg, .reservation-history .parking-history-details:active { transform: none; }
+}

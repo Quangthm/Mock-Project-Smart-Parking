@@ -45,16 +45,8 @@ public sealed class ReservationRequest
         if (State != "PREPARING" || VehicleBindingState != "ACTIVE" || reservationId == Guid.Empty)
             throw new InvalidOperationException("Booking requires the accepted workflow checks.");
         ReservationId = reservationId;
-        State = "BOOKING";
+        State = "HOLD_CREATED";
         Code = null;
-    }
-
-    public void FinishBooking(string state, string? code)
-    {
-        if (State != "BOOKING" || state is not ("COMPLETED" or "EXPIRED"))
-            throw new InvalidOperationException("A booking can finish only with an explicit terminal outcome.");
-        State = state;
-        Code = code;
     }
 
     public void Defer(DateTimeOffset nextActionAt, string code)
