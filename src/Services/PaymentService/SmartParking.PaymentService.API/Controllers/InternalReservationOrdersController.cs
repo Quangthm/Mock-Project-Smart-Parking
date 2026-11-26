@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartParking.PaymentService.API.Authentication;
+using SmartParking.PaymentService.API.Common;
 using SmartParking.PaymentService.Application.DTOs.Reservations;
 using SmartParking.PaymentService.Application.Usecase.Reservations.Commands.EnsureReservationDepositOrder;
 using SmartParking.PaymentService.Application.Usecase.Reservations.Commands.ReconcileReservation;
@@ -34,12 +35,10 @@ public sealed class InternalReservationOrdersController : ControllerBase
     {
         if (operationId != request.OperationId)
         {
-            return BadRequest(new
-            {
-                success = false,
-                errorCode = "OPERATION_ID_MISMATCH",
-                message = "Path operationId does not match request body."
-            });
+            return new PaymentApiErrorActionResult(PaymentErrorResponse.Error(
+                StatusCodes.Status400BadRequest,
+                "OPERATION_ID_MISMATCH",
+                "Path operationId does not match request body."));
         }
 
         var command = new EnsureReservationDepositOrderCommand(request);

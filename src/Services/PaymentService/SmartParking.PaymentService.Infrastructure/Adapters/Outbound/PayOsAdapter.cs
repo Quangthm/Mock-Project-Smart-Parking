@@ -63,10 +63,9 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-api-key", _options.ApiKey);
 
             using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
-            var root = await JsonDocument.ParseAsync(
+            using var root = await JsonDocument.ParseAsync(
                 await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var code = root.RootElement.TryGetProperty("code", out var codeElement) ? codeElement.GetString() : null;
-            var desc = root.RootElement.TryGetProperty("desc", out var descElement) ? descElement.GetString() : null;
             var status = root.RootElement.TryGetProperty("data", out var data) &&
                          data.TryGetProperty("status", out var statusElement)
                 ? statusElement.GetString() ?? "UNKNOWN"
@@ -74,10 +73,17 @@ public class PayOsAdapter : IPaymentGatewayPort
 
             if (!response.IsSuccessStatusCode || code != "00")
             {
-                _logger.LogWarning("PayOS cancellation failed for OrderCode {OrderCode}: {StatusCode} {Description}",
-                    orderCode, response.StatusCode, desc);
-                return new PaymentCancellationResult(false, status, gatewayTransactionId,
-                    $"PAYOS_{code ?? ((int)response.StatusCode).ToString(System.Globalization.CultureInfo.InvariantCulture)}", desc);
+                _logger.LogWarning(
+                    "PayOS cancellation failed for OrderCode {OrderCode}: HTTP {StatusCode}, provider code {ProviderCode}.",
+                    orderCode,
+                    (int)response.StatusCode,
+                    code);
+                return new PaymentCancellationResult(
+                    false,
+                    status,
+                    gatewayTransactionId,
+                    $"PAYOS_{code ?? ((int)response.StatusCode).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                    "PayOS rejected the cancellation request.");
             }
 
             return new PaymentCancellationResult(
@@ -85,12 +91,20 @@ public class PayOsAdapter : IPaymentGatewayPort
                 status,
                 gatewayTransactionId,
                 status is "CANCELLED" or "PAID" ? null : "PAYOS_CANCELLATION_UNCONFIRMED",
-                status is "CANCELLED" or "PAID" ? null : desc);
+                status is "CANCELLED" or "PAID" ? null : "PayOS did not confirm cancellation.");
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Error cancelling PayOS checkout for OrderCode {OrderCode}", orderCode);
-            return new PaymentCancellationResult(false, "UNKNOWN", gatewayTransactionId, "PAYOS_CANCELLATION_UNKNOWN", ex.Message);
+            _logger.LogError(
+                "Error cancelling PayOS checkout for OrderCode {OrderCode}: {ExceptionType}.",
+                orderCode,
+                ex.GetType().FullName);
+            return new PaymentCancellationResult(
+                false,
+                "UNKNOWN",
+                gatewayTransactionId,
+                "PAYOS_CANCELLATION_UNKNOWN",
+                "Unable to confirm PayOS checkout cancellation.");
         }
     }
 
@@ -151,11 +165,13 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-client-id", _options.ClientId);
             httpRequest.Headers.Add("x-api-key", _options.ApiKey);
 
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("PayOS initiate failed with HTTP {StatusCode}: {ErrorBody}", response.StatusCode, errorBody);
+                _logger.LogWarning(
+                    "PayOS initiate failed for OrderCode {OrderCode} with HTTP {StatusCode}.",
+                    request.OrderCode,
+                    (int)response.StatusCode);
 
                 return new PaymentInitiateResult(
                     IsSuccess: false,
@@ -165,19 +181,22 @@ public class PayOsAdapter : IPaymentGatewayPort
                     AccountName: null,
                     Bin: null,
                     GatewayTransactionId: null,
-                    ErrorCode: $"PAYOS_{response.StatusCode}",
-                    ErrorMessage: errorBody
+                    ErrorCode: $"PAYOS_{(int)response.StatusCode}",
+                    ErrorMessage: "The payment gateway rejected the checkout request."
                 );
             }
 
-            var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var root = doc.RootElement;
             var code = root.TryGetProperty("code", out var codeProp) ? codeProp.GetString() : "";
-            var desc = root.TryGetProperty("desc", out var descProp) ? descProp.GetString() : "PayOS error";
 
             if (code != "00" || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             {
-                _logger.LogWarning("PayOS initiate returned non-zero code {Code}: {Desc}", code, desc);
+                var safeCode = string.IsNullOrWhiteSpace(code) ? "ERROR" : code;
+                _logger.LogWarning(
+                    "PayOS initiate returned non-zero code {Code} for OrderCode {OrderCode}.",
+                    safeCode,
+                    request.OrderCode);
                 return new PaymentInitiateResult(
                     IsSuccess: false,
                     CheckoutUrl: null,
@@ -186,8 +205,8 @@ public class PayOsAdapter : IPaymentGatewayPort
                     AccountName: null,
                     Bin: null,
                     GatewayTransactionId: null,
-                    ErrorCode: $"PAYOS_{code}",
-                    ErrorMessage: desc
+                    ErrorCode: $"PAYOS_{safeCode}",
+                    ErrorMessage: "The payment gateway could not create a checkout link."
                 );
             }
 
@@ -203,9 +222,12 @@ public class PayOsAdapter : IPaymentGatewayPort
                 ErrorMessage: null
             );
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            _logger.LogError(ex, "Network timeout or connection failure when calling PayOS.");
+            _logger.LogError(
+                "Network failure or timeout calling PayOS for OrderCode {OrderCode}: {ExceptionType}.",
+                request.OrderCode,
+                ex.GetType().FullName);
             return new PaymentInitiateResult(
                 IsSuccess: false,
                 CheckoutUrl: null,
@@ -215,7 +237,25 @@ public class PayOsAdapter : IPaymentGatewayPort
                 Bin: null,
                 GatewayTransactionId: null,
                 ErrorCode: "GATEWAY_TIMEOUT",
-                ErrorMessage: ex.Message
+                ErrorMessage: "The payment gateway timed out."
+            );
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(
+                "Invalid JSON response from PayOS for OrderCode {OrderCode}: {ExceptionType}.",
+                request.OrderCode,
+                ex.GetType().FullName);
+            return new PaymentInitiateResult(
+                IsSuccess: false,
+                CheckoutUrl: null,
+                QrCode: null,
+                AccountNumber: null,
+                AccountName: null,
+                Bin: null,
+                GatewayTransactionId: null,
+                ErrorCode: "PAYOS_INVALID_RESPONSE",
+                ErrorMessage: "The payment gateway returned an unexpected response."
             );
         }
     }
@@ -288,7 +328,9 @@ public class PayOsAdapter : IPaymentGatewayPort
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to parse webhook JSON payload.");
+            _logger.LogError(
+                "Failed to parse webhook JSON payload: {ExceptionType}.",
+                ex.GetType().FullName);
             return Task.FromResult(new PaymentCallbackResult(
                 IsValidSignature: false,
                 OrderCode: 0,
@@ -329,7 +371,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-client-id", _options.ClientId);
             httpRequest.Headers.Add("x-api-key", _options.ApiKey);
 
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return new PaymentVerificationResult(
@@ -341,7 +383,7 @@ public class PayOsAdapter : IPaymentGatewayPort
                 );
             }
 
-            var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var root = doc.RootElement;
             var data = root.GetProperty("data");
 
@@ -364,9 +406,13 @@ public class PayOsAdapter : IPaymentGatewayPort
                 PaidAt: normalizedStatus == "SUCCESS" ? DateTimeOffset.UtcNow : null
             );
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException ||
+                                      (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            _logger.LogError(ex, "Error querying PayOS for OrderCode {OrderCode}", orderCode);
+            _logger.LogError(
+                "Error querying PayOS for OrderCode {OrderCode}: {ExceptionType}.",
+                orderCode,
+                ex.GetType().FullName);
             return new PaymentVerificationResult(
                 IsFound: false,
                 PaymentStatus: "UNKNOWN",

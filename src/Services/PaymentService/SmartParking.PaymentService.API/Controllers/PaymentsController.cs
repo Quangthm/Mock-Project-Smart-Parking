@@ -2,6 +2,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.PaymentService.API.Common;
 using SmartParking.PaymentService.Application.DTOs.Invoices;
 using SmartParking.PaymentService.Application.DTOs.Payments;
 using SmartParking.PaymentService.Application.Usecase.CollectCashPayment;
@@ -79,7 +80,10 @@ public class PaymentsController : ControllerBase
         if (request.DevelopmentTestAmount.HasValue && !_environment.IsDevelopment())
             return NotFound();
         if (request.DevelopmentTestAmount.HasValue && request.DevelopmentTestAmount.Value != 2000m)
-            return BadRequest(new { success = false, errorCode = "INVALID_TEST_AMOUNT", message = "The development PayOS test amount is fixed at 2,000 VND." });
+            return new PaymentApiErrorActionResult(PaymentErrorResponse.Error(
+                StatusCodes.Status400BadRequest,
+                "INVALID_TEST_AMOUNT",
+                "The development PayOS test amount is fixed at 2,000 VND."));
 
         var command = new PrepareParkingFeeOrderCommand(
             TenantId: request.TenantId,
@@ -220,12 +224,10 @@ public class PaymentsController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new
-            {
-                success = false,
-                errorCode = "INVALID_JSON_PAYLOAD",
-                message = "The webhook payload is not valid JSON."
-            });
+            return new PaymentApiErrorActionResult(PaymentErrorResponse.Error(
+                StatusCodes.Status400BadRequest,
+                "INVALID_JSON_PAYLOAD",
+                "The webhook payload is not valid JSON."));
         }
 
         var command = new ProcessPayOsWebhookCommand(rawBody, signature);
@@ -233,12 +235,10 @@ public class PaymentsController : ControllerBase
 
         if (!result.Success)
         {
-            return BadRequest(new
-            {
-                success = false,
-                errorCode = result.ErrorCode ?? "WEBHOOK_PROCESSING_FAILED",
-                message = result.Message
-            });
+            return new PaymentApiErrorActionResult(PaymentErrorResponse.Error(
+                StatusCodes.Status400BadRequest,
+                result.ErrorCode ?? "WEBHOOK_PROCESSING_FAILED",
+                result.Message));
         }
 
         return Ok(new
