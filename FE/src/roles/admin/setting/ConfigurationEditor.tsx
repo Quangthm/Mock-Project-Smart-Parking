@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { assistantAdminApi as api, type AiConfiguration, type AiProvider, type AiSettings, type ModelPage } from "../../../lib/assistantAdminApi"
 
 export type Editor = { mode: "add"; provider: AiProvider["id"] } | { mode: "edit" | "rotate"; row: AiConfiguration }
@@ -73,7 +74,7 @@ export function ConfigurationEditor({ editor, settings, busy, error, close, save
       else void save({ action: "add-configuration", provider, label, model, secret, enabled: false, priority: active.length + 1 })
     }}>
       <h3 id="config-title">{rotating ? "Replace key" : row ? "Edit configuration" : "Add configuration"}</h3>
-      {error && <p role="alert">{error}</p>}
+      {error && <div key={error} className="assistant-error-notice" role="alert"><UntitledIcon name="alert" size={20} /><p>{error}</p></div>}
       <fieldset className="assistant-settings-fields" disabled={busy}>
         {row ? <p>{provider === "gemini" ? "Gemini" : "OpenAI"} · {row.label}</p> :
           <label>Provider<select className="input" value={provider} onChange={e => {

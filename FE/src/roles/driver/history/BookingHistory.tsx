@@ -9,6 +9,7 @@ import { Modal } from "../../../components/ui/Modal"
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
 import { useReservationHistory, type HistorySite } from "./useReservationHistory"
+import { ReservationInvoice } from "./ReservationInvoice"
 import "../../../booking-support.css"
 import "./reservation-history.css"
 
@@ -44,6 +45,7 @@ export function BookingHistory() {
   const { user } = useApp()
   const scope = user?.role === "driver" ? `${user.id}:${getSessionGeneration()}` : ""
   const history = useReservationHistory(scope)
+  const reservationsById = new Map(history.items.map(item => [item.reservationId, item]))
   const records: ParkingHistoryRecord[] = history.items.map(item => ({
     id: item.reservationId, plate: item.licensePlate || "", title: siteName(item, history.sites[item.siteId]),
     subtitle: item.siteAddress || undefined, slot: slotName(item.allocatedSlotId, history.sites[item.siteId]),
@@ -63,6 +65,13 @@ export function BookingHistory() {
     <ParkingHistory title="Reservation history" scope="Your account only" scopeKey={`${scope}:${history.pageNumber}`}
       records={records} dateLabel="Booked for" emptyMessage="Your reservations will appear here after you make a booking."
       loading={history.loading} error={history.error} onRetry={history.refresh} onViewDetails={history.openDetails}
+      renderCardAction={id => {
+        const reservation = reservationsById.get(id)
+        if (!reservation) return null
+        const hasBillableBooking = reservation.state === "COMPLETED" || /^(PAID|SUCCESS|SETTLED)$/i.test(reservation.paymentStatus ?? "")
+        if (!reservation.parkingSessionId && !(reservation.orderId && hasBillableBooking)) return null
+        return <ReservationInvoice key={`${scope}:${id}`} sessionId={reservation.parkingSessionId} orderId={reservation.orderId} />
+      }}
       pagination={{ page: history.pageNumber, hasNext: history.hasNext, onPrevious: history.previous, onNext: history.next }} />
     {history.selectedId && <Modal title="Reservation details" className="reservation-history-modal" onClose={history.closeDetails}>
       {history.detail.loading ? <p role="status" className="reservation-history-loading">Loading reservation details…</p>
