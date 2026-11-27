@@ -1,20 +1,16 @@
 using FluentValidation;
-using SmartParking.Contracts.Audit;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using SmartParking.OperationService.Application;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
-using SmartParking.OperationService.Application.DTOs;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 using SmartParking.OperationService.Domain;
 using SmartParking.OperationService.Domain.Entities;
-using SmartParking.OperationService.Domain.Reservations;
 
 using OperationsUnitOfWork = SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork;
-using OperationsUnitOfWorkTransaction = SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWorkTransaction;
 
 namespace SmartParking.FacilityService.Tests;
 
@@ -23,7 +19,7 @@ public sealed class ReservationGateUseCaseTests
     [Fact]
     public async Task MediatorRejectsInvalidInputBeforeIdentityOrPersistence()
     {
-        var data = new FakeRepositories();
+        var data = new GateTestRepositories();
         using var services = CreateServices(data);
         var mediator = services.GetRequiredService<IMediator>();
         await Assert.ThrowsAsync<ValidationException>(() => mediator.Send(new CheckInWalkInCommand(data.Site, "!", "http://invalid", "HELICOPTER")));
@@ -33,7 +29,7 @@ public sealed class ReservationGateUseCaseTests
     [Fact]
     public async Task WalkInAcquiresGuardBeforeReadAndCommitsOnce()
     {
-        var data = new FakeRepositories();
+        var data = new GateTestRepositories();
         using var services = CreateServices(data);
         var result = await services.GetRequiredService<IMediator>().Send(new CheckInWalkInCommand(data.Site, "29A-12345", null, "CAR"));
         Assert.Equal("29A12345", data.Session!.NormalizedPlate);
@@ -47,7 +43,7 @@ public sealed class ReservationGateUseCaseTests
     [Fact]
     public async Task ExplicitWalkInCheckInRecordsAndReleasesOnlyTheSessionSlot()
     {
-        var data = new FakeRepositories();
+        var data = new GateTestRepositories();
         using var services = CreateServices(data);
         var mediator = services.GetRequiredService<IMediator>();
         var slotId = Guid.NewGuid();
@@ -70,7 +66,7 @@ public sealed class ReservationGateUseCaseTests
     [InlineData(true)]
     public async Task PhysicalOccupancyRejectsAConflictingReservationBeforeFacilityClaim(bool scan)
     {
-        var data = new FakeRepositories();
+        var data = new GateTestRepositories();
         using var services = CreateServices(data);
         var mediator = services.GetRequiredService<IMediator>();
         var slotId = Guid.NewGuid();
@@ -102,7 +98,7 @@ public sealed class ReservationGateUseCaseTests
     [Fact]
     public async Task UnavailableFacilitySlotLeavesExplicitCheckInUncommitted()
     {
-        var data = new FakeRepositories { SlotUnavailable = true };
+        var data = new GateTestRepositories { SlotUnavailable = true };
         using var services = CreateServices(data);
         var error = await Assert.ThrowsAsync<ReservationGateException>(() => services.GetRequiredService<IMediator>()
             .Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR", Guid.NewGuid())));
@@ -114,7 +110,7 @@ public sealed class ReservationGateUseCaseTests
     [Fact]
     public async Task DuplicateVehicleDoesNotWriteOrCommit()
     {
-        var data = new FakeRepositories { AlreadyInside = true };
+        var data = new GateTestRepositories { AlreadyInside = true };
         using var services = CreateServices(data);
         var error = await Assert.ThrowsAsync<ReservationGateException>(() => services.GetRequiredService<IMediator>()
             .Send(new CheckInWalkInCommand(data.Site, "29A-12345", null, "CAR")));
@@ -123,55 +119,211 @@ public sealed class ReservationGateUseCaseTests
         Assert.DoesNotContain("commit", data.Calls);
     }
 
-    [Fact]
-    public async Task PreferredSlotWithoutAllocationCannotBecomeActualParking()
+    [Theory]
+    [InlineData("CONFIRMED", null, 0)]
+    [InlineData("CONFIRMED", "RESERVED", 0)]
+    [InlineData("ALLOCATED", "RESERVED", 0)]
+    [InlineData("CONFIRMED", "RESERVED", 2)]
+    [InlineData("CONFIRMED", "RESERVED", -2)]
+    [InlineData("CONFIRMED", "RELEASED", 0)]
+    public async Task ReservationArrivalRecordsOnlyGateEvidence(string state, string? allocationStatus, int offsetHours)
     {
-        var data = new FakeRepositories();
-        data.Reservation = new() { Id = Guid.NewGuid(), Status = "CONFIRMED", TargetSlotId = Guid.NewGuid(), OriginalPlate = "29A-12345" };
+        var data = ReservationFixture(allocationStatus, offsetHours);
+        var reservation = data.Reservation!;
+        reservation.Status = state;
         using var services = CreateServices(data);
-        var error = await Assert.ThrowsAsync<ReservationGateException>(() => services.GetRequiredService<IMediator>()
-            .Send(new CheckInReservationCommand(data.Site, data.Reservation.Id, "29A-12345", null)));
-        Assert.Equal("ALLOCATION_UNAVAILABLE", error.Code);
-        Assert.Equal("CONFIRMED", data.Reservation.Status);
+        const string image = "data:image/png;base64,AQ==";
+        var result = await services.GetRequiredService<IMediator>().Send(
+            new CheckInReservationCommand(data.Site, reservation.Id, "29A12345", image));
+
+        Assert.Equal(reservation.Id, result.Id);
+        Assert.Equal("PARKING", reservation.Status);
+        var session = Assert.IsType<ParkingSessionRow>(data.Session);
+        Assert.Equal("ACTIVE", session.SessionStatus);
+        Assert.Equal(reservation.Id, session.ReservationId);
+        Assert.Equal(image, session.EntryImageUrl);
+        Assert.Equal(session.EntryTime, Assert.Single(data.Events).OccurredAt);
+        Assert.Null(session.CurrentSlotId);
+        Assert.Null(session.LocationScannedAt);
+        Assert.Null(data.Allocation?.ParkingSessionId);
+        Assert.Equal(allocationStatus, data.Allocation?.AllocationStatus);
+        Assert.DoesNotContain("read-allocations", data.Calls);
+        Assert.DoesNotContain("claim-slot", data.Calls);
+        Assert.Contains("commit", data.Calls);
+    }
+
+    [Theory]
+    [InlineData("CANCELLED", "29A12345", "INVALID_RESERVATION_STATE")]
+    [InlineData("PARKING", "29A12345", "INVALID_RESERVATION_STATE")]
+    [InlineData("CONFIRMED", "29A54321", "PLATE_MISMATCH")]
+    public async Task ReservationArrivalPreservesStateAndPlateGuards(string state, string plate, string code)
+    {
+        var data = ReservationFixture();
+        data.Reservation!.Status = state;
+        using var services = CreateServices(data);
+        var error = await Assert.ThrowsAsync<GateTransitionException>(() => services.GetRequiredService<IMediator>()
+            .Send(new CheckInReservationCommand(data.Site, data.Reservation.Id, plate, null)));
+        Assert.Equal(code, error.Code);
+        Assert.Equal(state, data.Reservation.Status);
         Assert.Null(data.Session);
         Assert.DoesNotContain("save", data.Calls);
     }
 
-    [Fact]
-    public async Task ReservedSlotBecomesOccupiedOnlyAtScanAndIsReleasedAtDeparture()
+    [Theory]
+    [InlineData("duplicate", "VEHICLE_ALREADY_INSIDE")]
+    [InlineData("unauthorized", "SITE_ACCESS_DENIED")]
+    [InlineData("other-site", "RESERVATION_NOT_FOUND")]
+    [InlineData("other-tenant", "RESERVATION_NOT_FOUND")]
+    public async Task ReservationArrivalPreservesAccessAndDuplicateGuards(string scenario, string code)
     {
-        var data = new FakeRepositories();
-        data.Reservation = new() { Id = Guid.NewGuid(), Status = "CONFIRMED", OriginalPlate = "29A-12345", VehicleType = "CAR",
-            TargetSlotId = Guid.NewGuid(), ExpectedStartTime = DateTimeOffset.UtcNow.AddHours(-1),
-            ExpectedEndTime = DateTimeOffset.UtcNow.AddHours(1) };
-        data.Allocation = new() { Id = Guid.NewGuid(), ReservationId = data.Reservation.Id, SlotId = Guid.NewGuid(), AllocationStatus = "RESERVED",
-            AllocatedStartTime = DateTimeOffset.UtcNow.AddHours(-1), AllocatedEndTime = DateTimeOffset.UtcNow.AddHours(1) };
+        var data = ReservationFixture();
+        data.AlreadyInside = scenario == "duplicate";
+        if (scenario == "other-site") data.Reservation!.SiteId = Guid.NewGuid();
+        if (scenario == "other-tenant") data.Reservation!.TenantId = Guid.NewGuid();
+        var site = scenario == "unauthorized" ? Guid.NewGuid() : data.Site;
+        using var services = CreateServices(data);
+        var error = await Assert.ThrowsAsync<ReservationGateException>(() => services.GetRequiredService<IMediator>()
+            .Send(new CheckInReservationCommand(site, data.Reservation!.Id, "29A12345", null)));
+        Assert.Equal(code, error.Code);
+        Assert.Equal("CONFIRMED", data.Reservation!.Status);
+        Assert.Null(data.Session);
+        Assert.DoesNotContain("commit", data.Calls);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task ReservationScanAndDepartureKeepExpectedAndActualSlotsSeparate(
+        bool allocated, bool scan, bool different)
+    {
+        var data = ReservationFixture(allocated ? "RESERVED" : null);
+        var reservation = data.Reservation!;
+        var expected = reservation.TargetSlotId!.Value;
+        var actual = different ? Guid.NewGuid() : expected;
         using var services = CreateServices(data);
         var mediator = services.GetRequiredService<IMediator>();
-        await mediator.Send(new CheckInReservationCommand(data.Site, data.Reservation.Id, "29A12345", null));
-        Assert.Equal("PARKING", data.Reservation.Status);
-        Assert.Null(data.Session!.CurrentSlotId);
-        Assert.Equal("RESERVED", data.Allocation.AllocationStatus);
-        var scan = new ScanParkingSessionCommand(data.Site, data.Reservation.Id, data.Allocation.SlotId);
-        await mediator.Send(scan);
-        Assert.Equal(data.Allocation.SlotId, data.Session!.CurrentSlotId);
-        Assert.Equal("OCCUPIED", data.Allocation.AllocationStatus);
-        Assert.NotNull(data.Session.LocationScannedAt);
-        await mediator.Send(new CheckOutReservationCommand(data.Site, data.Reservation.Id, "29A12345", null));
-        Assert.Equal("COMPLETED", data.Reservation.Status);
-        Assert.NotNull(data.Session.ExitTime);
-        Assert.Equal("RELEASED", data.Allocation.AllocationStatus);
+        await mediator.Send(new CheckInReservationCommand(data.Site, reservation.Id, "29A12345", null));
+        var session = data.Session!;
+        if (scan)
+        {
+            data.FacilityReserved = !different;
+            var result = await mediator.Send(new ScanParkingSessionCommand(data.Site, reservation.Id, actual));
+            Assert.Equal(actual, result.CurrentSlotId);
+            Assert.Equal(actual, session.CurrentSlotId);
+            Assert.NotNull(session.LocationScannedAt);
+            if (allocated)
+            {
+                Assert.Equal(expected, data.Allocation!.SlotId);
+                Assert.Equal(different ? "RESERVED" : "OCCUPIED", data.Allocation.AllocationStatus);
+                Assert.Equal(different ? (Guid?)null : session.Id, data.Allocation.ParkingSessionId);
+            }
+        }
+        await mediator.Send(new CheckOutReservationCommand(data.Site, reservation.Id, "29A12345", null));
+        Assert.Equal("COMPLETED", reservation.Status);
+        Assert.NotNull(session.ExitTime);
+        Assert.Equal(scan ? actual : (Guid?)null, data.ReleasedSlotId);
+        Assert.Equal(allocated ? "RELEASED" : null, data.Allocation?.AllocationStatus);
         var writes = data.Calls.Count(x => x == "save");
-        await mediator.Send(new CheckOutReservationCommand(data.Site, data.Reservation.Id, "29A12345", null));
+        await mediator.Send(new CheckOutReservationCommand(data.Site, reservation.Id, "29A12345", null));
         Assert.Equal(writes, data.Calls.Count(x => x == "save"));
         Assert.Equal(2, data.Events.Count);
-        Assert.All(data.Events, e => Assert.Equal(data.Reservation.Id, e.ReservationId));
+        Assert.All(data.Events, e => Assert.Equal(reservation.Id, e.ReservationId));
+    }
+
+    [Fact]
+    public async Task DifferentObservedSlotRequiresReconciliationForSubsequentClaimsOnEitherBay()
+    {
+        var data = ReservationFixture("RESERVED");
+        using var services = CreateServices(data);
+        var mediator = services.GetRequiredService<IMediator>();
+        var reservation = data.Reservation!;
+        var actual = Guid.NewGuid();
+        await mediator.Send(new CheckInReservationCommand(data.Site, reservation.Id, "29A12345", null));
+        await mediator.Send(new ScanParkingSessionCommand(data.Site, reservation.Id, actual));
+
+        foreach (var slot in new[] { data.Allocation!.SlotId, actual })
+        {
+            var error = await Assert.ThrowsAsync<ReservationGateException>(() => mediator.Send(
+                new CheckInWalkInCommand(data.Site, "29A54321", null, "CAR", slot)));
+            Assert.Equal("OCCUPANCY_RECONCILIATION_REQUIRED", error.Code);
+        }
+        Assert.Equal(1, data.Calls.Count(call => call == "claim-slot"));
+        Assert.Equal(actual, data.Session!.CurrentSlotId);
+    }
+
+    [Theory]
+    [InlineData(false, "CAPACITY_UNAVAILABLE")]
+    [InlineData(true, "NO_AVAILABLE_SLOT")]
+    public async Task ReservationScanRejectsAnOccupiedOrReservedAlternateSlot(bool facilityReserved, string code)
+    {
+        var data = ReservationFixture("RESERVED");
+        var actual = Guid.NewGuid();
+        data.FacilityReserved = facilityReserved;
+        if (!facilityReserved)
+            data.OtherSession = new() { Id = Guid.NewGuid(), CurrentSlotId = actual, VehicleType = "CAR" };
+        using var services = CreateServices(data);
+        var mediator = services.GetRequiredService<IMediator>();
+        await mediator.Send(new CheckInReservationCommand(data.Site, data.Reservation!.Id, "29A12345", null));
+        var error = await Assert.ThrowsAsync<ReservationGateException>(() => mediator.Send(
+            new ScanParkingSessionCommand(data.Site, data.Session!.Id, actual)));
+        Assert.Equal(code, error.Code);
+        Assert.Null(data.Session!.CurrentSlotId);
+        Assert.Null(data.Session.LocationScannedAt);
+        Assert.Equal("RESERVED", data.Allocation!.AllocationStatus);
+        Assert.Null(data.Allocation.ParkingSessionId);
+    }
+
+    [Theory]
+    [InlineData("own", "RELEASED")]
+    [InlineData("other-reservation", "RESERVED")]
+    [InlineData("other-session", "RESERVED")]
+    public async Task PaidDepartureReleasesOnlyOwnedAllocations(string owner, string finalStatus)
+    {
+        var data = ReservationFixture("RESERVED");
+        if (owner == "other-session") data.Allocation!.ParkingSessionId = Guid.NewGuid();
+        if (owner == "other-reservation") data.Allocation!.ReservationId = Guid.NewGuid();
+        using var services = CreateServices(data);
+        var mediator = services.GetRequiredService<IMediator>();
+        var id = data.Reservation!.Id;
+        await mediator.Send(new CheckInReservationCommand(data.Site, id, "29A12345", null));
+        var order = Guid.NewGuid();
+        data.Session!.AwaitCheckoutPayment(order);
+        await mediator.Send(new SimulatePaidGateDepartureCommand(data.Tenant, data.Site, "RESERVATION", id,
+            order, data.Session.EntryTime.AddMinutes(5)));
+        Assert.Equal(finalStatus, data.Allocation!.AllocationStatus);
+        Assert.Equal("COMPLETED", data.Reservation.Status);
+        Assert.Equal("COMPLETED", data.Session.SessionStatus);
+        Assert.Null(data.ReleasedSlotId);
+    }
+
+    private static GateTestRepositories ReservationFixture(string? allocationStatus = null, int offsetHours = 0)
+    {
+        var data = new GateTestRepositories();
+        var now = DateTimeOffset.UtcNow;
+        var reservation = data.Reservation = new()
+        {
+            Id = Guid.NewGuid(), TenantId = data.Tenant, SiteId = data.Site, Status = "CONFIRMED",
+            OriginalPlate = "29A-12345", VehicleType = "CAR", TargetSlotId = Guid.NewGuid(),
+            ExpectedStartTime = now.AddHours(-1), ExpectedEndTime = now.AddHours(1)
+        };
+        if (allocationStatus != null)
+            data.Allocation = new()
+            {
+                Id = Guid.NewGuid(), TenantId = data.Tenant, SiteId = data.Site, ReservationId = reservation.Id,
+                SlotId = reservation.TargetSlotId.Value, AllocationStatus = allocationStatus,
+                AllocatedStartTime = now.AddHours(offsetHours - 1), AllocatedEndTime = now.AddHours(offsetHours + 1)
+            };
+        return data;
     }
 
     [Fact]
     public async Task BoundCheckoutPaymentRecordsSettlementAndSimulatesDepartureAtEventTime()
     {
-        var data = new FakeRepositories();
+        var data = new GateTestRepositories();
         using var services = CreateServices(data);
         var mediator = services.GetRequiredService<IMediator>();
         var walkIn = await mediator.Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR"));
@@ -205,7 +357,7 @@ public sealed class ReservationGateUseCaseTests
     [Fact]
     public async Task AuditCaptureFailurePreventsSaveAndCommit()
     {
-        var data = new FakeRepositories { FailAudit = true };
+        var data = new GateTestRepositories { FailAudit = true };
         using var services = CreateServices(data);
         var error = await Assert.ThrowsAsync<ReservationGateException>(() => services.GetRequiredService<IMediator>()
             .Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR")));
@@ -223,7 +375,7 @@ public sealed class ReservationGateUseCaseTests
         Assert.Throws<GateTransitionException>(() => GateRules.VerifyPlate("29A12345", "29A54321"));
     }
 
-    private static ServiceProvider CreateServices(FakeRepositories data)
+    private static ServiceProvider CreateServices(GateTestRepositories data)
     {
         var services = new ServiceCollection();
         services.AddLogging(); services.AddApplicationServices(); services.AddSingleton(TimeProvider.System);
@@ -235,114 +387,5 @@ public sealed class ReservationGateUseCaseTests
         services.AddSingleton<IOccupancyOutboxStore>(data);
         services.AddSingleton<IReservationAvailabilityRepository>(data);
         return services.BuildServiceProvider();
-    }
-
-    private sealed class FakeRepositories : IReservationRepository, IParkingSessionRepository, ISlotAllocationRepository,
-        IOperationsAuditPublisher, IOperatorIdentityClient, IOperationsConcurrency, OperationsUnitOfWork, OperationsUnitOfWorkTransaction,
-        IOperatorGateSlotClaims, IOccupancyOutboxStore, IReservationAvailabilityRepository
-    {
-        public Guid Site { get; } = Guid.NewGuid();
-        public Guid Tenant { get; } = Guid.NewGuid();
-        public List<string> Calls { get; } = [];
-        public ReservationRow? Reservation;
-        public ParkingSessionRow? Session;
-        public SlotAllocationRow? Allocation;
-        public bool AlreadyInside;
-        public bool FailAudit;
-        public bool SlotUnavailable;
-        public Guid? ReleasedSlotId;
-        public Task<OperatorSiteScope> RequireSiteAsync(Guid site, CancellationToken ct) { Calls.Add("identity"); return Task.FromResult(new OperatorSiteScope(Guid.NewGuid(), Tenant, Site)); }
-        public Task<OperatorSiteScope> AuthorizeSiteAsync(Guid site, string bearerToken, CancellationToken ct) => RequireSiteAsync(site, ct);
-        public Task LockSiteAsync(Guid site, CancellationToken ct) { Calls.Add("guard"); return Task.CompletedTask; }
-        public Task LockVehicleAsync(string id, CancellationToken ct)
-        {
-            Assert.Equal(GateRules.NormalizePlate(id), id);
-            Assert.True(Calls.LastIndexOf("guard") < Calls.LastIndexOf("begin"));
-            Calls.Add("plate-guard");
-            return Task.CompletedTask;
-        }
-        public Task<OperationsUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken ct) { Calls.Add("begin"); return Task.FromResult<OperationsUnitOfWorkTransaction>(this); }
-        public Task<int> SaveChangesAsync(CancellationToken ct = default) { Calls.Add("save"); return Task.FromResult(1); }
-        public Task CommitAsync(CancellationToken ct) { Calls.Add("commit"); return Task.CompletedTask; }
-        public void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt)
-        {
-            Assert.Equal(Site, siteId);
-            Calls.Add("queue-snapshot");
-        }
-
-        public Task<IReadOnlyList<OutboxMessage>> ClaimBatchAsync(int batchSize, TimeSpan leaseDuration, CancellationToken ct) =>
-            throw new NotSupportedException();
-
-        public Task MarkPublishedAsync(IReadOnlyCollection<Guid> eventIds, CancellationToken ct) =>
-            throw new NotSupportedException();
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-        public Task<IOperatorGateSlotLease> ClaimAvailableAsync(Guid tenantId, Guid siteId, string vehicleType,
-            Guid? preferredSlotId, Guid? targetUnitId, bool allowReservedSlot, CancellationToken ct)
-        {
-            Calls.Add("claim-slot");
-            if (SlotUnavailable)
-                throw new ReservationGateException(409, "NO_AVAILABLE_SLOT", "No eligible parking slot is available.");
-            return Task.FromResult<IOperatorGateSlotLease>(new SlotLease(new ClaimedParkingSlot(
-                Assert.IsType<Guid>(preferredSlotId), "A01", vehicleType)));
-        }
-        public Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
-        {
-            Calls.Add("release-slot");
-            ReleasedSlotId = slotId;
-            return Task.CompletedTask;
-        }
-
-        public Task<ReservationAvailabilityFacts> ReadPhysicalAsync(ParkingSessionRow session, DateTimeOffset at, CancellationToken ct)
-        {
-            Assert.True(Calls.LastIndexOf("guard") > Calls.LastIndexOf("begin"));
-            Calls.Add("availability");
-            return Task.FromResult(new ReservationAvailabilityFacts(Reservation is null ? [] : [Reservation],
-                Session is { ExitTime: null } ? [Session] : [], Allocation is null ? [] : [Allocation], 0));
-        }
-
-        public Task<ReservationAvailabilityFacts> ReadAsync(ReservationRow proposed, DateTimeOffset at, CancellationToken ct) =>
-            throw new NotSupportedException();
-
-        public Task LockAccountAsync(Guid accountId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<bool> HasUnclassifiedCancellationAsync(Guid accountId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<ReservationCancellationEvidence>> ReadCancellationsAsync(Guid accountId, DateTimeOffset dayStart,
-            DateTimeOffset now, CancellationToken ct) => throw new NotSupportedException();
-        private sealed class SlotLease(ClaimedParkingSlot slot) : IOperatorGateSlotLease
-        {
-            public ClaimedParkingSlot Slot => slot;
-            public void Commit() { }
-            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-        }
-
-        public IReservationRepository Reservations => this;
-        public IParkingSessionRepository ParkingSessions => this;
-        public ISlotAllocationRepository SlotAllocations => this;
-        Task<ReservationRow?> IReservationRepository.FindForUpdateAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => Task.FromResult(Reservation);
-        Task<ParkingSessionRow?> IParkingSessionRepository.FindForUpdateAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) =>
-            Task.FromResult(Session?.Id == id ? Session : null);
-        public Task<bool> HasActivePlateAsync(Guid tenant, Guid site, string plate, CancellationToken ct) { Calls.Add("active-read"); return Task.FromResult(AlreadyInside); }
-        public Task<ParkingSessionRow?> FindByReservationAsync(Guid tenant, Guid site, Guid id, bool active, CancellationToken ct) =>
-            Task.FromResult(Session is not null && Session.ReservationId == id && (Session.ExitTime is null) == active ? Session : null);
-        public Task<SlotAllocationRow?> FindReservedAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => Task.FromResult(Allocation);
-        public Task<IReadOnlyList<SlotAllocationRow>> FindActiveForSessionAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => Task.FromResult<IReadOnlyList<SlotAllocationRow>>(Allocation is { AllocationStatus: "RESERVED" or "OCCUPIED" } ? [Allocation] : []);
-        public Task AddAsync(ParkingSessionRow row, CancellationToken ct) { Calls.Add("add-session"); Session = row; return Task.CompletedTask; }
-        public Task AddAsync(ReservationRow row, CancellationToken ct) { Reservation = row; return Task.CompletedTask; }
-        public Task AddAsync(SlotAllocationRow row, CancellationToken ct) { Allocation = row; return Task.CompletedTask; }
-        public List<OperationsGateAuditV1> Events { get; } = [];
-        public Task PublishAsync(OperationsGateAuditV1 row, CancellationToken ct)
-        {
-            if (FailAudit) throw new ReservationGateException(503, "AUDIT_PUBLISHING_UNAVAILABLE", "Audit is unavailable.");
-            Calls.Add("audit"); Events.Add(row); return Task.CompletedTask;
-        }
-        public void Remove(ReservationRow row) => throw new NotSupportedException();
-        public void Remove(ParkingSessionRow row) => throw new NotSupportedException();
-        public void Remove(SlotAllocationRow row) => throw new NotSupportedException();
-        public Task<IReadOnlyList<ReservationGateEntry>> ListAsync(Guid tenant, Guid site, CancellationToken ct) => Task.FromResult<IReadOnlyList<ReservationGateEntry>>([]);
-        public Task<ReservationGateEntry?> FindAsync(Guid tenant, Guid site, string query, CancellationToken ct) => Task.FromResult<ReservationGateEntry?>(null);
-        public Task<ReservationGateEntry?> FindByIdAsync(Guid tenant, Guid site, Guid id, CancellationToken ct) => Task.FromResult<ReservationGateEntry?>(new(id, Guid.NewGuid(), site, "site", Allocation?.SlotId, "Unassigned", "29A12345", Reservation!.Status,
-            null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), null, null, null, null, DateTimeOffset.UtcNow));
-        public Task<IReadOnlyList<ParkingSessionHistoryEntry>> ListSessionsAsync(Guid tenant, Guid site, CancellationToken ct) => Task.FromResult<IReadOnlyList<ParkingSessionHistoryEntry>>([]);
-        public Task<WalkInParkingSession?> FindActiveWalkInAsync(Guid tenant, Guid site, string plate, CancellationToken ct) => Task.FromResult<WalkInParkingSession?>(null);
     }
 }
