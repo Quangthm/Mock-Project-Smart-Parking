@@ -337,3 +337,30 @@ Content-Type: application/json
   "amount": 50000,
   "reason": ""
 }
+
+###
+
+###############################################################################
+# 22. Global Error Handling - Malformed JSON Binding Error (SPARK-267 - 400 VALIDATION_ERROR)
+###############################################################################
+POST {{baseUrl}}/api/v1/payments/orders/{{orderId}}/checkout
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "paymentMethod": "PAYOS",
+  "returnUrl":
+
+###
+
+###############################################################################
+# 23. Global Error Handling - Missing Authorization Header (SPARK-267 - 401 UNAUTHORIZED)
+###############################################################################
+GET {{baseUrl}}/api/v1/payments/transactions/{{transactionId}}/status
+
+###
+
+###############################################################################
+# 24. Global Error Handling - Route Not Found (SPARK-267 - 404 NOT_FOUND)
+###############################################################################
+GET {{baseUrl}}/api/v1/payments/non-existent-endpoint
