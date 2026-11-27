@@ -5,6 +5,7 @@ using SmartParking.NotificationAuditService.Application.Common.Interfaces.Ports;
 using SmartParking.NotificationAuditService.Infrastructure.Adapters.Delivery;
 using SmartParking.NotificationAuditService.Infrastructure.Consumers;
 using SmartParking.NotificationAuditService.Infrastructure.Options;
+using SmartParking.NotificationAuditService.Infrastructure.Security;
 using SmartParking.PaymentService.Domain.Events;
 
 namespace SmartParking.NotificationAuditService.Infrastructure;
@@ -16,6 +17,9 @@ public static class InfrastructureDependencyInjection
         IConfiguration configuration)
     {
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
+        services.Configure<JwtValidationOptions>(configuration.GetSection(JwtValidationOptions.SectionName));
+        services.AddHttpClient(JwksSigningKeyProvider.HttpClientName);
+        services.AddSingleton<IJwksSigningKeyProvider, JwksSigningKeyProvider>();
 
         // Delivery Adapters (Local Fixtures) & Dispatcher
         services.AddScoped<INotificationChannelAdapter, InAppDeliveryAdapter>();

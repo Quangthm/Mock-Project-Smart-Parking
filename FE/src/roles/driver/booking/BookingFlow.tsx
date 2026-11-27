@@ -1,7 +1,7 @@
 import { AuthApiError, getSessionGeneration } from "../../../lib/authApi"
 import { RoundedSelect } from "../../../components/ui/RoundedSelect"
 import { VehicleImageInput } from "../../../components/VehicleImageInput"
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 
 import { useApp } from "../../../context/AppContext"
 import { PageHeader } from "../../../components/ui/PageHeader"
@@ -16,9 +16,10 @@ import type {
 } from "../../../lib/types"
 
 import { qrLogo } from "../data/paymentOptions"
-import { reservationsApi, type ReservationPreview } from "../../../lib/reservationsApi"
-import { driverReservationApi, type ReservationSelection } from "../../../lib/driverReservationApi"
+import type { ReviewedReservationSelection } from "../../../lib/reservationsApi"
+import { driverReservationApi } from "../../../lib/driverReservationApi"
 import { readReservationAttempt, ReservationCheckout } from "./ReservationCheckout"
+import "./reservation-checkout.css"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
@@ -30,14 +31,14 @@ import {
   formatVietnamesePlateValue,
   isSupportedVietnamesePlate,
   vehiclesApi,
+  subscribeVehicleRegistration,
   type RegisteredVehicle,
   type RegistrationClaim,
   canonicalVietnamesePlate,
   pendingRegistrationMessage,
 } from "../../../lib/vehiclesApi"
 
-type Step = "slot" | "details" | "payment" | "qr" | "cash"
-type BookingPaymentMethod = "qr" | "cash"
+type Step = "slot" | "details" | "payment" | "qr"
 
 type VehicleForm = {
   type: "motorcycle" | "car"
@@ -128,21 +129,26 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
     resumeBooking?.endTime.slice(0, 16) ?? "",
   )
 
-  const [paymentMethod, setPaymentMethod] = useState<BookingPaymentMethod | null>(
-    resumeBooking?.paymentMethod === "qr" ? "qr" : null,
-  )
-
   const bookingId = resumeBooking?.id ?? ""
 
   const [message, setMessage] = useState("")
   const [showPolicyModal, setShowPolicyModal] = useState(false)
-  const [pricePreview, setPricePreview] = useState<ReservationPreview | null>(null)
-  const [previewError, setPreviewError] = useState("")
 
   useEffect(() => {
-    if (!user || resumeBooking) return
+    if (!user?.id) return
     let active = true
-    setVehicles([])
+    let reading = true
+    const addedDuringRead = new Map<string, RegisteredVehicle>()
+    const stop = subscribeVehicleRegistration(vehicle => {
+      if (reading) addedDuringRead.set(vehicle.id, vehicle)
+      setVehicles(current => [...current.filter(item => item.id !== vehicle.id), vehicle])
+      if (vehicle.vehicleType === "CAR") {
+        setVehicleError("")
+        setVehicleLoading(false)
+        setVehicleListFailed(false)
+        setSelectedVehicleId(current => current || vehicle.id)
+      }
+    })
     setVehicleLoading(true)
     setVehicleListFailed(false)
     setVehicleError("")
@@ -154,24 +160,32 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
     })
     vehiclesApi.list()
       .then(allItems => {
-        const items = allItems.filter(item => item.vehicleType === "CAR")
         if (!active) return
-        setVehicles(allItems)
+        const merged = new Map(allItems.map(item => [item.id, item]))
+        addedDuringRead.forEach((item, id) => merged.set(id, item))
+        const latest = [...merged.values()]
+        const items = latest.filter(item => item.vehicleType === "CAR")
+        setVehicles(latest)
         setSelectedVehicleId((current) =>
           items.some(item => item.id === current) ? current : items[0]?.id ?? "",
         )
       })
       .catch((error) => {
         if (active) {
-          setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
-          setVehicleListFailed(true)
+          const registeredCar = [...addedDuringRead.values()].some(item => item.vehicleType === "CAR")
+          if (!registeredCar) {
+            setVehicleError(error instanceof Error ? error.message : "Cannot load vehicles.")
+            setVehicleListFailed(true)
+          }
         }
       })
       .finally(() => {
+        reading = false
+        addedDuringRead.clear()
         if (active) setVehicleLoading(false)
       })
-    return () => { active = false }
-  }, [user, resumeBooking?.id, vehicleReload])
+    return () => { active = false; stop() }
+  }, [user?.id, vehicleReload])
 
   useEffect(() => {
     function refreshLots(event: StorageEvent) {
@@ -201,31 +215,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const validTimeWindow = Number.isFinite(startTimestamp) && Number.isFinite(endTimestamp) &&
     startTimestamp > Date.now() && endTimestamp > startTimestamp
 
-  const amount = pricePreview?.bookedAmount
-
-  useEffect(() => {
-    let active = true
-    setPricePreview(null)
-    setPreviewError("")
-    if (!selectedSlot || !validTimeWindow) return
-    const generation = getSessionGeneration()
-    const timer = window.setTimeout(() => {
-      void reservationsApi.preview({
-        siteId: lot.id, requestedSlotId: selectedSlot.id,
-        start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-        ...(selectedVehicleId ? { vehicleId: selectedVehicleId } : {}),
-        ...(paymentMethod ? { paymentMethod: paymentMethod === "qr" ? "PAYOS" : "CASH" } : {}),
-      }).then(result => {
-        if (active && generation === getSessionGeneration()) setPricePreview(result)
-      }).catch(error => {
-        if (active && generation === getSessionGeneration()) setPreviewError(error instanceof Error ? error.message : "Price preview unavailable.")
-      })
-    }, 350)
-    return () => { active = false; window.clearTimeout(timer) }
-  }, [lot.id, selectedSlot?.id, startTime, endTime, selectedVehicleId, paymentMethod, validTimeWindow])
-
-  const priceLabel = amount == null ? previewError || "Loading price…" : `${amount.toLocaleString("vi-VN")} VND`
-
   const bookingVehicles = vehicles.filter(vehicle => vehicle.vehicleType === "CAR")
   const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
@@ -234,8 +223,9 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const previewSlotId = selectedSlot?.id
   const previewVehicleId = selectedVehicle?.id
   const previewKey = JSON.stringify([lot.id, previewSlotId, previewVehicleId, startTime, endTime])
+  const canPreview = step === "details" || step === "payment"
   useEffect(() => {
-    if (!previewSlotId || !previewVehicleId || !validTimeWindow || (step !== "details" && step !== "payment")) return
+    if (!previewSlotId || !previewVehicleId || !validTimeWindow || !canPreview) return
     let active = true
     const timer = window.setTimeout(() => {
       driverReservationApi.preview({
@@ -248,15 +238,18 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
       })
     }, 350)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [lot.id, previewSlotId, previewVehicleId, previewKey, validTimeWindow, step, startTime, endTime])
-  const priceText = preview?.key === previewKey ? preview.text : validTimeWindow && previewVehicleId && previewSlotId
+  }, [lot.id, previewSlotId, previewVehicleId, previewKey, validTimeWindow, canPreview, startTime, endTime])
+  const priceLabel = preview?.key === previewKey ? preview.text : validTimeWindow && previewVehicleId && previewSlotId
     ? "Checking price…" : "Available after choosing time and vehicle"
-  const reservationSelection: ReservationSelection | null =
-    selectedSlot && selectedVehicle && validTimeWindow && paymentMethod ? {
-      siteId: lot.id, requestedSlotId: selectedSlot.id, vehicleId: selectedVehicle.id,
+  const canonicalPlate = selectedVehicle?.canonicalPlate
+  const reservationSelection = useMemo<ReviewedReservationSelection | null>(() =>
+    previewSlotId && canonicalPlate && validTimeWindow ? {
+      requestedSlotId: previewSlotId, licensePlate: canonicalPlate,
       start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-      paymentMethod: paymentMethod === "qr" ? "PAYOS" : "CASH",
-    } : null
+      paymentMethod: "PAYOS",
+    } : null,
+    [previewSlotId, canonicalPlate, validTimeWindow, startTime, endTime],
+  )
 
   function chooseSlot(slot: ParkingSlot) {
     const latest = preferPopulatedLot(
@@ -336,7 +329,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
         imageAssetId: vehicleForm.imageAssetId,
       })
       if (getSessionGeneration() !== generation) return
-      setVehicles(current => [...current.filter(item => item.id !== created.id), created])
       if (created.vehicleType === "CAR") {
         setSelectedVehicleId(created.id)
       } else setVehicleNotice("Motorcycle registered. Specific Slot booking requires a car.")
@@ -371,14 +363,12 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
 
   function cancelHold() {
     setStep("details")
-    setPaymentMethod(null)
     setMessage("")
   }
 
   function continueToPayment() {
     if (!reservationSelection) return
-
-    setStep(paymentMethod === "cash" ? "cash" : "qr")
+    setStep("qr")
   }
 
   const activeFloorKey: string =
@@ -1003,176 +993,44 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
       )}
 
       {step === "payment" && (
-        <section className="card booking-stage-right">
-          <h3
-            style={{
-              margin: "0 0 0.9rem",
-              fontFamily: "Be Vietnam Pro",
-              color: "var(--fg)",
-            }}
-          >
-            Choose a payment method
-          </h3>
-          <p
-            style={{
-              margin: "0 0 0.9rem",
-              color: "var(--muted)",
-              fontSize: "0.82rem",
-            }}
-          >
-            Choose how you would like to pay. Your slot and booking are not
-            reserved yet; the booking service must create an order before
-            payment can be completed.
-          </p>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              margin: "0 0 0.9rem",
-              flexWrap: "wrap",
-              gap: "0.5rem",
-            }}
-          >
-            <p
-              style={{
-                margin: 0,
-                color: "var(--muted)",
-                fontSize: "0.82rem",
-              }}
-            >
-              Estimated total:{" "}
-              <strong style={{ color: "var(--fg)" }}>
-                {priceLabel}
-              </strong>
-            </p>
-            <button
-              type="button"
-              className="btn-outline"
-              title="Review owner and platform policies"
-              onClick={() => setShowPolicyModal(true)}
-              style={{
-                fontSize: "0.75rem",
-                padding: "0.25rem 0.55rem",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.3rem",
-              }}
-            >
-              <UntitledIcon name="file" size={12} />
-              Owner & platform policies
-            </button>
+        <section className="card booking-stage-right booking-qr-stage" aria-labelledby="booking-qr-title">
+          <header>
+            <h3 id="booking-qr-title">Pay by QR</h3>
+            <p>Review the final price and booking terms before a payment QR is generated.</p>
+          </header>
+
+          <div className="booking-qr-summary">
+            <div className="booking-qr-provider">
+              <span className="booking-payment-icon" aria-hidden="true"><img src={qrLogo} alt="" /></span>
+              <div>
+                <strong>payOS VietQR</strong>
+                <span>Scan with your banking app</span>
+              </div>
+            </div>
+            <dl className="booking-qr-total">
+              <dt>Estimated total</dt>
+              <dd aria-live="polite">{priceLabel}</dd>
+            </dl>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-              gap: "0.75rem",
-              marginBottom: "1rem",
-            }}
-          >
-            {([
-              { id: "qr", name: "Pay by QR", description: "payOS VietQR", icon: <img src={qrLogo} alt="" /> },
-              { id: "cash", name: "Pay by cash", description: "At the parking site", icon: <UntitledIcon name="banknote" size={28} /> },
-            ] as const).map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => {
-                  setPaymentMethod(option.id)
-                  setMessage("")
-                }}
-                aria-pressed={paymentMethod === option.id}
-                style={{
-                  display: "flex",
 
-                  flexDirection: "column",
-
-                  alignItems: "center",
-
-                  justifyContent: "center",
-
-                  gap: "0.45rem",
-
-                  padding: "0.85rem 0.5rem",
-
-                  borderRadius: "var(--radius)",
-
-                  border: `2px solid ${
-                    paymentMethod === option.id
-                      ? "var(--primary)"
-                      : "var(--border)"
-                  }`,
-
-                  background:
-                    paymentMethod === option.id
-                      ? "color-mix(in srgb, var(--primary) 10%, var(--card))"
-                      : "var(--card)",
-
-                  cursor: "pointer",
-
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <span className="booking-payment-icon" aria-hidden="true">{option.icon}</span>
-                <span
-                  style={{
-                    fontSize: "0.95rem",
-                    fontWeight: 600,
-                    color: "var(--fg)",
-                    textAlign: "center",
-                  }}
-                >
-                  {option.name}
-                </span>
-                <span className="booking-payment-description">{option.description}</span>
-              </button>
-            ))}
-          </div>
-          {message && (
-            <p role="alert" style={{ color: "#b45309", fontSize: "0.82rem" }}>
-              {message}
-            </p>
-          )}
-          <div style={{ display: "flex", gap: "0.6rem" }}>
-            <button type="button" className="btn-outline" onClick={cancelHold}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={!reservationSelection}
-              onClick={continueToPayment}
-              style={{ flex: 1, justifyContent: "center" }}
-            >
-              Continue with {paymentMethod === "cash" ? "cash" : "QR"}
+          <button type="button" className="btn-outline booking-qr-policy" onClick={() => setShowPolicyModal(true)}>
+            <UntitledIcon name="file" size={16} />
+            Owner & platform policies
+          </button>
+          <div className="booking-qr-actions">
+            <button type="button" className="btn-outline" onClick={cancelHold}>Back</button>
+            <button type="button" className="btn-primary" disabled={!reservationSelection} onClick={continueToPayment}>
+              Continue with QR <UntitledIcon name="arrow-right" size={16} />
             </button>
           </div>
         </section>
       )}
 
-      {step === "qr" && selectedSlot && selectedVehicleId && user && (
+      {step === "qr" && user && (
         <div className="booking-stage-right booking-payment-checkout">
-          <ReservationCheckout key={`${selectedSlot.id}:${selectedVehicleId}:${startTime}:${endTime}:${step}`}
-            accountScope={`${user.id}:driver`} onDone={onDone}
-            selection={{ siteId: lot.id, requestedSlotId: selectedSlot.id, vehicleId: selectedVehicleId,
-              start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-              paymentMethod: "PAYOS" }} />
-          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
-            Back to payment methods
-          </button>
+          <ReservationCheckout key={storageKey} storageKey={storageKey} onDone={onDone}
+            selection={reservationSelection} onBack={() => setStep("payment")} />
         </div>
-      )}
-
-      {step === "cash" && (
-        <section className="card booking-stage-right booking-cash-stage">
-          <span className="booking-payment-icon" aria-hidden="true"><UntitledIcon name="banknote" size={28} /></span>
-          <h3>Pay by cash</h3>
-          <p>Cash is collected at the parking site. To reserve a space in advance, choose Pay by QR and complete the required prepayment.</p>
-          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
-            Back to payment methods
-          </button>
-        </section>
       )}
 
       </div>

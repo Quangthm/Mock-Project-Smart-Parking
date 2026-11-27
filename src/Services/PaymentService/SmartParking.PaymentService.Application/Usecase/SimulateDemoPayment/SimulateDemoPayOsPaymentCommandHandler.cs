@@ -16,6 +16,7 @@ public sealed class SimulateDemoPayOsPaymentCommandHandler
 {
     private readonly IPaymentOrderRepository _orderRepository;
     private readonly IPaymentTransactionRepository _transactionRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IPayOsWebhookSimulatorPort _webhookSimulatorPort;
     private readonly ICurrentActor _currentActor;
     private readonly IMediator _mediator;
@@ -24,6 +25,7 @@ public sealed class SimulateDemoPayOsPaymentCommandHandler
     public SimulateDemoPayOsPaymentCommandHandler(
         IPaymentOrderRepository orderRepository,
         IPaymentTransactionRepository transactionRepository,
+        IUnitOfWork unitOfWork,
         IPayOsWebhookSimulatorPort webhookSimulatorPort,
         ICurrentActor currentActor,
         IMediator mediator,
@@ -31,6 +33,7 @@ public sealed class SimulateDemoPayOsPaymentCommandHandler
     {
         _orderRepository = orderRepository;
         _transactionRepository = transactionRepository;
+        _unitOfWork = unitOfWork;
         _webhookSimulatorPort = webhookSimulatorPort;
         _currentActor = currentActor;
         _mediator = mediator;
@@ -107,6 +110,39 @@ public sealed class SimulateDemoPayOsPaymentCommandHandler
         }
 
         var pendingTx = order.Transactions.FirstOrDefault(t => t.Status == PaymentStatus.PENDING);
+
+        if (order.ReviewedMethod is not null &&
+            !order.Transactions.Any(t =>
+                t.TransactionType == TransactionType.PAYMENT &&
+                t.PaymentMethod == PaymentMethod.PAYOS &&
+                !string.IsNullOrWhiteSpace(t.GatewayTransactionId)))
+        {
+            var demoLinkId = $"DEMO-LINK-{order.Id:N}";
+            if (pendingTx is not null && string.IsNullOrWhiteSpace(pendingTx.GatewayTransactionId))
+            {
+                pendingTx.GatewayTransactionId = demoLinkId;
+                _transactionRepository.Update(pendingTx);
+            }
+            else
+            {
+                pendingTx = new PaymentTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = order.TenantId,
+                    PaymentOrderId = order.Id,
+                    TransactionType = TransactionType.PAYMENT,
+                    PaymentMethod = PaymentMethod.PAYOS,
+                    GatewayTransactionId = demoLinkId,
+                    Amount = order.FinalAmount,
+                    Status = PaymentStatus.PENDING,
+                    CreatedAt = now
+                };
+                order.Transactions.Add(pendingTx);
+                await _transactionRepository.AddAsync(pendingTx, cancellationToken);
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         var simulatedWebhook = _webhookSimulatorPort.BuildSignedSuccessWebhook(
             new DemoPayOsWebhookRequest(

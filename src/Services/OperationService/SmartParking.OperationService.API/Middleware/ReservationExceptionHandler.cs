@@ -29,7 +29,14 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             [typeof(SmartParking.OperationService.Domain.Policies.LotPolicyNotFoundException)] = error => (404, ((SmartParking.OperationService.Domain.Policies.LotPolicyNotFoundException)error).Code, error.Message),
             [typeof(SmartParking.OperationService.Domain.Policies.NoDraftToPublishException)] = error => (409, "NO_DRAFT_TO_PUBLISH", error.Message),
             [typeof(SmartParking.OperationService.Domain.Policies.IdempotencyPayloadMismatchException)] = error => (409, "IDEMPOTENCY_PAYLOAD_MISMATCH", error.Message),
-            [typeof(SmartParking.OperationService.Domain.Policies.PolicyOperationInProgressException)] = error => (409, "OPERATION_IN_PROGRESS", error.Message)
+            [typeof(SmartParking.OperationService.Domain.Policies.PolicyOperationInProgressException)] = error => (409, "OPERATION_IN_PROGRESS", error.Message),
+            [typeof(SmartParking.OperationService.Domain.PassPlans.PassPlanException)] = error =>
+            {
+                var passPlan = (SmartParking.OperationService.Domain.PassPlans.PassPlanException)error;
+                return (passPlan.StatusCode, passPlan.Code, passPlan.Message);
+            },
+            [typeof(SmartParking.OperationService.Infrastructure.Authentication.JwksUnavailableException)] = _ =>
+                (503, "AUTHENTICATION_KEYS_UNAVAILABLE", "Authentication is temporarily unavailable.")
         };
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
@@ -38,7 +45,14 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
             return false;
         var result = (Status: 500, Code: "INTERNAL_ERROR", Message: "An unexpected error occurred.");
         object? errors = null;
-        if (exception is ValidationException validation)
+        if (exception is SmartParking.OperationService.Application.Discovery.DiscoveryFailure discovery)
+        {
+            if (discovery.RetryAfter is int seconds)
+                context.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            result = (discovery.Status, discovery.Code, "Parking search could not be completed.");
+            errors = Array.Empty<object>();
+        }
+        else if (exception is ValidationException validation)
         {
             var primaryError = validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_TIME_DURATION")
                 ?? validation.Errors.FirstOrDefault(e => e.ErrorCode == "INVALID_ACTIVATION_SCHEDULE")
@@ -51,7 +65,12 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
                 "POLICY_OUT_OF_BOUNDS" => "POLICY_OUT_OF_BOUNDS",
                 "INVALID_TIME_DURATION" => "INVALID_TIME_DURATION",
                 "INVALID_ACTIVATION_SCHEDULE" => "INVALID_ACTIVATION_SCHEDULE",
-                _ => context.Request.Path.StartsWithSegments("/internal/structure") ? "INVALID_STRUCTURE" : "INVALID_REQUEST"
+                "VALIDATION_ERROR" => "VALIDATION_ERROR",
+                _ => context.Request.Path.StartsWithSegments("/internal/structure")
+                    ? "INVALID_STRUCTURE"
+                    : IsPassPlanPath(context.Request.Path)
+                        ? "VALIDATION_ERROR"
+                        : "INVALID_REQUEST"
             };
 
             result = (400, machineCode, primaryError?.ErrorMessage ?? "Request validation failed.");
@@ -60,7 +79,7 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         else if (exception is PostgresException { SqlState: PostgresErrorCodes.UndefinedTable or PostgresErrorCodes.UndefinedColumn }
             && (context.Request.Path.StartsWithSegments("/api/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
-                context.Request.Path.StartsWithSegments("/api/reservation-terms") ||
+                context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))
@@ -83,5 +102,13 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
         for (Type? current = type; current is not null; current = current.BaseType)
             if (Known.TryGetValue(current, out var mapping)) return mapping;
         return null;
+    }
+
+    private static bool IsPassPlanPath(PathString path)
+    {
+        var value = path.Value;
+        return value is not null &&
+               (value.Contains("/pass-plans", StringComparison.OrdinalIgnoreCase) ||
+                value.Contains("/pass-offers", StringComparison.OrdinalIgnoreCase));
     }
 }

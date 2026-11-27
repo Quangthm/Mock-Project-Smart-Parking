@@ -27,6 +27,12 @@ public class PaymentOrderConfiguration : IEntityTypeConfiguration<PaymentOrder>
         builder.Property(x => x.ReferenceType).HasColumnName("reference_type").HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(x => x.ReferenceId).HasColumnName("reference_id").IsRequired();
         builder.Property(x => x.QuoteId).HasColumnName("quote_id");
+        builder.Property(x => x.ReviewedMethod).HasColumnName("reviewed_method");
+        builder.Property(x => x.ReviewedCurrency).HasColumnName("reviewed_currency");
+        builder.Property(x => x.IsProvisioningFence).HasColumnName("is_provisioning_fence");
+        builder.Property(x => x.ZeroDispositionReason).HasColumnName("zero_disposition_reason");
+        builder.HasIndex(x => x.QuoteId).IsUnique().HasFilter("reviewed_method IS NOT NULL");
+        builder.HasIndex(x => x.ReferenceId).IsUnique().HasFilter("reviewed_method IS NOT NULL");
         builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50);
 
         builder.Property(x => x.Amount).HasColumnName("amount").HasPrecision(14, 2).IsRequired();
@@ -34,7 +40,8 @@ public class PaymentOrderConfiguration : IEntityTypeConfiguration<PaymentOrder>
         builder.Property(x => x.DepositDeducted).HasColumnName("deposit_deducted").HasPrecision(14, 2).HasDefaultValue(0);
         builder.Property(x => x.FinalAmount).HasColumnName("final_amount").HasPrecision(14, 2).IsRequired();
 
-        builder.Property(x => x.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(50).HasDefaultValue(Domain.Enums.PaymentOrderStatus.PENDING);
+        builder.Property(x => x.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(50)
+            .HasDefaultValue(Domain.Enums.PaymentOrderStatus.PENDING).ValueGeneratedNever();
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");

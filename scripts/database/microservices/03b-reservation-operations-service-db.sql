@@ -15,29 +15,31 @@ CREATE TABLE IF NOT EXISTS reservation_requests (
     operation TEXT NOT NULL CHECK (operation = 'CREATE_RESERVATION'),
     intent_json JSONB NOT NULL,
     fingerprint TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'HOLD_CREATED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
+    progress_version BIGINT NOT NULL DEFAULT 1 CHECK (progress_version > 0),
+    account_check TEXT,
+    plate_check TEXT,
+    slot_check TEXT,
+    resolved_site_id UUID,
+    resolved_tenant_id UUID,
+    state TEXT NOT NULL CHECK (state IN ('PENDING_AUTHORIZATION', 'PREPARING', 'CHECKING', 'EVALUATING', 'HOLD_CREATED', 'CONFIRMED', 'REJECTED', 'DENIED', 'FAILED_DEPENDENCY')),
     code TEXT,
     admitted_at TIMESTAMPTZ NOT NULL,
     overall_deadline TIMESTAMPTZ NOT NULL,
     attempt_id UUID NOT NULL,
-    attempt_number INTEGER NOT NULL CHECK (attempt_number BETWEEN 1 AND 3),
-    attempt_started_at TIMESTAMPTZ NOT NULL,
-    attempt_deadline TIMESTAMPTZ NOT NULL,
-    next_action_at TIMESTAMPTZ NOT NULL,
     decision_id UUID,
     decided_at TIMESTAMPTZ,
-    awaiting_reply BOOLEAN NOT NULL,
     reservation_id UUID,
     vehicle_binding_state TEXT CHECK (vehicle_binding_state IN ('ACTIVE', 'INELIGIBLE')),
     vehicle_binding_revision BIGINT CHECK (vehicle_binding_revision > 0),
     vehicle_binding_checked_at TIMESTAMPTZ,
     vehicle_plate TEXT,
     UNIQUE (account_id, operation, idempotency_key),
-    CHECK (attempt_started_at < attempt_deadline AND attempt_deadline <= overall_deadline),
     CHECK (admitted_at < overall_deadline)
 );
-CREATE INDEX IF NOT EXISTS ix_reservation_requests_due ON reservation_requests(next_action_at, id)
-    WHERE state IN ('PENDING_AUTHORIZATION', 'PREPARING');
+CREATE TABLE IF NOT EXISTS reservation_admission_sagas (
+    correlation_id UUID PRIMARY KEY REFERENCES reservation_requests(id),
+    current_state TEXT NOT NULL
+);
 
 -- Review snapshots are immutable; acceptance binds each review to one workflow.
 CREATE TABLE IF NOT EXISTS reservation_terms (
@@ -49,37 +51,6 @@ CREATE TABLE IF NOT EXISTS reservation_terms (
     snapshot_json JSONB NOT NULL CHECK (jsonb_typeof(snapshot_json) = 'object'),
     accepted_request_id UUID UNIQUE REFERENCES reservation_requests(id)
 );
-
--- Reverse Facility handshake: per-workflow evidence, not a mirrored structure catalogue or audit log.
-CREATE TABLE IF NOT EXISTS reservation_facility_dependencies (
-    id UUID PRIMARY KEY,
-    workflow_id UUID NOT NULL REFERENCES reservation_requests(id),
-    purpose TEXT NOT NULL CHECK (purpose IN ('ADMISSION', 'CONFIRMATION')),
-    tenant_id UUID NOT NULL,
-    site_id UUID NOT NULL,
-    slot_id UUID NOT NULL,
-    intent_fingerprint TEXT NOT NULL,
-    deadline TIMESTAMPTZ NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('PREPARING', 'HELD', 'READY', 'ABORTING', 'COMPLETED')),
-    snapshot_json JSONB,
-    snapshot_fingerprint TEXT,
-    outcome_json JSONB,
-    abort_reason TEXT,
-    resolution TEXT CHECK (resolution IN ('COMMITTED', 'ABORTED')),
-    version INTEGER NOT NULL CHECK (version > 0),
-    created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL,
-    next_action_at TIMESTAMPTZ NOT NULL,
-    completed_at TIMESTAMPTZ,
-    UNIQUE (workflow_id, purpose),
-    CHECK (created_at < deadline),
-    CHECK (state NOT IN ('HELD', 'READY') OR (snapshot_json IS NOT NULL AND snapshot_fingerprint IS NOT NULL)),
-    CHECK (state <> 'READY' OR outcome_json IS NOT NULL),
-    CHECK (state <> 'ABORTING' OR abort_reason IS NOT NULL),
-    CHECK ((state = 'COMPLETED') = (completed_at IS NOT NULL AND resolution IS NOT NULL))
-);
-CREATE INDEX IF NOT EXISTS ix_reservation_facility_dependencies_due
-    ON reservation_facility_dependencies(next_action_at, id) WHERE state <> 'COMPLETED';
 
 -- MassTransit 8.5.7 EF inbox/outbox mapping, same owning ReservationDbContext.
 CREATE TABLE IF NOT EXISTS "InboxState" (
@@ -155,22 +126,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX_OutboxMessage_OutboxId_SequenceNumber" ON 
 
 CREATE INDEX IF NOT EXISTS "IX_OutboxState_Created" ON "OutboxState" ("Created");
 
--- 1. BẢNG CẤU HÌNH ĐỊNH MỨC SỨC CHỨA VẬN HÀNH (OPERATIONAL CAPACITY CONFIGS)
--- Lưu trữ cấu hình hạn mức nhận đặt chỗ và sức chứa tối đa phục vụ tính toán khả dụng.
-CREATE TABLE IF NOT EXISTS operational_capacity_configs (
+-- 1. OPTIONAL SITE RESERVATION QUOTAS
+CREATE TABLE IF NOT EXISTS reservation_quota_configs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
-    spatial_unit_id UUID NULL,
     vehicle_type VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
-    total_physical_capacity INT NOT NULL CHECK (total_physical_capacity >= 0),
-    max_reservation_quota INT NOT NULL CHECK (max_reservation_quota >= 0 AND max_reservation_quota <= total_physical_capacity),
+    max_reservation_quota INT NOT NULL CONSTRAINT ck_reservation_quota_nonnegative CHECK (max_reservation_quota >= 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE NULLS NOT DISTINCT (site_id, spatial_unit_id, vehicle_type)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_op_capacity_site ON operational_capacity_configs(site_id, vehicle_type);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_reservation_quota_scope
+    ON reservation_quota_configs(tenant_id, site_id, vehicle_type);
 
 -- 2. BẢNG CHÍNH SÁCH VẬN HÀNH (OPERATIONAL POLICIES)
 -- Quản lý các tham số cửa sổ thời gian (bounds) theo chuẩn SRS v1.0
@@ -289,26 +257,23 @@ CREATE TABLE IF NOT EXISTS reservations (
     vehicle_id UUID,
     terms_id UUID REFERENCES reservation_terms(id),
     terms_version TEXT,
+    quote_id UUID UNIQUE,
+    quote_valid_until TIMESTAMPTZ,
+    tariff_version TEXT,
+    coverage_version TEXT,
+    is_covered BOOLEAN,
+    covered_amount NUMERIC(18,2),
+    zero_receipt_id UUID UNIQUE,
     selected_payment_method TEXT,
     booked_amount NUMERIC(18,2) CHECK (booked_amount >= 0),
     deposit_amount NUMERIC(18,2) CHECK (deposit_amount >= 0),
     currency TEXT,
     payment_order_id UUID UNIQUE,
-    order_provisioning_state TEXT NOT NULL DEFAULT 'NOT_REQUIRED'
-        CHECK (order_provisioning_state IN ('NOT_REQUIRED', 'PENDING', 'IN_PROGRESS', 'UNKNOWN', 'CREATED', 'CLOSED_NO_ORDER')),
-    order_provisioning_next_action_at TIMESTAMPTZ,
-    order_provisioning_attempts INT NOT NULL DEFAULT 0 CHECK (order_provisioning_attempts >= 0),
-    order_provisioning_code TEXT,
-    zero_price_acceptance_state TEXT NOT NULL DEFAULT 'NOT_REQUIRED'
-        CHECK (zero_price_acceptance_state IN ('NOT_REQUIRED', 'PENDING', 'IN_PROGRESS', 'UNKNOWN', 'ACCEPTED', 'REJECTED')),
-    zero_price_acceptance_next_action_at TIMESTAMPTZ,
-    zero_price_acceptance_attempts INT NOT NULL DEFAULT 0 CHECK (zero_price_acceptance_attempts >= 0),
-    zero_price_acceptance_code TEXT,
     confirmation_state TEXT NOT NULL DEFAULT 'AWAITING_COLLECTION'
-        CHECK (confirmation_state IN ('AWAITING_COLLECTION', 'AWAITING_ZERO_PRICE_ACCEPTANCE', 'PENDING', 'CONFIRMED', 'NO_ENTITLEMENT', 'RECONCILIATION_REQUIRED')),
-    confirmation_next_action_at TIMESTAMPTZ,
+        CHECK (confirmation_state IN ('AWAITING_COLLECTION', 'CONFIRMED', 'NO_ENTITLEMENT')),
     confirmation_code TEXT,
     collection_id UUID UNIQUE,
+    collection_fingerprint TEXT,
     confirmation_effect_id UUID UNIQUE,
     confirmation_evaluated_at TIMESTAMPTZ,
     claim_end_time TIMESTAMPTZ,
@@ -328,7 +293,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     confirmed_at TIMESTAMPTZ,
     accepted_operational_policy_snapshot JSONB NULL CHECK (jsonb_typeof(accepted_operational_policy_snapshot) = 'object'),
     status VARCHAR(50) NOT NULL DEFAULT 'PENDING_PAYMENT' 
-        CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'UNFULFILLABLE')),
+        CHECK (status IN ('PENDING_PAYMENT', 'CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED', 'EXPIRED', 'NO_SHOW', 'CANCELLED', 'INVALIDATED', 'UNFULFILLABLE')),
     hold_expires_at TIMESTAMPTZ,
     cancelled_at TIMESTAMPTZ,
     accepted_pricing_snapshot JSONB,
@@ -336,14 +301,22 @@ CREATE TABLE IF NOT EXISTS reservations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (expected_end_time > expected_start_time),
     CHECK (claim_end_time IS NULL OR claim_end_time >= expected_end_time),
-    CHECK (request_id IS NULL OR (vehicle_id IS NOT NULL AND normalized_plate IS NOT NULL AND
-        terms_id IS NOT NULL AND terms_version IS NOT NULL AND booked_amount IS NOT NULL AND
-        deposit_amount IS NOT NULL AND currency IS NOT NULL AND currency = 'VND' AND accepted_pricing_snapshot IS NOT NULL AND
-        accepted_operational_policy_snapshot IS NOT NULL)),
+    CHECK (request_id IS NULL OR (normalized_plate IS NOT NULL AND booked_amount IS NOT NULL AND
+        deposit_amount IS NOT NULL AND currency IS NOT NULL AND currency = 'VND' AND accepted_operational_policy_snapshot IS NOT NULL AND
+        ((quote_id IS NULL AND vehicle_id IS NOT NULL AND terms_id IS NOT NULL AND terms_version IS NOT NULL AND accepted_pricing_snapshot IS NOT NULL)
+         OR (quote_id IS NOT NULL AND vehicle_id IS NULL AND terms_id IS NULL AND terms_version IS NULL AND accepted_pricing_snapshot IS NULL
+             AND quote_valid_until IS NOT NULL AND created_at < quote_valid_until
+             AND coverage_version IS NOT NULL AND tariff_version IS NOT NULL AND selected_payment_method IS NOT NULL
+             AND target_slot_id IS NOT NULL AND
+             ((deposit_amount > 0 AND zero_receipt_id IS NULL AND hold_expires_at IS NOT NULL AND created_at < hold_expires_at AND hold_expires_at <= expected_start_time)
+               OR (deposit_amount = 0 AND hold_expires_at IS NULL AND collection_id IS NULL AND confirmation_effect_id IS NOT NULL
+                 AND ((payment_order_id IS NULL) = (zero_receipt_id IS NULL))))
+             AND is_covered IS NOT NULL AND covered_amount IS NOT NULL AND covered_amount = CASE WHEN is_covered THEN booked_amount ELSE 0 END AND booked_amount = deposit_amount + covered_amount)))),
     CHECK (request_id IS NULL OR status NOT IN ('CONFIRMED', 'ALLOCATED', 'PARKING', 'COMPLETED') OR
         (confirmation_evaluated_at IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_at = confirmation_evaluated_at AND confirmed_at < expected_start_time AND confirmation_effect_id IS NOT NULL)),
     CHECK (NOT (target_slot_id IS NOT NULL AND target_spatial_unit_id IS NOT NULL)),
-    CONSTRAINT no_overlapping_reservations_per_vehicle EXCLUDE USING gist (
+    CONSTRAINT no_overlapping_reservations_per_site_plate EXCLUDE USING gist (
+        site_id WITH =,
         normalized_plate WITH =,
         tstzrange(expected_start_time, COALESCE(claim_end_time, expected_end_time), '[)') WITH &&
     ) WHERE (status IN ('CONFIRMED', 'ALLOCATED', 'PARKING'))
@@ -352,15 +325,6 @@ CREATE INDEX IF NOT EXISTS idx_reservations_tenant_site ON reservations(tenant_i
 CREATE INDEX IF NOT EXISTS idx_reservations_account ON reservations(account_id);
 CREATE INDEX IF NOT EXISTS idx_reservations_status_times ON reservations(status, expected_start_time, expected_end_time);
 CREATE INDEX IF NOT EXISTS idx_reservations_plate ON reservations(normalized_plate);
-CREATE INDEX IF NOT EXISTS ix_reservations_order_provisioning_due
-    ON reservations(order_provisioning_next_action_at, id)
-    WHERE order_provisioning_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
-CREATE INDEX IF NOT EXISTS ix_reservations_no_payment_confirmation_due
-    ON reservations(confirmation_next_action_at, id)
-    WHERE deposit_amount = 0 AND confirmation_state = 'PENDING';
-CREATE INDEX IF NOT EXISTS ix_reservations_zero_price_acceptance_due
-    ON reservations(zero_price_acceptance_next_action_at, id)
-    WHERE deposit_amount = 0 AND zero_price_acceptance_state IN ('PENDING', 'UNKNOWN', 'IN_PROGRESS');
 
 -- Business enforcement evidence, not an audit repository. Future cancellation handlers
 -- write this atomically with cancellation under reservation-account:<account_id>.
@@ -493,6 +457,19 @@ CREATE TABLE IF NOT EXISTS monthly_passes (
 CREATE INDEX IF NOT EXISTS idx_monthly_passes_tenant_site ON monthly_passes(tenant_id, site_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_passes_account ON monthly_passes(account_id);
 
+-- 8A. BẢNG XE ĐƯỢC ĐĂNG KÝ GÓI (SUBSCRIBED VEHICLES)
+CREATE TABLE IF NOT EXISTS subscribed_vehicles (
+    subscription_id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    license_plate VARCHAR(50) NOT NULL,
+    vehicle_type VARCHAR(50) NOT NULL
+        CHECK (vehicle_type IN ('CAR', 'MOTORCYCLE', 'OVERSIZED')),
+    transaction_id UUID NOT NULL,
+    active_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expire_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 9. BẢNG SỰ CỐ VẬN HÀNH (OPERATIONAL INCIDENTS)
 CREATE TABLE IF NOT EXISTS operational_incidents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -568,3 +545,241 @@ CREATE TABLE IF NOT EXISTS structure_release_receipts (
 -- Direct SQL, bulk writes, direct DbContext saves and cascades bypass these C# safeguards.
 -- confirmed_at records history only; it is NOT evidence that confirmation committed before booking start.
 -- CREATE IF NOT EXISTS does not remove triggers or upgrade columns in a previously deployed database.
+
+-- Quartz.NET v4.5.0 standard PostgreSQL store (database/tables/tables_postgres.sql).
+CREATE TABLE IF NOT EXISTS qrtz_job_details
+  (
+    sched_name TEXT NOT NULL,
+    job_name TEXT NOT NULL,
+    job_group TEXT NOT NULL,
+    description TEXT NULL,
+    job_class_name TEXT NOT NULL,
+    is_durable BOOL NOT NULL,
+    is_nonconcurrent BOOL NOT NULL,
+    is_update_data BOOL NOT NULL,
+    requests_recovery BOOL NOT NULL,
+    job_data BYTEA NULL,
+    PRIMARY KEY (sched_name, job_name, job_group)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_triggers
+  (
+    sched_name TEXT NOT NULL,
+    trigger_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    job_name TEXT NOT NULL,
+    job_group TEXT NOT NULL,
+    description TEXT NULL,
+    next_fire_time BIGINT NULL,
+    prev_fire_time BIGINT NULL,
+    priority INTEGER NULL,
+    trigger_state TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,
+    start_time BIGINT NOT NULL,
+    end_time BIGINT NULL,
+    calendar_name TEXT NULL,
+    misfire_instr SMALLINT NULL,
+    misfire_orig_fire_time BIGINT NULL,
+    execution_group VARCHAR(200) NULL,
+    preferred_node VARCHAR(200) NULL,
+    preferred_node_auto BOOL NOT NULL DEFAULT FALSE,
+    retry_policy VARCHAR(250) NULL,
+    retry_attempt INTEGER NULL,
+    continues_trigger_name TEXT NULL,
+    continues_trigger_group TEXT NULL,
+    continuation_condition INTEGER NULL,
+    overlap_policy INTEGER NULL,
+    pause_reason VARCHAR(250) NULL,
+    paused_by VARCHAR(200) NULL,
+    paused_at BIGINT NULL,
+    job_data BYTEA NULL,
+    PRIMARY KEY (sched_name, trigger_name, trigger_group),
+    FOREIGN KEY (sched_name, job_name, job_group)
+      REFERENCES qrtz_job_details (sched_name, job_name, job_group)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_simple_triggers
+  (
+    sched_name TEXT NOT NULL,
+    trigger_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    repeat_count BIGINT NOT NULL,
+    repeat_interval BIGINT NOT NULL,
+    times_triggered BIGINT NOT NULL,
+    PRIMARY KEY (sched_name, trigger_name, trigger_group),
+    FOREIGN KEY (sched_name, trigger_name, trigger_group)
+      REFERENCES qrtz_triggers (sched_name, trigger_name, trigger_group)
+      ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_simprop_triggers
+  (
+    sched_name TEXT NOT NULL,
+    trigger_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    str_prop_1 TEXT NULL,
+    str_prop_2 TEXT NULL,
+    str_prop_3 TEXT NULL,
+    int_prop_1 INTEGER NULL,
+    int_prop_2 INTEGER NULL,
+    long_prop_1 BIGINT NULL,
+    long_prop_2 BIGINT NULL,
+    dec_prop_1 NUMERIC NULL,
+    dec_prop_2 NUMERIC NULL,
+    bool_prop_1 BOOL NULL,
+    bool_prop_2 BOOL NULL,
+    time_zone_id TEXT NULL,
+    PRIMARY KEY (sched_name, trigger_name, trigger_group),
+    FOREIGN KEY (sched_name, trigger_name, trigger_group)
+      REFERENCES qrtz_triggers (sched_name, trigger_name, trigger_group)
+      ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_cron_triggers
+  (
+    sched_name TEXT NOT NULL,
+    trigger_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    cron_expression TEXT NOT NULL,
+    time_zone_id TEXT,
+    PRIMARY KEY (sched_name, trigger_name, trigger_group),
+    FOREIGN KEY (sched_name, trigger_name, trigger_group)
+      REFERENCES qrtz_triggers (sched_name, trigger_name, trigger_group)
+      ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_blob_triggers
+  (
+    sched_name TEXT NOT NULL,
+    trigger_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    blob_data BYTEA NULL,
+    PRIMARY KEY (sched_name, trigger_name, trigger_group),
+    FOREIGN KEY (sched_name, trigger_name, trigger_group)
+      REFERENCES qrtz_triggers (sched_name, trigger_name, trigger_group)
+      ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_calendars
+  (
+    sched_name TEXT NOT NULL,
+    calendar_name TEXT NOT NULL,
+    calendar BYTEA NOT NULL,
+    PRIMARY KEY (sched_name, calendar_name)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_paused_trigger_grps
+  (
+    sched_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    pause_reason VARCHAR(250) NULL,
+    paused_by VARCHAR(200) NULL,
+    paused_at BIGINT NULL,
+    PRIMARY KEY (sched_name, trigger_group)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_paused_job_grps
+  (
+    sched_name TEXT NOT NULL,
+    job_group TEXT NOT NULL,
+    pause_reason VARCHAR(250) NULL,
+    paused_by VARCHAR(200) NULL,
+    paused_at BIGINT NULL,
+    PRIMARY KEY (sched_name, job_group)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_fired_triggers
+  (
+    sched_name TEXT NOT NULL,
+    entry_id TEXT NOT NULL,
+    trigger_name TEXT NOT NULL,
+    trigger_group TEXT NOT NULL,
+    instance_name TEXT NOT NULL,
+    fired_time BIGINT NOT NULL,
+    sched_time BIGINT NOT NULL,
+    priority INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    job_name TEXT NULL,
+    job_group TEXT NULL,
+    is_nonconcurrent BOOL NOT NULL,
+    requests_recovery BOOL NULL,
+    execution_group VARCHAR(200) NULL,
+    progress INTEGER NULL,
+    progress_message VARCHAR(250) NULL,
+    PRIMARY KEY (sched_name, entry_id)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_scheduler_state
+  (
+    sched_name TEXT NOT NULL,
+    instance_name TEXT NOT NULL,
+    last_checkin_time BIGINT NOT NULL,
+    checkin_interval BIGINT NOT NULL,
+    PRIMARY KEY (sched_name, instance_name)
+);
+
+CREATE TABLE IF NOT EXISTS qrtz_locks
+  (
+    sched_name TEXT NOT NULL,
+    lock_name TEXT NOT NULL,
+    PRIMARY KEY (sched_name, lock_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_qrtz_j_g_n ON qrtz_job_details (sched_name, job_group, job_name);
+CREATE INDEX IF NOT EXISTS idx_qrtz_t_j ON qrtz_triggers (sched_name, job_name, job_group);
+CREATE INDEX IF NOT EXISTS idx_qrtz_t_c ON qrtz_triggers (sched_name, calendar_name);
+CREATE INDEX IF NOT EXISTS idx_qrtz_t_g_n ON qrtz_triggers (sched_name, trigger_group, trigger_name);
+CREATE INDEX IF NOT EXISTS idx_qrtz_t_nft_st ON qrtz_triggers (sched_name, trigger_state, next_fire_time asc, priority desc, misfire_instr);
+CREATE INDEX IF NOT EXISTS idx_qrtz_ft_inst_job_req_rcvry ON qrtz_fired_triggers (sched_name, instance_name, requests_recovery);
+CREATE INDEX IF NOT EXISTS idx_qrtz_ft_j_g ON qrtz_fired_triggers (sched_name, job_name, job_group);
+CREATE INDEX IF NOT EXISTS idx_qrtz_ft_t_g ON qrtz_fired_triggers (sched_name, trigger_name, trigger_group);
+
+-- 13. BẢNG ĐỊNH NGHĨA GÓI ĐỖ XE THEO THÁNG / NĂM (SPARK-331 - WHEN_SPACE_AVAILABLE ONLY)
+-- Tách biệt hoàn toàn khỏi giá & điều khoản hoàn tiền bên PaymentDb; không giữ chỗ hay chiếm công suất.
+CREATE TABLE IF NOT EXISTS parking_pass_plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    entitlement_type VARCHAR(50) NOT NULL DEFAULT 'WHEN_SPACE_AVAILABLE'
+        CHECK (entitlement_type = 'WHEN_SPACE_AVAILABLE'),
+    is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT', 'PUBLISHED', 'DISABLED')),
+    active_revision INT NOT NULL DEFAULT 0 CHECK (active_revision >= 0),
+    draft_revision INT NULL,
+    draft_payload JSONB NULL,
+    created_by UUID NOT NULL,
+    updated_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, product_type)
+);
+CREATE INDEX IF NOT EXISTS idx_parking_pass_plans_site ON parking_pass_plans(site_id, is_enabled);
+
+-- Snapshot bất biến mỗi lần Owner Publish gói (chỉ INSERT, không UPDATE nội dung revision đã phát hành)
+CREATE TABLE IF NOT EXISTS parking_pass_plan_revisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_id UUID NOT NULL REFERENCES parking_pass_plans(id) ON DELETE RESTRICT,
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    revision_number INT NOT NULL CHECK (revision_number >= 1),
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    zone_id UUID NULL,
+    vehicle_types JSONB NOT NULL,
+    ordinary_coverage_rules JSONB NOT NULL,
+    contract_timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_to TIMESTAMPTZ NULL,
+    publish_note TEXT NULL,
+    idempotency_key VARCHAR(128) NULL,
+    idempotency_payload_hash VARCHAR(128) NULL,
+    published_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (plan_id, revision_number)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pass_plan_rev_idempotency
+    ON parking_pass_plan_revisions(plan_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pass_plan_rev_site
+    ON parking_pass_plan_revisions(site_id, product_type, revision_number DESC);

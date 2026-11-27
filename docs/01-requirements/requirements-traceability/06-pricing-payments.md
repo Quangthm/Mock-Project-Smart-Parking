@@ -26,3 +26,7 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | Provider verification, UNKNOWN/replay, late money and refund capability evidence (existing rules retained) | FR-PAY-04/05/06/07; BR-PAY-04, BR-REF-01; US-D02, US-D06; UC-PAY-01/02 | AC-069–AC-070, AC-072; existing AC-005–007, AC-030/032/044/045 |
 
 [PAY-01 decision](../../05-project-management/decision-log/2026-10-13-payos-priority-pay-01.md). Existing matrix ID associations remain valid; no new FR/BR/UC/US identifiers are added.
+
+## Reservation amendment trace
+
+The [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) preserves existing IDs and associations. [Reservation scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md#admission-realtime-and-commercial-acceptance) trace FR-PAY-03/04/05 and FR-RES-04 to the immutable quote, verified paid collection, future zero-amount order/receipt and unknown-effect recovery. Implementation and execution evidence are pending.

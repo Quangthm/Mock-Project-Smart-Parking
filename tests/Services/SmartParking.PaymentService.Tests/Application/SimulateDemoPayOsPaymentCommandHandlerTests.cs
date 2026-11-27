@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SmartParking.PaymentService.API.Controllers;
+using SmartParking.PaymentService.Application.Reservations;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
 using SmartParking.PaymentService.Application.Usecase.SimulateDemoPayment;
 using SmartParking.PaymentService.Domain.Entities;
@@ -31,7 +32,12 @@ public class SimulateDemoPayOsPaymentCommandHandlerTests
     private (SimulateDemoPayOsPaymentCommandHandler Handler, StubMediator Mediator) CreateSystem(
         string checksumKey = "demo-checksum-key")
     {
-        var payOsOptions = Options.Create(new PayOsOptions { ChecksumKey = checksumKey });
+        var payOsOptions = Options.Create(new PayOsOptions
+        {
+            ClientId = "demo-client-id",
+            ApiKey = "demo-api-key",
+            ChecksumKey = checksumKey
+        });
         var payOsAdapter = new PayOsAdapter(new HttpClient(), payOsOptions, NullLogger<PayOsAdapter>.Instance);
         var simulator = new PayOsWebhookSimulatorAdapter(payOsOptions);
 
@@ -41,6 +47,13 @@ public class SimulateDemoPayOsPaymentCommandHandlerTests
             _orderRepo,
             _txRepo,
             _invoiceRepo,
+            new ReviewedPayOsSettlement(
+                _orderRepo,
+                _txRepo,
+                new FakeRefundRequestRepository(),
+                _eventPublisher,
+                _uow,
+                NullLogger<ReviewedPayOsSettlement>.Instance),
             _eventPublisher,
             _uow,
             NullLogger<ProcessPayOsWebhookCommandHandler>.Instance);
@@ -50,6 +63,7 @@ public class SimulateDemoPayOsPaymentCommandHandlerTests
         var handler = new SimulateDemoPayOsPaymentCommandHandler(
             _orderRepo,
             _txRepo,
+            _uow,
             simulator,
             _actor,
             mediator,
@@ -110,6 +124,46 @@ public class SimulateDemoPayOsPaymentCommandHandlerTests
         Assert.Equal(order.Id, evt.PaymentOrderId);
         Assert.Equal(30000m, evt.Amount);
         Assert.Equal("51A-123.45", evt.PlateNumber);
+    }
+
+    [Fact]
+    public async Task Handle_ReviewedReservationOrderWithoutQr_SettlesThroughReviewedSettlement()
+    {
+        var driverId = Guid.NewGuid();
+        var reservationId = Guid.NewGuid();
+        _actor.AccountId = driverId;
+        _actor.UserId = driverId;
+        _actor.Role = "DRIVER";
+
+        var order = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            SiteId = Guid.NewGuid(),
+            AccountId = driverId,
+            OrderCode = "1795664807777",
+            OrderType = OrderType.RESERVATION_FEE,
+            ReferenceType = ReferenceType.RESERVATION,
+            ReferenceId = reservationId,
+            ReviewedMethod = nameof(PaymentMethod.PAYOS),
+            ReviewedCurrency = "VND",
+            Amount = 35000m,
+            FinalAmount = 35000m,
+            Status = PaymentOrderStatus.PENDING,
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(10)
+        };
+        _orderRepo.Orders.Add(order);
+
+        var (handler, _) = CreateSystem();
+        var result = await handler.Handle(new SimulateDemoPayOsPaymentCommand(order.Id), CancellationToken.None);
+
+        Assert.Equal("SUCCESS", result.Status);
+        Assert.Equal($"DEMO-LINK-{order.Id:N}", result.GatewayTransactionId);
+        Assert.Equal(PaymentOrderStatus.PAID, order.Status);
+        var evt = Assert.IsType<PaymentSucceededV1>(Assert.Single(_eventPublisher.PublishedEvents));
+        Assert.Equal("RESERVATION", evt.ReferenceType);
+        Assert.Equal(reservationId, evt.ReferenceId);
+        Assert.Equal(35000m, evt.Amount);
     }
 
     [Fact]
@@ -210,7 +264,7 @@ public class SimulateDemoPayOsPaymentCommandHandlerTests
         _orderRepo.Orders.Add(order);
         _invoiceRepo.Invoices.Add(invoice);
 
-        var (handler, _) = CreateSystem(checksumKey: string.Empty);
+        var (handler, _) = CreateSystem(checksumKey: "demo-session-checksum-key");
         var result = await handler.Handle(new SimulateDemoPayOsPaymentCommand(order.Id), CancellationToken.None);
 
         Assert.Equal("SUCCESS", result.Status);

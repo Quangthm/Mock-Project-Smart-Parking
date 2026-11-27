@@ -1,4 +1,6 @@
+using SmartParking.Contracts.ReservationPayments;
 using MassTransit;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using QuestPDF.Infrastructure;
@@ -26,6 +28,11 @@ public static class InfrastructureDependencyInjection
         services.AddSingleton<IPdfInvoiceGenerator, QuestPdfInvoiceGenerator>();
 
         var reservationServiceBaseUrl = configuration["Services:OperationService:BaseUrl"] ?? "http://localhost:5002/";
+        var userServiceBaseUrl = configuration["Services:User"] ?? "http://localhost:5035/";
+        var facilityServiceBaseUrl = configuration["Services:Parking"]
+            ?? configuration["Services:Facility"]
+            ?? "http://localhost:5045/";
+        var internalServiceKey = configuration["Services:Key"];
 
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
@@ -34,6 +41,29 @@ public static class InfrastructureDependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentActor, CurrentActorAdapter>();
+
+        services.AddHttpClient("UserServiceClient", client =>
+        {
+            client.BaseAddress = new Uri(userServiceBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+        services.AddHttpClient("FacilityServiceClient", client =>
+        {
+            client.BaseAddress = new Uri(facilityServiceBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+        services.AddScoped<IOwnerSiteAccessPort>(provider =>
+        {
+            var factory = provider.GetRequiredService<IHttpClientFactory>();
+            var httpContextAccessor = provider.GetRequiredService<IHttpContextAccessor>();
+            return new OwnerSiteAccessHttpAdapter(
+                factory.CreateClient("UserServiceClient"),
+                factory.CreateClient("FacilityServiceClient"),
+                httpContextAccessor,
+                internalServiceKey);
+        });
 
         services.AddHttpClient<IReservationPricingSnapshotPort, ReservationSnapshotHttpAdapter>(client =>
         {
@@ -51,8 +81,14 @@ public static class InfrastructureDependencyInjection
 
         var useInMemory = configuration.GetValue<bool>("RabbitMQ:UseInMemory");
 
+        services.AddScoped<SmartParking.PaymentService.Application.Reservations.IReservationFinancialNotifications, ReservationFinancialNotifications>();
         services.AddMassTransit(x =>
         {
+            if (configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
+            {
+                x.AddConsumer<EnsureReservationOrderConsumer>().Endpoint(e => e.Name = ReservationPaymentEndpoints.EnsureOrder);
+                x.AddConsumer<ReservationDispositionConsumer>().Endpoint(e => e.Name = ReservationPaymentEndpoints.Disposition);
+            }
             configureOutbox?.Invoke(x);
 
             if (useInMemory)

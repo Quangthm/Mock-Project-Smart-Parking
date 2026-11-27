@@ -4,8 +4,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using SmartParking.OperationService.Application.PassPlans.Options;
+using SmartParking.OperationService.Application.PassPlans.Ports;
 using SmartParking.OperationService.Infrastructure.Clients;
 using SmartParking.OperationService.Infrastructure.Outbox;
+using SmartParking.OperationService.Infrastructure.PassPlans;
 using SmartParking.OperationService.Persistence;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Infrastructure.Reservations;
@@ -39,24 +42,20 @@ public static class InfrastructureDependencyInjection
 
         var serviceKey = configuration["Services:Key"]
             ?? throw new InvalidOperationException("Configure Services:Key.");
-        services.AddHttpClient<IReservationVehicleOwner, ReservationVehicleClient>(client =>
-        {
-            client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");
-            client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
-        });
-        services.AddHttpClient<IReservationCommercialOwner, ReservationCommercialClient>(client =>
+        services.AddHttpClient<ReservationCommercialClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
             client.Timeout = TimeSpan.FromSeconds(15);
         });
+        services.AddScoped<IReservationCommercialOwner>(p => p.GetRequiredService<ReservationCommercialClient>());
+        if (configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
+            services.AddScoped<IReservationQuoteOwner>(p => p.GetRequiredService<ReservationCommercialClient>());
         services.AddHttpClient<ReservationFacilityClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
             client.Timeout = TimeSpan.FromSeconds(10);
         }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<IReservationFacilityOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
-        services.AddScoped<IReservationFacilityDependencyOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
         services.AddHttpClient<ParkingGateSlotClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Parking"]
@@ -77,6 +76,23 @@ public static class InfrastructureDependencyInjection
             provider.GetRequiredService<CheckoutPaymentClient>());
 
         services.AddScoped<Application.Policies.Ports.ISiteOwnershipValidator, Policies.SiteOwnershipValidator>();
+
+        services.Configure<PassPlanDefaultsOptions>(configuration.GetSection(PassPlanDefaultsOptions.SectionName));
+        services.AddHttpClient<PassPlanFacilityScopeAdapter>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<IPassPlanFacilityScopePort>(provider =>
+            provider.GetRequiredService<PassPlanFacilityScopeAdapter>());
+
+        services.AddHttpClient<PaymentPassTermsHttpAdapter>(client =>
+        {
+            client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<IPaymentPassTermsPort>(provider =>
+            provider.GetRequiredService<PaymentPassTermsHttpAdapter>());
 
         AddOutboxPublisher(services, configuration);
 
@@ -102,22 +118,5 @@ public static class InfrastructureDependencyInjection
         });
         services.AddSingleton<IOutboxEventPublisher, RabbitMqOutboxPublisher>();
         services.AddHostedService<OccupancyOutboxWorker>();
-    }
-}
-
-internal sealed class DisabledOutboxEventPublisher(ILogger<DisabledOutboxEventPublisher> logger) : IOutboxEventPublisher
-{
-    private static bool _warned;
-
-    public string Name => "disabled";
-
-    public Task PublishAsync(OutboxMessage message, CancellationToken cancellationToken)
-    {
-        if (!_warned)
-        {
-            _warned = true;
-            logger.LogWarning("Occupancy outbox publisher disabled: RabbitMq:ConnectionString is not configured. Events remain unpublished.");
-        }
-        return Task.CompletedTask;
     }
 }

@@ -1,38 +1,42 @@
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr"
+import { HubConnectionBuilder, HttpTransportType, LogLevel } from "@microsoft/signalr"
 import { authApi, authExpiredEvent, authRefreshedEvent, ensureAccessToken } from "./authApi"
 
 const serverUrl = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5035").replace(/\/$/, "")
+const retryDelays = [2_000, 10_000, 30_000]
 
-const listeners = new Set<() => void>()
-let stopShared: (() => void) | undefined
 let stopping: Promise<void> | undefined
 
-export function watchOperators(onChanged: () => void) {
-  // Each registration owns its cleanup, even if two consumers use the same callback.
-  const listener = () => onChanged()
-  listeners.add(listener)
-  stopShared ??= startOperators(() => listeners.forEach(notify => notify()))
-  return () => {
-    if (!listeners.delete(listener) || listeners.size) return
-    stopShared?.()
-    stopShared = undefined
+function authorizationFailure(error: unknown): 401 | 403 | undefined {
+  if (!error || typeof error !== "object") return undefined
+  const failure = error as { status?: number; statusCode?: number; message?: string; innerErrors?: unknown[] }
+  const status = failure.statusCode ?? failure.status
+  if (status === 401 || status === 403) return status
+  if (/\b(forbidden|403)\b/i.test(failure.message ?? "")) return 403
+  if (/\b(unauthorized|unauthenticated|401)\b/i.test(failure.message ?? "")) return 401
+  if (Array.isArray(failure.innerErrors)) {
+    return failure.innerErrors.map(authorizationFailure).find(status => status !== undefined)
   }
 }
 
-function startOperators(onChanged: () => void) {
+export function watchOperators(onChanged: () => void, onDenied: () => void, onUnavailable?: () => void) {
   let stopped = false
+  let blocked = false
+  let connectedAt: number | undefined
+  let attempts = 0
   let retry: ReturnType<typeof setTimeout> | undefined
   let invalidation: ReturnType<typeof setTimeout> | undefined
   let starting: Promise<void> | undefined
   const connection = new HubConnectionBuilder()
-    .withUrl(serverUrl + "/hubs/operators", { accessTokenFactory: ensureAccessToken, withCredentials: false })
+    .withUrl(serverUrl + "/hubs/operators", {
+      accessTokenFactory: ensureAccessToken, withCredentials: false, transport: HttpTransportType.WebSockets,
+    })
     .configureLogging(LogLevel.None)
     .build()
   const invalidate = () => {
-    if (stopped || invalidation !== undefined) return
+    if (stopped || blocked || invalidation !== undefined) return
     invalidation = setTimeout(() => {
       invalidation = undefined
-      if (!stopped) onChanged()
+      if (!stopped && !blocked) onChanged()
     }, 250)
   }
   connection.on("OperatorsChanged", invalidate)
@@ -40,42 +44,65 @@ function startOperators(onChanged: () => void) {
     clearTimeout(retry)
     retry = undefined
   }
-  function scheduleRetry(delay: number) {
+  function block() {
+    blocked = true
     clearRetry()
-    if (stopped || authApi.expiresAt() <= Date.now() + 30_000) return
-    retry = setTimeout(() => {
+    clearTimeout(invalidation)
+  }
+  function handleAuthorizationFailure(error: unknown) {
+    const status = authorizationFailure(error)
+    if (!status) return false
+    block()
+    if (status === 403) onDenied()
+    else onUnavailable?.()
+    return true
+  }
+  function scheduleRetry() {
+    if (stopped || blocked || retry !== undefined || authApi.expiresAt() <= Date.now() + 30_000) return
+    if (attempts >= retryDelays.length) { onUnavailable?.(); return }
+    const delay = retryDelays[attempts++]
+    const timer = setTimeout(() => {
+      if (retry !== timer) return
       retry = undefined
       if (authApi.expiresAt() > Date.now() + 30_000) void connect()
     }, delay)
+    retry = timer
   }
   async function connect() {
-    if (stopped || starting || connection.state !== "Disconnected" || document.visibilityState === "hidden" ||
+    if (stopped || blocked || starting || connection.state !== "Disconnected" || document.visibilityState === "hidden" ||
       authApi.expiresAt() <= Date.now() + 30_000) return
     if (stopping) {
       await stopping
-      if (stopped || starting || connection.state !== "Disconnected") return
+      if (stopped || blocked || starting || connection.state !== "Disconnected" ||
+        authApi.expiresAt() <= Date.now() + 30_000) return
     }
     clearRetry()
     starting = connection.start().then(() => {
       clearRetry()
-      if (!stopped) onChanged()
-    }).catch(() => {
-      scheduleRetry(10_000)
+      if (stopped || blocked) return
+      const reconnecting = connectedAt !== undefined || attempts > 0
+      connectedAt = Date.now()
+      if (reconnecting) invalidate()
+    }).catch((error: unknown) => {
+      if (stopped || blocked) return
+      if (!handleAuthorizationFailure(error)) scheduleRetry()
     }).finally(() => { starting = undefined })
     await starting
   }
   // Reconnect after the next authenticated activity/refresh; never refresh solely
   // to keep an idle subscription alive. Server closes connections at token expiry.
-  connection.onclose(() => {
-    scheduleRetry(2_000)
+  connection.onclose((error?: Error) => {
+    if (stopped || blocked) return
+    if (handleAuthorizationFailure(error)) return
+    // A websocket can upgrade successfully and then be rejected by the hub.
+    if (connectedAt !== undefined && Date.now() - connectedAt >= 60_000) attempts = 0
+    scheduleRetry()
   })
   const resume = () => {
-    if (connection.state === "Disconnected") void connect()
+    if (attempts < retryDelays.length) void connect()
   }
   const expire = () => {
-    clearRetry()
-    clearTimeout(invalidation)
-    invalidation = undefined
+    block()
     void connection.stop().catch(() => {})
   }
   window.addEventListener(authRefreshedEvent, resume)

@@ -1,10 +1,12 @@
 using System.Security.Cryptography;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.PaymentService.API.Authentication;
+using SmartParking.PaymentService.API.Extensions;
 using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.API;
 using SmartParking.PaymentService.Application;
@@ -19,7 +21,17 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    });
+    })
+    .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
+        new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(new
+        {
+            success = false,
+            code = "VALIDATION_ERROR",
+            message = "Validation failed for the requested operation.",
+            errors = context.ModelState.Where(field => field.Value?.Errors.Count > 0)
+                .Select(field => new { field = field.Key, code = "INVALID_VALUE", message = "The value is invalid." }).ToArray(),
+            traceId = Activity.Current?.Id ?? context.HttpContext.TraceIdentifier
+        }));
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
     .WithOrigins(
@@ -32,11 +44,36 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
 
 if (builder.Environment.IsDevelopment())
 {
+    const string devOrJwtScheme = "SmartParkingDevOrJwt";
+    var hasJwks = !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:JwksUri"]);
+
     builder.Services.AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = DevAuthenticationHandler.SchemeName;
-        options.DefaultChallengeScheme = DevAuthenticationHandler.SchemeName;
-    }).AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
+        options.DefaultAuthenticateScheme = devOrJwtScheme;
+        options.DefaultChallengeScheme = devOrJwtScheme;
+    })
+    .AddPolicyScheme(devOrJwtScheme, devOrJwtScheme, options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            if (hasJwks &&
+                context.Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                var header = authHeader.ToString();
+                if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var token = header["Bearer ".Length..].Trim();
+                    if (token.Count(c => c == '.') == 2)
+                    {
+                        return UserJwtAuthentication.Scheme;
+                    }
+                }
+            }
+
+            return DevAuthenticationHandler.SchemeName;
+        };
+    })
+    .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
 }
 else
 {
@@ -85,6 +122,8 @@ else
 }
 
 builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
+builder.Services.AddUserJwtAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddPaymentApiErrorResponses();
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
@@ -95,7 +134,8 @@ builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaym
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseRouting();
+app.UsePaymentApiErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.NotificationAuditService.API.Common;
 using SmartParking.NotificationAuditService.Application.Common.Interfaces.Services;
 using SmartParking.NotificationAuditService.Application.Usecase.Notifications.Commands.MarkAllNotificationsRead;
 using SmartParking.NotificationAuditService.Application.Usecase.Notifications.Commands.MarkNotificationRead;
@@ -35,7 +36,10 @@ public class NotificationsController : ControllerBase
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Unauthorized(new { success = false, message = "Authentication is required to access notifications." });
+            return new NotificationApiErrorActionResult(NotificationErrorResponse.Error(
+                StatusCodes.Status401Unauthorized,
+                "UNAUTHORIZED",
+                "Authentication is required to access notifications."));
         }
 
         var query = new GetDriverNotificationsQuery
@@ -60,7 +64,10 @@ public class NotificationsController : ControllerBase
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Unauthorized(new { success = false, message = "Authentication is required to view notification details." });
+            return new NotificationApiErrorActionResult(NotificationErrorResponse.Error(
+                StatusCodes.Status401Unauthorized,
+                "UNAUTHORIZED",
+                "Authentication is required to view notification details."));
         }
 
         var query = new GetNotificationByIdQuery
@@ -85,14 +92,20 @@ public class NotificationsController : ControllerBase
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Unauthorized(new { success = false, message = "Authentication is required to mark notification as read." });
+            return new NotificationApiErrorActionResult(NotificationErrorResponse.Error(
+                StatusCodes.Status401Unauthorized,
+                "UNAUTHORIZED",
+                "Authentication is required to mark notification as read."));
         }
 
         var command = new MarkNotificationReadCommand(id, _currentUserService.UserId.Value);
         var result = await _mediator.Send(command, cancellationToken);
         if (result == null)
         {
-            return NotFound(new { success = false, message = $"Notification with ID '{id}' was not found." });
+            return new NotificationApiErrorActionResult(NotificationErrorResponse.Error(
+                StatusCodes.Status404NotFound,
+                "NOT_FOUND",
+                $"Notification with ID '{id}' was not found."));
         }
 
         return Ok(new
@@ -107,7 +120,10 @@ public class NotificationsController : ControllerBase
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Unauthorized(new { success = false, message = "Authentication is required to mark all notifications as read." });
+            return new NotificationApiErrorActionResult(NotificationErrorResponse.Error(
+                StatusCodes.Status401Unauthorized,
+                "UNAUTHORIZED",
+                "Authentication is required to mark all notifications as read."));
         }
 
         var command = new MarkAllNotificationsReadCommand(_currentUserService.UserId.Value);
@@ -132,7 +148,10 @@ public class NotificationsController : ControllerBase
     {
         if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
         {
-            return Unauthorized(new { success = false, message = "Authentication is required to retry notification delivery." });
+            return new NotificationApiErrorActionResult(NotificationErrorResponse.Error(
+                StatusCodes.Status401Unauthorized,
+                "UNAUTHORIZED",
+                "Authentication is required to retry notification delivery."));
         }
 
         var command = new RetryNotificationDeliveryCommand

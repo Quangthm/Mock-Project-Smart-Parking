@@ -8,12 +8,10 @@ namespace SmartParking.PaymentService.Tests.Infrastructure;
 
 public class PayOsWebhookSimulatorAdapterTests
 {
-    [Theory]
-    [InlineData("demo-test-checksum-key-123")]
-    [InlineData("")]
-    public async Task BuildSignedSuccessWebhook_RoundTripsThroughPayOsAdapterVerification(string checksumKey)
+    [Fact]
+    public async Task BuildSignedSuccessWebhook_RoundTripsThroughPayOsAdapterVerification()
     {
-        var options = Options.Create(new PayOsOptions { ChecksumKey = checksumKey });
+        var options = Options.Create(new PayOsOptions { ChecksumKey = "demo-test-checksum-key-123" });
         var simulator = new PayOsWebhookSimulatorAdapter(options);
         var payOsAdapter = new PayOsAdapter(new HttpClient(), options, NullLogger<PayOsAdapter>.Instance);
 

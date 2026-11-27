@@ -10,6 +10,7 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
 {
     public DbSet<ReservationRow> Reservations => Set<ReservationRow>();
     public DbSet<ParkingSessionRow> ParkingSessions => Set<ParkingSessionRow>();
+    public DbSet<SubscribedVehicleRow> SubscribedVehicles => Set<SubscribedVehicleRow>();
     public DbSet<SlotAllocationRow> SlotAllocations => Set<SlotAllocationRow>();
     public DbSet<SiteCapacityPoolRow> SiteCapacityPools => Set<SiteCapacityPoolRow>();
     public DbSet<StructureEditHoldRow> StructureEditHolds => Set<StructureEditHoldRow>();
@@ -18,18 +19,16 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
     public DbSet<ReservationRequest> ReservationRequests => Set<ReservationRequest>();
     public DbSet<OperationalPolicyDraftRow> OperationalPolicyDrafts => Set<OperationalPolicyDraftRow>();
     public DbSet<OutboxEventRow> OutboxEvents => Set<OutboxEventRow>();
+    public DbSet<ParkingPassPlanRow> ParkingPassPlans => Set<ParkingPassPlanRow>();
+    public DbSet<ParkingPassPlanRevisionRow> ParkingPassPlanRevisions => Set<ParkingPassPlanRevisionRow>();
+    public DbSet<SearchFacilityProjectionRow> SearchFacilityProjections => Set<SearchFacilityProjectionRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.AddTransactionalOutboxEntities();
+        modelBuilder.Entity<ReservationAdmissionState>().HasKey(x => x.CorrelationId);
+        Map<ReservationAdmissionState>(modelBuilder, "reservation_admission_sagas");
         Map<ReservationRequest>(modelBuilder, "reservation_requests");
-        Map<ReservationTerms>(modelBuilder, "reservation_terms");
-        Map<ReservationFacilityDependency>(modelBuilder, "reservation_facility_dependencies");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.OutcomeJson).HasColumnType("jsonb");
-        modelBuilder.Entity<ReservationFacilityDependency>().Property(x => x.Version).IsConcurrencyToken();
-        modelBuilder.Entity<ReservationFacilityDependency>().HasIndex(x => new { x.WorkflowId, x.Purpose }).IsUnique();
-        modelBuilder.Entity<ReservationTerms>().Property(x => x.SnapshotJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRow>().Property(x => x.AcceptedPricingSnapshot).HasColumnType("jsonb");
         Map<OperationalPolicyRow>(modelBuilder, "operational_policies");
         modelBuilder.Entity<OperationalPolicyRow>().Property(x => x.OverrideBounds).HasColumnType("jsonb");
@@ -37,7 +36,9 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         Map<OperationalPolicyDraftRow>(modelBuilder, "operational_policy_drafts");
         modelBuilder.Entity<OperationalPolicyDraftRow>().Property(x => x.DraftPayload).HasColumnType("jsonb");
         modelBuilder.Entity<OperationalPolicyDraftRow>().HasIndex(x => x.SiteId).IsUnique();
-        Map<OperationalCapacityConfig>(modelBuilder, "operational_capacity_configs");
+        Map<ReservationQuotaConfig>(modelBuilder, "reservation_quota_configs");
+        modelBuilder.Entity<ReservationQuotaConfig>().HasIndex(x => new { x.TenantId, x.SiteId, x.VehicleType })
+            .IsUnique().HasDatabaseName("uq_reservation_quota_scope");
         Map<ReservationCancellationEvidence>(modelBuilder, "reservation_cancellation_evidence");
         modelBuilder.Entity<ReservationCancellationEvidence>().Property(x => x.PolicySnapshot).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationCancellationEvidence>().HasIndex(x => x.ReservationId).IsUnique();
@@ -46,9 +47,12 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<ReservationRequest>().Property(x => x.IntentJson).HasColumnType("jsonb");
         modelBuilder.Entity<ReservationRequest>().HasIndex(x => new { x.AccountId, x.Operation, x.IdempotencyKey }).IsUnique();
         Map<ReservationRow>(modelBuilder, "reservations");
+        modelBuilder.Entity<ReservationRow>().HasIndex(x => x.QuoteId).IsUnique();
         modelBuilder.Entity<ReservationRow>().Property(x => x.Version).IsConcurrencyToken();
         Map<ParkingSessionRow>(modelBuilder, "parking_sessions");
         modelBuilder.Entity<ParkingSessionRow>().Property(x => x.Version).IsConcurrencyToken();
+        Map<SubscribedVehicleRow>(modelBuilder, "subscribed_vehicles");
+        modelBuilder.Entity<SubscribedVehicleRow>().HasKey(x => x.SubscriptionId);
         Map<SlotAllocationRow>(modelBuilder, "slot_allocations");
         Map<SiteCapacityPoolRow>(modelBuilder, "site_capacity_pools");
         Map<StructureEditHoldRow>(modelBuilder, "structure_edit_holds");
@@ -65,6 +69,20 @@ public sealed class ReservationDbContext(DbContextOptions<ReservationDbContext> 
         modelBuilder.Entity<OutboxEventRow>().Property(x => x.Payload).HasColumnType("jsonb");
         modelBuilder.Entity<OutboxEventRow>().HasIndex(x => x.SequenceNumber);
         modelBuilder.Entity<OutboxEventRow>().HasIndex(x => new { x.SiteId, x.SequenceNumber });
+
+        Map<ParkingPassPlanRow>(modelBuilder, "parking_pass_plans");
+        modelBuilder.Entity<ParkingPassPlanRow>().Property(x => x.DraftPayload).HasColumnType("jsonb");
+        modelBuilder.Entity<ParkingPassPlanRow>().HasIndex(x => new { x.SiteId, x.ProductType }).IsUnique();
+
+        Map<ParkingPassPlanRevisionRow>(modelBuilder, "parking_pass_plan_revisions");
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().Property(x => x.VehicleTypes).HasColumnType("jsonb");
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().Property(x => x.OrdinaryCoverageRules).HasColumnType("jsonb");
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().HasIndex(x => new { x.PlanId, x.RevisionNumber }).IsUnique();
+        modelBuilder.Entity<ParkingPassPlanRevisionRow>().HasIndex(x => new { x.PlanId, x.IdempotencyKey }).IsUnique()
+            .HasFilter("idempotency_key IS NOT NULL");
+
+        Map<SearchFacilityProjectionRow>(modelBuilder, "search_facility_projections");
+        modelBuilder.Entity<SearchFacilityProjectionRow>().HasKey(x => x.SiteId);
     }
 
     private static void Map<TEntity>(ModelBuilder modelBuilder, string table) where TEntity : class

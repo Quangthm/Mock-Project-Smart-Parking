@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. BẢNG BIỂU GIÁ BÃI XE (TARIFFS)
 -- Tiếp nhận từ FacilityDb sang Payment & Pricing Service theo đúng Bounded Context v1.0
-CREATE TABLE tariffs (
+CREATE TABLE IF NOT EXISTS tariffs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -22,12 +22,12 @@ CREATE TABLE tariffs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMPTZ NULL
 );
-CREATE INDEX idx_tariffs_site_vehicle ON tariffs(site_id, vehicle_type) WHERE is_active = TRUE AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_tariffs_site_vehicle ON tariffs(site_id, vehicle_type) WHERE is_active = TRUE AND deleted_at IS NULL;
 
 -- 2. BẢNG LỊCH SỬ CHÍNH SÁCH BẤT BIẾN (POLICY REVISIONS - IMMUTABLE AUDIT)
 -- Giải quyết triệt để lỗi ghi đè version cũ. Mọi sửa đổi biểu giá đều sinh bản ghi mới,
 -- tuyệt đối cấm UPDATE bản ghi cũ để bảo toàn lịch sử đối soát tài chính.
-CREATE TABLE policy_revisions (
+CREATE TABLE IF NOT EXISTS policy_revisions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     policy_id UUID NOT NULL, -- ID gốc của tariff hoặc cấu hình chính sách
     policy_type VARCHAR(50) NOT NULL CHECK (policy_type IN ('TARIFF', 'SUBSCRIPTION', 'OVERSTAY_PENALTY', 'SPECIAL_EVENT')),
@@ -41,8 +41,8 @@ CREATE TABLE policy_revisions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (policy_id, revision_number)
 );
-CREATE INDEX idx_policy_revisions_lookup ON policy_revisions(policy_id, effective_from);
-CREATE INDEX idx_policy_revisions_scope ON policy_revisions(scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_policy_revisions_lookup ON policy_revisions(policy_id, effective_from);
+CREATE INDEX IF NOT EXISTS idx_policy_revisions_scope ON policy_revisions(scope_type, scope_id);
 
 -- 2.1 DỮ LIỆU MẪU CHO MÔI TRƯỜNG DEV
 -- Đồng bộ với SmartPark Demo Site trong facility-db.
@@ -131,12 +131,13 @@ WHERE t.id = 'c0000000-0000-4000-8000-000000000002'
 ON CONFLICT (id) DO NOTHING;
 
 -- 2.2 BẢNG BÁO GIÁ ĐẶT CHỖ (RESERVATION QUOTES - IMMUTABLE QUOTE SNAPSHOT)
-CREATE TABLE reservation_quotes (
+CREATE TABLE IF NOT EXISTS reservation_quotes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
     account_id UUID NOT NULL,
     vehicle_id UUID,
+    reviewed_evidence JSONB,
     requested_slot_id UUID,
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
@@ -148,7 +149,7 @@ CREATE TABLE reservation_quotes (
     
     tariff_id UUID,
     tariff_revision_id UUID,
-    terms_version VARCHAR(50) NOT NULL DEFAULT 'v1',
+    terms_version VARCHAR(50),
     coverage_version VARCHAR(100),
     
     valid_until TIMESTAMPTZ NOT NULL,
@@ -156,12 +157,12 @@ CREATE TABLE reservation_quotes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_reservation_quotes_account ON reservation_quotes(account_id);
-CREATE INDEX idx_reservation_quotes_site_status ON reservation_quotes(site_id, status);
-CREATE INDEX idx_reservation_quotes_validity ON reservation_quotes(valid_until);
+CREATE INDEX IF NOT EXISTS idx_reservation_quotes_account ON reservation_quotes(account_id);
+CREATE INDEX IF NOT EXISTS idx_reservation_quotes_site_status ON reservation_quotes(site_id, status);
+CREATE INDEX IF NOT EXISTS idx_reservation_quotes_validity ON reservation_quotes(valid_until);
 
 -- 3. BẢNG ĐƠN HÀNG THANH TOÁN (PAYMENT ORDERS)
-CREATE TABLE payment_orders (
+CREATE TABLE IF NOT EXISTS payment_orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     site_id UUID NOT NULL,
@@ -173,6 +174,10 @@ CREATE TABLE payment_orders (
     reference_type VARCHAR(50) NOT NULL CHECK (reference_type IN ('RESERVATION', 'PARKING_SESSION', 'MONTHLY_PASS')),
     reference_id UUID NOT NULL, -- Logical ID trỏ sang OperationsDb
     quote_id UUID,
+    reviewed_method TEXT,
+    reviewed_currency TEXT,
+    is_provisioning_fence BOOLEAN NOT NULL DEFAULT FALSE,
+    zero_disposition_reason VARCHAR(100),
     terms_version VARCHAR(50),
     plate_number VARCHAR(50),
     
@@ -182,23 +187,47 @@ CREATE TABLE payment_orders (
     final_amount DECIMAL(14,2) NOT NULL CHECK (final_amount >= 0),
     CHECK (final_amount = (amount - discount_amount - deposit_deducted)),
     
-    status VARCHAR(50) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED')),
+    status VARCHAR(50) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PAID', 'FAILED', 'CANCELLED', 'REFUNDED')),
     expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_payment_orders_reviewed_binding CHECK (
+        (reviewed_method IS NULL AND reviewed_currency IS NULL) OR
+        (order_type = 'RESERVATION_FEE' AND reference_type = 'RESERVATION'
+         AND reviewed_method IS NOT NULL AND btrim(reviewed_method) <> ''
+         AND reviewed_currency IS NOT NULL AND reviewed_currency ~ '^[A-Z]{3}$'
+         AND account_id IS NOT NULL AND quote_id IS NOT NULL
+         AND terms_version IS NULL
+         AND idempotency_key IS NOT NULL AND btrim(idempotency_key) <> ''
+         AND ((final_amount > 0 AND expires_at IS NOT NULL) OR
+              (final_amount = 0 AND expires_at IS NULL AND status = 'PAID' AND NOT is_provisioning_fence)))
+    ),
+    CONSTRAINT ck_payment_orders_provisioning_fence CHECK (
+        (status IS NULL) = is_provisioning_fence AND
+        (NOT is_provisioning_fence OR
+         (order_type = 'RESERVATION_FEE' AND reference_type = 'RESERVATION'
+          AND idempotency_key IS NOT NULL AND btrim(idempotency_key) <> '' AND expires_at IS NOT NULL))
+    ),
+    CONSTRAINT ck_payment_orders_zero_disposition CHECK (
+        zero_disposition_reason IS NULL OR
+        (reviewed_method IS NOT NULL AND NOT is_provisioning_fence AND final_amount = 0 AND status = 'PAID'
+         AND btrim(zero_disposition_reason) <> '')
+    )
 );
-CREATE INDEX idx_payment_orders_tenant_site ON payment_orders(tenant_id, site_id);
-CREATE INDEX idx_payment_orders_account ON payment_orders(account_id);
-CREATE INDEX idx_payment_orders_reference ON payment_orders(reference_type, reference_id);
-CREATE INDEX idx_payment_orders_status ON payment_orders(status);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_tenant_site ON payment_orders(tenant_id, site_id);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_account ON payment_orders(account_id);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_reference ON payment_orders(reference_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_payment_orders_status ON payment_orders(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reviewed_order_quote ON payment_orders(quote_id) WHERE reviewed_method IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reviewed_order_reservation ON payment_orders(reference_id) WHERE reviewed_method IS NOT NULL;
 -- Checkout is created before the gate transition. The order remains durable while
 -- the operator waits in payOS or refreshes the browser.
-CREATE INDEX idx_payment_orders_pending_checkout
+CREATE INDEX IF NOT EXISTS idx_payment_orders_pending_checkout
     ON payment_orders(site_id, status, expires_at)
     WHERE status = 'PENDING';
 
 -- 4. BẢNG GIAO DỊCH DÒNG TIỀN (PAYMENT TRANSACTIONS)
-CREATE TABLE payment_transactions (
+CREATE TABLE IF NOT EXISTS payment_transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     payment_order_id UUID NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
@@ -206,6 +235,12 @@ CREATE TABLE payment_transactions (
     transaction_type VARCHAR(50) NOT NULL CHECK (transaction_type IN ('PAYMENT', 'REFUND')),
     payment_method VARCHAR(50) NOT NULL CHECK (payment_method IN ('PAYOS', 'VNPAY', 'MOMO', 'ZALOPAY', 'CASH')),
     gateway_transaction_id VARCHAR(255),
+    provider_collection_reference VARCHAR(255),
+    provider_verified_at TIMESTAMPTZ,
+    CHECK ((provider_collection_reference IS NULL) = (provider_verified_at IS NULL)),
+    CHECK (provider_collection_reference IS NULL OR
+        (btrim(provider_collection_reference) <> '' AND paid_at IS NOT NULL
+         AND status = 'SUCCESS' AND transaction_type = 'PAYMENT' AND amount > 0)),
     idempotency_key VARCHAR(255),
     amount DECIMAL(14,2) NOT NULL,
     
@@ -219,18 +254,20 @@ CREATE TABLE payment_transactions (
     paid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_payment_transactions_order ON payment_transactions(payment_order_id);
-CREATE INDEX idx_payment_transactions_idempotency ON payment_transactions(idempotency_key);
-CREATE UNIQUE INDEX idx_provider_transaction_unique ON payment_transactions(payment_method, gateway_transaction_id) 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_collection_reference ON payment_transactions(payment_method, provider_collection_reference)
+    WHERE provider_collection_reference IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_order ON payment_transactions(payment_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_idempotency ON payment_transactions(idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_transaction_unique ON payment_transactions(payment_method, gateway_transaction_id)
     WHERE gateway_transaction_id IS NOT NULL;
 -- A successful transaction is the durable prerequisite for OperationService
 -- to complete a parking-session check-out. CASH and demo-payOS use this table too.
-CREATE INDEX idx_payment_transactions_pending_reconciliation
+CREATE INDEX IF NOT EXISTS idx_payment_transactions_pending_reconciliation
     ON payment_transactions(payment_order_id, status)
     WHERE status IN ('PENDING', 'UNKNOWN');
 
 -- 5. BẢNG HÓA ĐƠN KẾ TOÁN (INVOICES - HỖ TRỢ CẢ PHIÊN ĐỖ VÀ VÉ THÁNG/ĐẶT CHỖ)
-CREATE TABLE invoices (
+CREATE TABLE IF NOT EXISTS invoices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     payment_order_id UUID NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
@@ -248,16 +285,17 @@ CREATE TABLE invoices (
     pricing_snapshot JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_invoices_site ON invoices(site_id);
-CREATE INDEX idx_invoices_order ON invoices(payment_order_id);
-CREATE INDEX idx_invoices_reference ON invoices(reference_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_site ON invoices(site_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_order ON invoices(payment_order_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_reference ON invoices(reference_type, reference_id);
 
 -- 6. BẢNG YÊU CẦU HOÀN TIỀN (REFUND REQUESTS)
-CREATE TABLE refund_requests (
+CREATE TABLE IF NOT EXISTS refund_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
     payment_order_id UUID NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
     
+    collection_id UUID UNIQUE REFERENCES payment_transactions(id),
     amount DECIMAL(14,2) NOT NULL CHECK (amount > 0),
     reason TEXT NOT NULL,
     evidence_url VARCHAR(500),
@@ -270,11 +308,11 @@ CREATE TABLE refund_requests (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_refund_requests_order ON refund_requests(payment_order_id);
-CREATE INDEX idx_refund_requests_status ON refund_requests(status);
+CREATE INDEX IF NOT EXISTS idx_refund_requests_order ON refund_requests(payment_order_id);
+CREATE INDEX IF NOT EXISTS idx_refund_requests_status ON refund_requests(status);
 
 -- 7. BẢNG HOOK NHÀ CUNG CẤP CỔNG THANH TOÁN (PROVIDER WEBHOOKS)
-CREATE TABLE provider_webhooks (
+CREATE TABLE IF NOT EXISTS provider_webhooks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     provider VARCHAR(50) NOT NULL,
     provider_event_id VARCHAR(255) NOT NULL,
@@ -283,7 +321,7 @@ CREATE TABLE provider_webhooks (
     received_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (provider, provider_event_id)
 );
-CREATE INDEX idx_provider_webhooks_state ON provider_webhooks(processing_state, received_at);
+CREATE INDEX IF NOT EXISTS idx_provider_webhooks_state ON provider_webhooks(processing_state, received_at);
 
 -- 8. BẢNG TIN TRANSACTIONAL OUTBOX (MASSTRANSIT EF CORE OUTBOX - POSTGRESQL NATIVE)
 CREATE TABLE IF NOT EXISTS "InboxState" (
@@ -345,3 +383,70 @@ CREATE INDEX IF NOT EXISTS "IX_OutboxMessage_ExpirationTime" ON "OutboxMessage" 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber" ON "OutboxMessage" ("InboxMessageId", "InboxConsumerId", "SequenceNumber");
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_OutboxMessage_OutboxId_SequenceNumber" ON "OutboxMessage" ("OutboxId", "SequenceNumber");
 CREATE INDEX IF NOT EXISTS "IX_OutboxState_Created" ON "OutboxState" ("Created");
+
+-- 9. BẢNG GIÁ TRỌN KỲ & ĐIỀU KHOẢN HOÀN TIỀN GÓI ĐỖ XE (SPARK-331)
+-- Gắn logical UUID (plan_id) + plan_revision sang OperationsDb; sinh revision bất biến cho mỗi cập nhật.
+CREATE TABLE IF NOT EXISTS subscription_financial_terms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    plan_id UUID NOT NULL,
+    product_type VARCHAR(20) NOT NULL CHECK (product_type IN ('MONTHLY', 'YEARLY')),
+    active_revision INT NOT NULL DEFAULT 1 CHECK (active_revision >= 1),
+    currency VARCHAR(10) NOT NULL DEFAULT 'VND',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (site_id, plan_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sub_fin_terms_site ON subscription_financial_terms(site_id, is_active);
+
+CREATE TABLE IF NOT EXISTS subscription_financial_term_revisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    financial_term_id UUID NOT NULL REFERENCES subscription_financial_terms(id) ON DELETE RESTRICT,
+    plan_id UUID NOT NULL,
+    plan_revision INT NOT NULL CHECK (plan_revision >= 1),
+    revision_number INT NOT NULL CHECK (revision_number >= 1),
+    vehicle_prices JSONB NOT NULL,
+    refund_policy JSONB NOT NULL,
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_to TIMESTAMPTZ NULL,
+    idempotency_key VARCHAR(128) NULL,
+    idempotency_payload_hash VARCHAR(128) NULL,
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (financial_term_id, revision_number)
+);
+CREATE INDEX IF NOT EXISTS idx_sub_fin_rev_plan
+    ON subscription_financial_term_revisions(plan_id, plan_revision, effective_from DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_fin_rev_idempotency
+    ON subscription_financial_term_revisions(financial_term_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+-- 10. BẢNG CHỐNG HOÀN TIỀN TRÙNG LẶP KHI ĐÓNG CỬA TẠM THỜI / VĨNH VIỄN (SPARK-331 / M-06)
+CREATE TABLE IF NOT EXISTS subscription_closure_compensations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    site_id UUID NOT NULL,
+    closure_event_id UUID NOT NULL,
+    closure_type VARCHAR(20) NOT NULL CHECK (closure_type IN ('TEMPORARY', 'PERMANENT')),
+    pass_id UUID NOT NULL,
+    payment_order_id UUID NOT NULL REFERENCES payment_orders(id) ON DELETE RESTRICT,
+    refund_request_id UUID NULL REFERENCES refund_requests(id) ON DELETE RESTRICT,
+    compensated_from TIMESTAMPTZ NULL,
+    compensated_to TIMESTAMPTZ NULL,
+    compensated_intervals JSONB NOT NULL DEFAULT '[]'::jsonb,
+    refund_amount DECIMAL(14,2) NOT NULL CHECK (refund_amount >= 0),
+    idempotency_key VARCHAR(128) NOT NULL UNIQUE,
+    idempotency_payload_hash VARCHAR(128) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK (
+        (refund_amount = 0 AND compensated_from IS NULL AND compensated_to IS NULL)
+        OR (compensated_from IS NOT NULL AND compensated_to IS NOT NULL AND compensated_to > compensated_from)
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_sub_closure_comp_order
+    ON subscription_closure_compensations(payment_order_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sub_closure_comp_pass
+    ON subscription_closure_compensations(pass_id);

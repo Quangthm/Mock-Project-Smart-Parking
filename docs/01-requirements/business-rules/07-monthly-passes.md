@@ -56,7 +56,7 @@ Preserve accepted paid periods against later price or sales changes. Temporary c
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Overlapping available-only coverage must not duplicate sold rights or charges. Neither a monthly nor a yearly pass creates a reservation automatically; Driver may separately reserve capacity. Apply valid coverage before disclosed booking minimum (E03); if genuinely zero, confirm without payment, even under fixed-deposit mode, with ordinary atomic capacity and cap checks. Record entitlement/version/coverage basis. A-01 prevents voluntary pass cancellation while future reservations still depend on removed coverage. Guaranteed-resource lifecycle is FUTURE, not offered or accepted in MVP.
+Overlapping available-only coverage must not duplicate sold rights or charges. Neither a monthly nor a yearly pass creates a reservation automatically; Driver may separately reserve capacity. Apply valid coverage before disclosed booking minimum (E03); future fully covered reservation acceptance uses the linked zero-value order and durable receipt evidence under [BR-PAY-01/04/06](06-pricing-payments.md#reservation-first-slice-boundary), with ordinary guarded capacity checks and no provider collection. Record entitlement/version/coverage basis. Reservation subscription eligibility returns false until the entitlement engine is delivered. A-01 prevents voluntary pass cancellation while future reservations still depend on removed coverage. Guaranteed-resource lifecycle is FUTURE, not offered or accepted in MVP.
 
 **Trace:** FR-MON-01–14; UC-MON-02, UC-MON-04
 
@@ -72,6 +72,6 @@ Repurchase while parked validates existing vehicle/session and eligibility witho
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Monthly/yearly plans bind account, vehicle, lot/zone and available-only entitlement. Validate product-specific enablement and accepted financial policy, not zero/absent price as an enablement surrogate. Vehicle/lot/type transfers and suspend-and-add-days are unsupported in MVP; use disclosed cancellation/new purchase with A-01 dependency guard. Preserve accepted financial versions; Operator cannot edit paid periods to postpone money or grant credit.
+Monthly/yearly coverage binds the canonical plate, applicable lot/zone and valid entitlement interval. The purchasing Account controls purchase management, permissions, billing and audit. UserService Account ownership and VehicleId are separate from coverage. A later transfer or removal in UserService alone leaves plate coverage and accepted reservations intact. Existing product rules for changing the covered plate or location still apply. Validate product-specific enablement and accepted financial policy, not zero/absent price as an enablement surrogate. Vehicle/lot/type transfers and suspend-and-add-days are unsupported in MVP; use disclosed cancellation/new purchase with A-01 dependency guard. Preserve accepted financial versions; Operator cannot edit paid periods to postpone money or grant credit.
 
 **Trace:** FR-MON-01–14; UC-MON-01, UC-MON-05
