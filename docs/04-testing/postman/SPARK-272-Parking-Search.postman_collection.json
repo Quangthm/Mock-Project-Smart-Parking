@@ -379,6 +379,408 @@
           }
         }
       ]
+    },
+    {
+      "name": "17 Partial facility name",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&keyword={{keyword}}",
+        "description": "Set keyword to a real published site-name fragment within the chosen radius."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Vietnamese accented keyword",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&keyword=B%E1%BA%BFn%20%C4%90%E1%BB%97",
+        "description": "Fixture: published facility name containing Bến Đỗ in radius; compare with request 19."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Equivalent unaccented keyword",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&keyword=Ben%20Do",
+        "description": "Same fixture as request 18; compare returned site IDs."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Oversized keyword",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&keyword=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "description": "No fixture; trimmed keyword exceeds 100 characters."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(400));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Expected code', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Current hourly price order",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=price",
+        "description": "Fixture: at least two published sites with distinct fresh hourly tariffs; include genuine zero and unknown/stale cases when available."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Interval total-price order",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&startAt={{startAt}}&endAt={{endAt}}&sort=price",
+        "description": "Fixture: future stay and distinct fresh total estimates; compare totals, not hourly tariffs."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Availability order",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=availability",
+        "description": "Fixture: sites with distinct fresh CAR counts, a known zero, and unknown/stale evidence."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 Price first page",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=price&limit=1",
+        "description": "Needs at least two matching published sites; stores priceCursor when provided."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });",
+              "if (body.data.nextCursor) pm.environment.set('priceCursor', body.data.nextCursor);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 Price continuation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=price&limit=1&cursor={{priceCursor}}",
+        "description": "Repeat exact filters from request 24; requires its nonempty priceCursor."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 Availability first page",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=availability&limit=1",
+        "description": "Needs at least two matching sites; stores availabilityCursor when provided."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });",
+              "if (body.data.nextCursor) pm.environment.set('availabilityCursor', body.data.nextCursor);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 Availability continuation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=availability&limit=1&cursor={{availabilityCursor}}",
+        "description": "Repeat exact filters from request 26; requires its nonempty availabilityCursor."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "28 Changed sort with cursor",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&sort=distance&limit=1&cursor={{priceCursor}}",
+        "description": "Run request 24 first, then reuse its price cursor with changed sort."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(400));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Expected code', () => pm.expect(body.code).to.eql('INVALID_CURSOR'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "29 Latest historical location",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/me/discovery/last-booked-location",
+        "description": "Driver bearer token. Fixture: latest qualifying reservation at a currently published usable site.",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{driverBearerToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "30 Historical location without authentication",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/me/discovery/last-booked-location",
+        "description": "No token; expect authentication challenge.",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(401));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Expected code', () => pm.expect(body.code).to.eql('UNAUTHENTICATED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31 Historical location wrong role",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/me/discovery/last-booked-location",
+        "description": "Use a valid token for a non-Driver role; no fixture reservation needed.",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{wrongRoleBearerToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(403));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Expected code', () => pm.expect(body.code).to.eql('FORBIDDEN'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "32 Historical Facility unavailable",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/me/discovery/last-booked-location",
+        "description": "Driver with qualifying booking; induce Facility dependency failure in isolated development stack.",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{driverBearerToken}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(503));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Expected code', () => pm.expect(body.code).to.eql('OWNER_UNAVAILABLE'));"
+            ]
+          }
+        }
+      ]
     }
   ]
 }
