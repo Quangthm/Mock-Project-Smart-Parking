@@ -48,6 +48,64 @@ test('reservation adapter propagates failed requests without fabricating a booki
   await assert.rejects(api.submitQuote(quoteIntent, 'key'), /no result/);
 });
 
+test('booking shows a newly registered car and preserves it when a pending list returns older data', async () => {
+  const vehicle = {id:'new-car', rawPlate:'51A-123.45', canonicalPlate:'51A12345', vehicleType:'CAR'};
+  const lot = {id:'site', name:'Test site', slots:[], type:'outdoor'};
+  let resolveList, reads = 0, generation = 1;
+  const vehicleModule = load('lib/vehiclesApi.ts', {
+    './authApi': {getSessionGeneration: () => generation, request: async (resource, method) => {
+      if (method === 'POST') return {success:true,data:vehicle};
+      if (resource === '/registration-claims') return {success:true,data:[]};
+      reads++;
+      return new Promise(resolve => { resolveList = resolve; });
+    }},
+  });
+  let slot = 0, mounted = false;
+  const state = [], effects = [];
+  const jsx = (type, props) => ({type, props});
+  const component = load('roles/driver/booking/BookingFlow.tsx', {
+    react: {
+      useState(initial) {
+        const i = slot++;
+        if (!(i in state)) state[i] = i === 0 ? 'details' : typeof initial === 'function' ? initial() : initial;
+        return [state[i], value => { state[i] = typeof value === 'function' ? value(state[i]) : value; }];
+      },
+      useEffect(effect) { if (!mounted) effects.push(effect); },
+      useMemo(make) { return make(); },
+    },
+    'react/jsx-runtime': {jsx, jsxs:jsx},
+    '../../../context/AppContext': {useApp:() => ({ user:{id:'driver'} })},
+    '../../../lib/authApi': {getSessionGeneration:() => generation},
+    '../../../lib/vehiclesApi': vehicleModule,
+    '../data/data': {driverData:{getLots:() => [lot]}},
+    '../data/paymentOptions': {},
+    '../../../lib/driverReservationApi': {},
+    './ReservationCheckout': {}, './reservation-checkout.css': {},
+    './BookingDateTimePicker': {},
+    '../../../components/ui/RoundedSelect': {RoundedSelect:'select'},
+    '../../../components/VehicleImageInput': {}, '../../../components/ui/PageHeader': {},
+    '../../../components/3d/Parking3DViewer': {}, '../../../components/feedback/ErrorBoundary': {},
+    '../../../components/icon/UntitledIcon': {}, '../../../components/modals/LotPolicyModal': {},
+  }, {window:{addEventListener() {}, removeEventListener() {}}}).BookingFlow;
+  const props = {lot, onDone() {}};
+  const render = () => { slot = 0; return JSON.stringify(component(props).type(props)); };
+  render();
+  mounted = true;
+  effects.forEach(effect => effect());
+  const input = {plate:vehicle.rawPlate, vehicleType:'CAR', imageAssetId:'asset'};
+  await vehicleModule.vehiclesApi.save(input);
+  assert.match(render(), /51A-123\.45/);
+  resolveList({success:true,data:[]});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(render(), /51A-123\.45/);
+  assert.equal(reads, 1);
+  let events = 0;
+  vehicleModule.subscribeVehicleRegistration(() => { events++; });
+  generation++;
+  await vehicleModule.vehiclesApi.save(input);
+  assert.equal(events, 0, 'a new login must not update subscribers from the old login');
+});
+
 // A small hook harness exercises client transitions with mocked services; it is not browser/E2E evidence.
 const requestKey = '0854e9bf-b070-47b9-ab2f-b8b294186acf';
 const receiptId = '22680f58-0737-46fa-9a53-6d5201bf7bdd';
@@ -66,7 +124,7 @@ function checkout(api = {}, storage = new Map()) {
     },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     '../../../lib/authApi': { getSessionGeneration: () => generation },
-    '../../../lib/reservationsApi': { reservationsApi: { reviewQuote: async () => quote, submitQuote: api.submit } },
+    '../../../lib/reservationsApi': { reservationsApi: { reviewQuote: api.review ?? (async () => quote), submitQuote: api.submit } },
     '../../../lib/reservationProgress': { useReservationProgress: id => { subscribed = id; return { snapshot, checkout: financial, connected: true }; } },
     '../../../lib/formatStatus': { formatStatus: value => value },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'UntitledIcon' },
@@ -85,11 +143,40 @@ function checkout(api = {}, storage = new Map()) {
   }
   function nodes() { return walk(tree); }
   function button(label) { return nodes().find(node => node.type === 'button' && node.props.children === label); }
-  async function click(label) { button(label).props.onClick(); await new Promise(resolve => setImmediate(resolve)); render(); }
-  async function accept() { await click('Review price and terms'); nodes().find(node => node.type === 'input').props.onChange({ target: { checked: true } }); render(); await click('Accept terms and reserve'); }
+  async function settle() { await new Promise(resolve => setImmediate(resolve)); render(); }
+  async function click(label) { button(label).props.onClick(); render(); await settle(); }
+  async function accept() { await settle(); nodes().find(node => node.type === 'input').props.onChange({ target: { checked: true } }); render(); await click('Accept terms and reserve'); }
   render();
-  return { render, nodes, button, click, accept, storage, payment: value => { financial = value; render(); }, requestId: () => subscribed, progress: value => { snapshot = value; render(); }, switchAccount: () => { generation++; } };
+  return { render, nodes, button, click, accept, settle, storage, payment: value => { financial = value; render(); }, requestId: () => subscribed, progress: value => { snapshot = value; render(); }, switchAccount: () => { generation++; } };
 }
+
+test('opening checkout loads one quote and leaves reservation consent unchecked', async () => {
+  let reads = 0;
+  const f = checkout({
+    review: async payload => { assert.equal(payload, quoteSelection); reads++; return quote; },
+    submit: () => assert.fail('loading a quote must not submit a reservation'),
+  });
+  await f.settle();
+  f.render();
+  assert.equal(reads, 1);
+  assert.equal(f.button('Review price and terms'), undefined);
+  assert.equal(f.button('Accept terms and reserve').props.disabled, true);
+  assert.equal(f.nodes().find(node => node.type === 'input').props.checked, false);
+});
+
+test('quote failure waits for explicit retry', async () => {
+  let reads = 0;
+  const f = checkout({ review: async () => {
+    if (++reads === 1) throw new Error('Quote service unavailable');
+    return quote;
+  } });
+  await f.settle();
+  assert.equal(reads, 1);
+  assert.equal(f.button('Accept terms and reserve'), undefined);
+  await f.click('Retry loading price and terms');
+  assert.equal(reads, 2);
+  assert.equal(f.button('Accept terms and reserve').props.disabled, true);
+});
 
 test('happy path waits for a real order and never treats HOLD_CREATED as CONFIRMED', async () => {
   let booking = { requestId: 'request', admissionState: 'HOLD_CREATED', checks: {account:'SUCCEEDED',vehicle:'SUCCEEDED',facility:'SUCCEEDED',booking:'SUCCEEDED'}, reservationId: 'booking', reservationState: 'PENDING_PAYMENT', orderId: null, holdExpiresAt: '2099-01-01T00:00:00Z', bookedAmount: 40000, depositAmount: 20000 };
@@ -101,6 +188,9 @@ test('happy path waits for a real order and never treats HOLD_CREATED as CONFIRM
   f.payment({ state: 'PAYABLE', orderId: 'payment-order', holdExpiresAt:booking.holdExpiresAt });
   f.progress(booking);
   assert.equal(f.nodes().find(node => node.type === 'PaymentCheckout').props.reservationOrderId, 'payment-order');
+  assert.equal(f.button('Done'), undefined);
+  f.payment({ state: 'PAID', orderId: 'payment-order' });
+  assert.equal(f.nodes().find(node => node.type === 'PaymentCheckout').props.paymentConfirmed, true);
   assert.equal(f.button('Done'), undefined);
   f.progress({ ...booking, reservationState: 'CONFIRMED' });
   assert.ok(f.button('Done'));
@@ -125,7 +215,7 @@ test('saved terms and malformed intents cannot resubmit, but a known request can
     const f = checkout({ submit }, new Map([['driver-account', JSON.stringify(attempt)]]));
     assert.equal(f.requestId(), undefined);
     assert.equal(f.button('Retry same request'), undefined);
-    assert.ok(f.button('Review price and terms'));
+    assert.ok(f.nodes().some(node => node.props?.role === 'status'));
   }
   const f = checkout({ submit }, new Map([['driver-account', JSON.stringify({ ...legacy, requestId: receiptId })]]));
   assert.equal(f.requestId(), receiptId);
@@ -260,8 +350,12 @@ test('financial SignalR success binds once to the scoped order and survives a st
 test('payment return schedules status checks only for standalone orders', async () => {
   const order = 'f7e1ff6b-c768-48c6-9c78-64d381aba8ba';
   const requestId = 'a0e97ab1-6222-4cd4-a6f7-cf960334344f';
-  for (const route of ['reservation', 'legacy-reservation', 'standalone', 'legacy-standalone', 'lookup-unavailable']) {
-    let index = 0, changed = false, reads = 0, timers = 0, lookups = 0, subscribed;
+  const historicalReservationId = '22222222-2222-4222-8222-222222222222';
+  const wrongOrder = '33333333-3333-4333-8333-333333333333';
+  for (const route of ['reservation', 'legacy-reservation', 'legacy-failed', 'foreign-order', 'foreign-account',
+    'closed-fence', 'standalone', 'legacy-standalone', 'lookup-unavailable']) {
+    let index = 0, changed = false, reads = 0, timers = 0, lookups = 0, operationsReads = 0, subscribed;
+    const historical = ['legacy-reservation', 'legacy-failed', 'foreign-order', 'foreign-account'].includes(route);
     let snapshot = null, tree;
     const slots = [], effects = [];
     const react = {
@@ -277,22 +371,26 @@ test('payment return schedules status checks only for standalone orders', async 
       useRef(initial) { const i = index++; return slots[i] ?? (slots[i] = {current: initial}); },
     };
     const jsx = (type, props) => ({type, props});
-    const search = '?orderId=' + order + (route === 'reservation' ? '&requestId=' + order : '');
+    const search = '?orderId=' + order + (route === 'reservation' || historical ? '&requestId=' + wrongOrder : '');
     const { PaymentResultPage } = load('roles/driver/payments/PaymentResultPage.tsx', {
       react, 'react/jsx-runtime': { jsx, jsxs: jsx },
       'react-router-dom': {useNavigate() {}}, '../../../components/brand/BrandLogo': {},
       '../../../context/AppContext': {useApp: () => ({authReady:true, user:{id:'me',role:'driver'}})},
       '../../../lib/authApi': {getSessionGeneration: () => 1}, '../../../lib/formatStatus': {formatStatus: v => v},
       './payment-checkout.css': {},
-      '../../../lib/reservationsApi': {reservationsApi:{requestForOrder:async () =>
-        route === 'legacy-reservation' ? {requestId, reservationId:requestId} : null}},
+      '../../../lib/reservationsApi': {reservationsApi:{requestForOrder:async id => {
+        operationsReads++;
+        assert.equal(id, order);
+        return {requestId: route === 'foreign-account' ? null : requestId};
+      }}},
       '../../../lib/paymentApi': {isPaymentOrderId: v => typeof v === 'string' && v.length === 36,
-        classifyPaymentStatus: () => 'pending', paymentApi: {
+        classifyPaymentStatus: () => route === 'legacy-failed' ? 'failed' : route === 'legacy-reservation' ? 'success' : 'pending', paymentApi: {
           orderReservation: async id => {
             assert.equal(id, order); lookups++;
             if (route === 'lookup-unavailable') throw new Error('Unavailable');
-            if (route === 'legacy-reservation') return {state:'HISTORICAL', reservationId:requestId, orderId:order};
-            return route.endsWith('reservation') ? { state:'PAID', reservationId:requestId } : {state:'STANDALONE', reservationId:null};
+            if (historical) return {state:'HISTORICAL', reservationId:historicalReservationId, orderId:route === 'foreign-order' ? wrongOrder : order};
+            if (route === 'closed-fence') return {state:'CLOSED', reservationId:requestId, orderId:null};
+            return route === 'reservation' ? {state:'PAID', reservationId:requestId, orderId:order} : {state:'STANDALONE', reservationId:null, orderId:order};
           },
           rememberedCheckout: () => ({paymentTransactionId: order, standalone: route === 'standalone'}),
           status: async () => { reads++; return {orderId:order,status:'PENDING',amount:1}; },
@@ -310,11 +408,30 @@ test('payment return schedules status checks only for standalone orders', async 
     } while (changed);
     assert.equal(reads, 1, route);
     assert.equal(lookups, 1, route);
-    assert.equal(subscribed ?? null, route.endsWith('reservation') ? requestId : null, route);
+    assert.equal(subscribed ?? null, ['reservation', 'legacy-reservation', 'legacy-failed'].includes(route) ? requestId : null, route);
+    assert.equal(operationsReads, historical && route !== 'foreign-order' ? 1 : 0, route);
     assert.equal(timers, route.endsWith('standalone') ? 1 : 0, route);
+    const heading = node => Array.isArray(node) ? node.map(heading).find(Boolean) :
+      node?.type === 'h1' ? node.props.children : node?.props && heading(node.props.children);
+    if (route === 'legacy-reservation') {
+      const waiting = 'Payment received. Awaiting reservation confirmation.';
+      assert.equal(heading(tree), waiting);
+      const matching = {requestId, reservationId:historicalReservationId, orderId:order, reservationState:'CONFIRMED'};
+      for (const wrong of [{reservationId:requestId}, {requestId:wrongOrder}, {orderId:wrongOrder}]) {
+        snapshot = {...matching, ...wrong};
+        index = 0; assert.equal(heading(component()), waiting);
+      }
+      snapshot = matching;
+      index = 0; assert.equal(heading(component()), 'Reservation confirmed');
+    }
+    if (route === 'legacy-failed') {
+      snapshot = {requestId, reservationId:historicalReservationId, orderId:order, reservationState:'CONFIRMED'};
+      index = 0; tree = component();
+      assert.equal(heading(tree), 'Payment not completed');
+      assert.doesNotMatch(JSON.stringify(tree), /CONFIRMED/);
+    }
+    if (route === 'closed-fence') assert.equal(heading(tree), 'Reservation payment order closed');
     if (route === 'reservation') {
-      const heading = node => Array.isArray(node) ? node.map(heading).find(Boolean) :
-        node?.type === 'h1' ? node.props.children : node?.props && heading(node.props.children);
       assert.equal(heading(tree), 'Payment is still processing');
       snapshot = {requestId, reservationId:order, orderId:null, reservationState:'CONFIRMED'};
       index = 0; assert.equal(heading(component()), 'Payment is still processing');
