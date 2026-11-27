@@ -89,6 +89,7 @@ public sealed class ExceptionHandlingMiddleware
 
                     PaymentDomainException.OrderAlreadyPaid or
                     PaymentDomainException.IdempotencyPayloadMismatch or
+                    "ORDER_CANCELLED" or
                     "IDEMPOTENCY_CONFLICT" or
                     "IDEMPOTENCY_PAYLOAD_MISMATCH" or
                     "PAYMENT_RETRY_LIMIT_EXCEEDED" or

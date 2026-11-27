@@ -176,6 +176,7 @@ services:
       PayOs__ApiKey: ${SMARTPARK_PAYOS_API_KEY:-}
       PayOs__ChecksumKey: ${SMARTPARK_PAYOS_CHECKSUM_KEY:-}
       PayOs__BaseUrl: ${SMARTPARK_PAYOS_BASE_URL:-https://api-merchant.payos.vn}
+      PayOs__EnableDemoBypass: ${SMARTPARK_PAYOS_ENABLE_DEMO_BYPASS:-}
     ports:
       - "127.0.0.1:5065:8080"
     networks:
