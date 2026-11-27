@@ -42,24 +42,20 @@ public static class InfrastructureDependencyInjection
 
         var serviceKey = configuration["Services:Key"]
             ?? throw new InvalidOperationException("Configure Services:Key.");
-        services.AddHttpClient<IReservationVehicleOwner, ReservationVehicleClient>(client =>
-        {
-            client.BaseAddress = new(configuration["Services:User"] ?? "http://localhost:5035/");
-            client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.Add("X-Service-Key", serviceKey);
-        });
-        services.AddHttpClient<IReservationCommercialOwner, ReservationCommercialClient>(client =>
+        services.AddHttpClient<ReservationCommercialClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Payment"] ?? "http://localhost:5065/");
             client.Timeout = TimeSpan.FromSeconds(15);
         });
+        services.AddScoped<IReservationCommercialOwner>(p => p.GetRequiredService<ReservationCommercialClient>());
+        if (configuration.GetValue<bool>("ReservationIntegration:ReviewedSettlementEnabled"))
+            services.AddScoped<IReservationQuoteOwner>(p => p.GetRequiredService<ReservationCommercialClient>());
         services.AddHttpClient<ReservationFacilityClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Facility"] ?? configuration["Services:Parking"] ?? "http://localhost:5045/");
             client.Timeout = TimeSpan.FromSeconds(10);
         }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<IReservationFacilityOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
-        services.AddScoped<IReservationFacilityDependencyOwner>(p => p.GetRequiredService<ReservationFacilityClient>());
         services.AddHttpClient<ParkingGateSlotClient>(client =>
         {
             client.BaseAddress = new(configuration["Services:Parking"]

@@ -98,9 +98,8 @@ export function BookingHistory() {
           <section aria-labelledby="reservation-history-payment"><h3 id="reservation-history-payment">Price & payment</h3><Fields values={[
             ["Booked amount", historyMoney(detail.bookedAmount, detail.currency)], ["Deposit", historyMoney(detail.depositAmount, detail.currency)],
             ["Payment status", labels(detail.paymentStatus)], ["Payment order ID", detail.orderId || "None"],
-            ["Order provisioning", labels(detail.orderProvisioningState)],
-          ]} /><p className="reservation-history-hint">Reservation status and payment status are separate. Unknown payment status does not confirm or deny a payment.</p>
-          </section>
+            ...(detail.zeroReceiptId ? [["Zero receipt ID", detail.zeroReceiptId] as [string, string]] : []),
+          ]} /><p className="reservation-history-hint">Reservation status and payment status are separate. Unknown payment status does not confirm or deny a payment.</p></section>
         </div>}
     </Modal>}
   </div>

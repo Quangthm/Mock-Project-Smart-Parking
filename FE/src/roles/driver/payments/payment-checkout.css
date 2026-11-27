@@ -1,8 +1,8 @@
 .payos-checkout,.payment-result-page{--payment-error:#b42336}
 .dark .payos-checkout,.dark .payment-result-page{--payment-error:#fb8b92}
-.payos-checkout{display:grid;gap:22px;padding:clamp(20px,3vw,32px);border-radius:22px}
-.payos-checkout-heading span{color:var(--primary);font-size:.75rem;font-weight:750;letter-spacing:.08em}
-.payos-checkout-heading h3{margin:8px 0 6px;color:var(--fg);font-size:1.35rem;line-height:1.3}
+.payos-checkout{display:grid;gap:18px;min-width:0;padding:clamp(14px,3vw,26px);border-radius:18px;container:payos-checkout / inline-size}
+.payos-checkout-heading h3{margin:0;color:var(--fg);font-size:clamp(1.15rem,2.5vw,1.45rem);font-weight:700;line-height:1.3}
+.payos-checkout-heading p{margin-top:6px}
 .payos-checkout-heading p,.payos-checkout-note{margin:0;color:var(--muted);line-height:1.55}
 .payos-checkout-form{display:grid;gap:10px;max-width:600px}
 .payos-checkout-form>label{color:var(--fg);font-weight:650}
@@ -21,17 +21,32 @@
 .payos-checkout-unavailable{display:grid;gap:8px;padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--raised);line-height:1.55}
 .payos-checkout-unavailable strong{color:var(--fg)}
 .payos-checkout-unavailable p{margin:0;color:var(--muted)}
-.payos-checkout-details{display:grid;grid-template-columns:minmax(0,240px) minmax(0,1fr);gap:20px;align-items:start}
-.payos-qr-panel{display:grid;justify-items:center;gap:10px;padding:8px;border-radius:16px;background:#fff;color:#17312e}
-.payos-qr-panel svg{max-width:100%;height:auto}
-.payos-qr-panel p{margin:0;font-size:.85rem;font-weight:650;text-align:center}
-.payos-checkout-facts{display:grid;gap:8px;margin:0;min-width:0}
-.payos-checkout-facts div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
-.payos-checkout-facts dt{color:var(--muted)}
-.payos-checkout-facts dd{margin:0;color:var(--fg);font-weight:700;font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
-.payos-checkout-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px}
+.payos-checkout-details{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start;min-width:0}
+.payos-qr-panel{display:grid;justify-items:center;gap:10px;min-width:0;margin:0;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg)}
+.payos-qr-panel>div{width:min(100%,232px);border-radius:8px;background:#fff;overflow:hidden}
+.payos-qr-panel svg{display:block;width:100%;height:auto}
+.payos-qr-panel figcaption{font-size:.85rem;font-weight:650;text-align:center;color:var(--fg)}
+.payos-transfer{min-width:0;border:1px solid var(--border);border-radius:14px;background:var(--bg)}
+.payos-transfer-summary{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px 16px;padding:14px 16px;border-radius:13px 13px 0 0;background:var(--active)}
+.payos-transfer-summary>div{display:grid;gap:3px;min-width:0}
+.payos-transfer-summary>div>span{color:var(--muted);font-size:.8rem;font-weight:600}
+.payos-transfer-summary strong{color:var(--primary);font-size:clamp(1.35rem,3vw,1.9rem);line-height:1.2;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.payos-transfer-summary small{font-size:.65em}
+.payos-transfer-status{padding:4px 8px;border-radius:6px;background:var(--card);color:var(--badge-warning-fg);font-size:.75rem;font-weight:650}
+.payos-transfer-status[data-status="success"]{color:var(--badge-success-fg)}
+.payos-transfer-status:is([data-status="failed"],[data-status="expired"]){color:var(--badge-danger-strong)}
+.payos-transfer-message{margin:0;padding:12px 16px 0;color:var(--muted);font-size:.85rem}
+.payos-checkout-facts{display:grid;gap:12px 16px;margin:0;min-width:0;padding:14px 16px}
+.payos-checkout-facts div{display:grid;align-content:start;gap:3px;min-width:0}
+.payos-checkout-facts dt{color:var(--muted);font-size:.8rem}
+.payos-checkout-facts dd{margin:0;color:var(--fg);font-size:.9rem;font-weight:650;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.payos-transfer-expiry{grid-column:1/-1;padding-top:10px;border-top:1px solid var(--border)}
+.payos-checkout-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;padding-top:2px}
 .payos-checkout-actions button{min-height:44px;border-radius:999px}
 .payos-checkout-details>.payos-checkout-error{grid-column:1/-1}
+@container payos-checkout (min-width:360px){.payos-checkout-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container payos-checkout (min-width:560px){.payos-checkout-details[data-qr="true"]{grid-template-columns:minmax(0,250px) minmax(0,1fr)}}
+@container payos-checkout (max-width:400px){.payos-checkout-actions button{width:100%;justify-content:center}}
 .payment-result-page{min-height:100dvh;display:grid;place-items:center;padding:20px;background:var(--bg);color:var(--fg)}
 .payment-result-card{width:min(100%,600px);padding:clamp(24px,4vw,40px);border-radius:24px}
 .payment-result-brand{display:flex;align-items:center;gap:10px;margin-bottom:34px}
@@ -49,7 +64,6 @@
 .payment-result-actions button{min-height:44px;border-radius:999px}
 .payos-checkout :focus-visible,.payment-result-card :focus-visible{outline: 2px solid var(--focus-ink, var(--focus));outline-offset: -3px}
 @media(max-width:560px){.payment-result-actions button{width:100%}.payos-method,.payos-pay-button{width:100%}}
-@media(max-width:620px){.payos-checkout-details{grid-template-columns:minmax(0,1fr)}.payos-checkout-actions{grid-column:1}.payos-checkout-actions button{width:100%}}
 .booking-payment-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:var(--raised);color:var(--primary)}
 .booking-payment-icon img{width:28px;height:28px;object-fit:contain}
 .booking-payment-description{font-size:.8rem;line-height:1.4;color:var(--muted);text-align:center}

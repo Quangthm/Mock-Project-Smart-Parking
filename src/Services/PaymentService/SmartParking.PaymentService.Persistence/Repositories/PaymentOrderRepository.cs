@@ -17,27 +17,43 @@ public class PaymentOrderRepository : IPaymentOrderRepository
     {
         return await _dbContext.PaymentOrders
             .Include(x => x.Transactions)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsProvisioningFence, cancellationToken);
     }
 
     public async Task<PaymentOrder?> GetByOrderCodeAsync(string orderCode, CancellationToken cancellationToken = default)
     {
         return await _dbContext.PaymentOrders
             .Include(x => x.Transactions)
-            .FirstOrDefaultAsync(x => x.OrderCode == orderCode, cancellationToken);
+            .FirstOrDefaultAsync(x => x.OrderCode == orderCode && !x.IsProvisioningFence, cancellationToken);
     }
 
     public async Task<PaymentOrder?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
     {
         return await _dbContext.PaymentOrders
             .Include(x => x.Transactions)
+            .Include(x => x.Invoice)
             .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
+    }
+
+    public Task<PaymentOrder?> FindOwnCheckoutAsync(Guid accountId, Guid? reservationId, Guid? orderId, CancellationToken ct)
+    {
+        var owned = _dbContext.PaymentOrders.AsNoTracking().Where(o => o.AccountId == accountId);
+        return reservationId is Guid reservation
+            ? owned.SingleOrDefaultAsync(o => o.ReferenceId == reservation && o.ReviewedMethod != null, ct)
+            : owned.SingleOrDefaultAsync(o => o.Id == orderId && !o.IsProvisioningFence, ct);
     }
 
     public async Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default)
     {
         await _dbContext.PaymentOrders.AddAsync(order, cancellationToken);
     }
+
+    public Task<Guid?> FindReviewedOrderIdAsync(string orderCode, CancellationToken ct) =>
+        _dbContext.PaymentOrders.Where(o => o.OrderCode == orderCode && o.ReviewedMethod != null && !o.IsProvisioningFence)
+            .Select(o => (Guid?)o.Id).SingleOrDefaultAsync(ct);
+
+    public Task<bool> HasReviewedReservationAsync(Guid reservationId, CancellationToken ct) =>
+        _dbContext.PaymentOrders.AnyAsync(o => o.ReferenceId == reservationId && o.ReviewedMethod != null, ct);
 
     public void Update(PaymentOrder order)
     {

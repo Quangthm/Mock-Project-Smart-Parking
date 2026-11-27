@@ -55,6 +55,13 @@ public static class ConsumerAuthenticationRegistration
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Path == "/hubs/reservation-progress" &&
+                            context.Request.Query.TryGetValue("access_token", out var token) && token.Count == 1)
+                            context.Token = token[0];
+                        return Task.CompletedTask;
+                    },
                     OnTokenValidated = context =>
                     {
                         if (!HasIdentity(context.Principal)) context.Fail("Required identity claims are invalid.");

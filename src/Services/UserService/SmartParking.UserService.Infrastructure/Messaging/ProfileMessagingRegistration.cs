@@ -16,6 +16,7 @@ public static class ProfileMessagingRegistration
         IConfiguration configuration, Action<IBusRegistrationConfigurator> configureOutbox,
         Action<IReceiveEndpointConfigurator, IBusRegistrationContext>? configureAccessEndpoint = null)
     {
+        var sagaEnabled = configuration.GetValue<bool>("ReservationAdmission:SagaConsumersEnabled");
         var accessEnabled = configuration.GetValue<bool>("Messaging:Enabled");
         var reservationEnabled = configuration.GetValue<bool>("ReservationAdmission:Enabled");
         if (reservationEnabled && (string.IsNullOrWhiteSpace(configuration["ReservationAdmission:BrokerUser"]) ||
@@ -31,6 +32,7 @@ public static class ProfileMessagingRegistration
         {
             configureOutbox(registration);
             if (accessEnabled) registration.AddConsumer<OperatorAccessChangedConsumer>();
+            if (reservationEnabled && sagaEnabled) registration.AddConsumer<ReservationPlateConsumer>();
             if (reservationEnabled) registration.AddConsumer<AccountCurrentConsumer>();
             registration.UsingRabbitMq((context, bus) =>
             {
@@ -52,6 +54,14 @@ public static class ProfileMessagingRegistration
                     publish.AutoDelete = false;
                     publish.ExchangeType = "fanout";
                 });
+                if (reservationEnabled && sagaEnabled)
+                    bus.ReceiveEndpoint("user-reservation-plate-v1", endpoint =>
+                    {
+                        endpoint.ConfigureConsumeTopology = false;
+                        endpoint.UseMessageRetry(r => r.Interval(2, TimeSpan.FromMilliseconds(250)));
+                        configureAccessEndpoint!.Invoke(endpoint, context);
+                        endpoint.ConfigureConsumer<ReservationPlateConsumer>(context);
+                    });
                 // Profile audit routing is provisioned independently; no audit consumer is required.
                 if (reservationEnabled)
                     bus.ReceiveEndpoint(SmartParking.Contracts.AccountAccess.AccountAccessEndpoints.Requests, endpoint =>

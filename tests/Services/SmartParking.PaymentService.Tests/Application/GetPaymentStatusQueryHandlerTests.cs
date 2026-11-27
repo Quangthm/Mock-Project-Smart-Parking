@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Domain.Entities;
@@ -27,7 +28,9 @@ public class GetPaymentStatusQueryHandlerTests
             _eventPublisher,
             _uow,
             _gatewayPort,
-            NullLogger<GetPaymentStatusQueryHandler>.Instance
+            NullLogger<GetPaymentStatusQueryHandler>.Instance,
+            new ReviewedPayOsSettlement(_orderRepo, _txRepo, new FakeRefundRequestRepository(), _eventPublisher, _uow,
+                NullLogger<ReviewedPayOsSettlement>.Instance)
         );
     }
 

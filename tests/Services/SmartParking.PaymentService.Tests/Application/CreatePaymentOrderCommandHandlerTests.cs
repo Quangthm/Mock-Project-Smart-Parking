@@ -114,8 +114,13 @@ public class CreatePaymentOrderCommandHandlerTests
         Assert.Equal("IDEMPOTENCY_PAYLOAD_MISMATCH", ex.Code);
     }
 
-    [Fact]
-    public async Task Handle_ReservationFee_PublicCreation_ThrowsForbidden()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(OrderType.PARKING_FEE)]
+    [InlineData(OrderType.RESERVATION_FEE)]
+    [InlineData(OrderType.MONTHLY_PASS_FEE)]
+    [InlineData(OrderType.OVERNIGHT_FEE)]
+    public async Task Handle_ReservationReference_PublicCreation_ThrowsForbidden(OrderType? orderType)
     {
         var handler = CreateHandler();
         var request = new CreatePaymentOrderRequestDto(
@@ -124,12 +129,13 @@ public class CreatePaymentOrderCommandHandlerTests
             ReferenceId: Guid.NewGuid(),
             ReferenceType: ReferenceType.RESERVATION,
             Amount: 30000,
-            OrderType: OrderType.RESERVATION_FEE
+            OrderType: orderType
         );
 
         var ex = await Assert.ThrowsAsync<PaymentDomainException>(
             () => handler.Handle(new CreatePaymentOrderCommand(request), CancellationToken.None));
 
         Assert.Equal("FORBIDDEN_RESERVATION_DEPOSIT_CREATION", ex.Code);
+        Assert.Empty(_orderRepo.Orders);
     }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 
 import {
@@ -68,6 +68,8 @@ import { PendingApproval } from "./public pages/PendingApproval"
 
 import { getUserHomePath } from "./roles/operator/data/roleRoutes"
 import { scrollPageToTop } from "./lib/scrollPageToTop"
+// @ts-expect-error Vite resolves the JSX demo scene when the route is opened.
+const ParkingDemo3D = lazy(() => import("./components/parking-demo/ParkingDemo3D.jsx"))
 
 function AppContent() {
   const { view, user, authReady, authError, accentColor, setView } = useApp()
@@ -120,6 +122,8 @@ function AppContent() {
   const isOwnerContractPath = location.pathname.startsWith("/owner/contract/")
   const isAdminContractPath = /^\/admin\/applications\/[^/]+\/contract$/.test(location.pathname)
   const isContractPath = isOwnerContractPath || isAdminContractPath
+
+  if (location.pathname === "/demo") return <Suspense fallback={<div className="p-8 text-center">Loading demo…</div>}><ParkingDemo3D /></Suspense>
 
   useEffect(() => {
     if (

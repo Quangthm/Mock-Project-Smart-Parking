@@ -2,6 +2,7 @@ using System.Reflection;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.NotificationAuditService.API.Common;
 using SmartParking.NotificationAuditService.API.Controllers;
 using SmartParking.NotificationAuditService.Application.Common.Interfaces.Services;
 using SmartParking.NotificationAuditService.Application.DTOs.Notifications;
@@ -96,8 +97,8 @@ public class NotificationsControllerTests
         var result = await controller.MarkAsRead(Guid.NewGuid());
 
         // Assert
-        var unauthorizedResult = Assert.IsType<UnauthorizedObjectResult>(result);
-        Assert.Equal(401, unauthorizedResult.StatusCode);
+        var unauthorizedResult = Assert.IsType<NotificationApiErrorActionResult>(result);
+        Assert.Equal(401, unauthorizedResult.Response.StatusCode);
     }
 
     [Fact]
@@ -114,8 +115,8 @@ public class NotificationsControllerTests
         var result = await controller.MarkAsRead(targetNotificationId);
 
         // Assert
-        var notFoundResult = Assert.IsType<NotFoundObjectResult>(result);
-        Assert.Equal(404, notFoundResult.StatusCode);
+        var notFoundResult = Assert.IsType<NotificationApiErrorActionResult>(result);
+        Assert.Equal(404, notFoundResult.Response.StatusCode);
 
         var sentCommand = Assert.IsType<MarkNotificationReadCommand>(mediator.LastSentRequest);
         Assert.Equal(targetNotificationId, sentCommand.Id);
@@ -186,8 +187,8 @@ public class NotificationsControllerTests
         var result = await controller.MarkAllAsRead();
 
         // Assert
-        var unauthorizedResult = Assert.IsType<UnauthorizedObjectResult>(result);
-        Assert.Equal(401, unauthorizedResult.StatusCode);
+        var unauthorizedResult = Assert.IsType<NotificationApiErrorActionResult>(result);
+        Assert.Equal(401, unauthorizedResult.Response.StatusCode);
     }
 
     [Fact]
@@ -223,8 +224,8 @@ public class NotificationsControllerTests
         var result = await controller.GetNotifications(null);
 
         // Assert
-        var unauthorizedResult = Assert.IsType<UnauthorizedObjectResult>(result);
-        Assert.Equal(401, unauthorizedResult.StatusCode);
+        var unauthorizedResult = Assert.IsType<NotificationApiErrorActionResult>(result);
+        Assert.Equal(401, unauthorizedResult.Response.StatusCode);
     }
 
     [Fact]
@@ -265,8 +266,8 @@ public class NotificationsControllerTests
         var result = await controller.GetNotificationById(Guid.NewGuid());
 
         // Assert
-        var unauthorizedResult = Assert.IsType<UnauthorizedObjectResult>(result);
-        Assert.Equal(401, unauthorizedResult.StatusCode);
+        var unauthorizedResult = Assert.IsType<NotificationApiErrorActionResult>(result);
+        Assert.Equal(401, unauthorizedResult.Response.StatusCode);
     }
 
     [Fact]
@@ -306,8 +307,8 @@ public class NotificationsControllerTests
         var result = await controller.RetryDelivery(Guid.NewGuid());
 
         // Assert
-        var unauthorizedResult = Assert.IsType<UnauthorizedObjectResult>(result);
-        Assert.Equal(401, unauthorizedResult.StatusCode);
+        var unauthorizedResult = Assert.IsType<NotificationApiErrorActionResult>(result);
+        Assert.Equal(401, unauthorizedResult.Response.StatusCode);
     }
 
     [Fact]

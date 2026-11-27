@@ -7,6 +7,7 @@ namespace SmartParking.PaymentService.API.Authentication;
 public static class OperationsServiceAuthentication
 {
     public const string Scheme = "OperationsService";
+    public const string QuotePolicy = "ReviewedReservationQuotes";
     public const string Policy = "ReservationDepositOrders";
     public const string Permission = "reservation:deposit-order";
     public const string PassFinancialTermsReadPolicy = "PassFinancialTermsRead";
@@ -82,29 +83,16 @@ public static class OperationsServiceAuthentication
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy(Policy, policy =>
+            void Add(string name, string permission) => options.AddPolicy(name, policy =>
                 policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
                     .RequireClaim("sub", "SmartParking.OperationService")
                     .RequireClaim("sender", "SmartParking.OperationService")
-                    .RequireClaim("permission", Permission));
-
-            options.AddPolicy(PassFinancialTermsReadPolicy, policy =>
-                policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
-                    .RequireClaim("sub", "SmartParking.OperationService")
-                    .RequireClaim("sender", "SmartParking.OperationService")
-                    .RequireClaim("permission", PassFinancialTermsReadPermission));
-
-            options.AddPolicy(PassFinancialTermsQuotePolicy, policy =>
-                policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
-                    .RequireClaim("sub", "SmartParking.OperationService")
-                    .RequireClaim("sender", "SmartParking.OperationService")
-                    .RequireClaim("permission", PassFinancialTermsQuotePermission));
-
-            options.AddPolicy(PassClosuresCompensatePolicy, policy =>
-                policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
-                    .RequireClaim("sub", "SmartParking.OperationService")
-                    .RequireClaim("sender", "SmartParking.OperationService")
-                    .RequireClaim("permission", PassClosuresCompensatePermission));
+                    .RequireClaim("permission", permission));
+            Add(Policy, Permission);
+            Add(QuotePolicy, "reservation:quote");
+            Add(PassFinancialTermsReadPolicy, PassFinancialTermsReadPermission);
+            Add(PassFinancialTermsQuotePolicy, PassFinancialTermsQuotePermission);
+            Add(PassClosuresCompensatePolicy, PassClosuresCompensatePermission);
         });
     }
 }

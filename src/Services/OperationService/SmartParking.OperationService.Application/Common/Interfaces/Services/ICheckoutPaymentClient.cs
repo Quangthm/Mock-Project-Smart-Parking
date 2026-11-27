@@ -15,8 +15,8 @@ public interface ICheckoutPaymentClient
     Task<CheckoutPaymentPreparation> PrepareAsync(
         Guid tenantId,
         Guid siteId,
-        Guid referenceId,
-        string referenceType,
+        Guid sessionId,
+        Guid? reservationId,
         string vehicleType,
         DateTimeOffset entryTime,
         DateTimeOffset pricingCutoffAt,
@@ -34,7 +34,8 @@ public interface ICheckoutPaymentClient
 
 public sealed record CheckoutPaymentPreparation(
     CheckoutPricing Pricing,
-    CheckoutPaymentOrder Order);
+    CheckoutPaymentOrder? Order,
+    bool IsMonthlyCovered = false);
 
 public sealed record CheckoutPricing(
     long FinalAmountVnd,

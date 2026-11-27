@@ -32,10 +32,11 @@ public sealed class ReservationRequestRepository(ReservationDbContext db) : IRes
         return row;
     }
 
-    public async Task<IReadOnlyList<Guid>> DueAsync(DateTimeOffset now, CancellationToken ct) =>
-        await db.ReservationRequests.AsNoTracking().Where(x => (x.State == "PENDING_AUTHORIZATION" ||
-            x.State == "PREPARING") && x.NextActionAt <= now)
-            .OrderBy(x => x.NextActionAt).ThenBy(x => x.Id).Select(x => x.Id).Take(100).ToListAsync(ct);
+    public Task<Guid?> FindOwnByOrderAsync(Guid accountId, Guid orderId, CancellationToken ct) =>
+        (from booking in db.Reservations.AsNoTracking()
+         join request in db.ReservationRequests on booking.RequestId equals (Guid?)request.Id
+         where booking.PaymentOrderId == orderId && booking.AccountId == accountId && request.AccountId == accountId
+         select booking.RequestId).SingleOrDefaultAsync(ct);
 
     public void Add(ReservationRequest request) => db.ReservationRequests.Add(request);
     private void RequireTransaction()

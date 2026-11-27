@@ -5,7 +5,6 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Npgsql;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
@@ -65,19 +64,16 @@ public static class DiscoveryCatalogueEndpoints
         app.UseRateLimiter();
         app.MapGet("/api/public/parking-sites", List).RequireRateLimiting("discovery-catalogue");
         app.MapPut("/api/parking-lots/{siteId:guid}/publication",
-            (Guid siteId, PublishSite fields, DiscoveryCatalogue catalogue, HttpContext ctx, CancellationToken ct) =>
-                Run(ctx, async () => { await catalogue.Publish(siteId, fields, ct); return Results.NoContent(); }));
+            Publish);
         app.MapDelete("/api/parking-lots/{siteId:guid}/publication",
-            (Guid siteId, DiscoveryCatalogue catalogue, HttpContext ctx, CancellationToken ct) =>
-                Run(ctx, async () => { await catalogue.Withdraw(siteId, ct); return Results.NoContent(); }));
+            Withdraw);
     }
     public static bool IsDiscoveryPath(PathString path) => path.StartsWithSegments("/api/public/parking-sites") ||
         path.StartsWithSegments("/api/parking-lots") && path.Value!.EndsWith("/publication", StringComparison.Ordinal);
 
-    private sealed record Cursor(CatalogueFilter Filter, CataloguePosition Position, DateTimeOffset ExpiresAt);
 
-    private static Task<IResult> List(HttpContext ctx, DiscoveryCatalogue catalogue, IDataProtectionProvider protection,
-        TimeProvider clock, CancellationToken ct) => Run(ctx, async () =>
+    private static async Task<IResult> List(HttpContext ctx, DiscoveryCatalogue catalogue, IDataProtectionProvider protection,
+        TimeProvider clock, CancellationToken ct)
     {
         if (ctx.Request.ContentLength > 0 || ctx.Request.Headers.ContainsKey("Transfer-Encoding"))
             throw new StructureException("VALIDATION_FAILED", "This read does not accept a body.");
@@ -100,7 +96,7 @@ public static class DiscoveryCatalogueEndpoints
             try
             {
                 if (token.Length is 0 or > 2048) throw new CryptographicException();
-                var cursor = JsonSerializer.Deserialize<Cursor>(protector.Unprotect(token));
+                var cursor = JsonSerializer.Deserialize<CatalogueCursor>(protector.Unprotect(token));
                 if (cursor == null || cursor.Filter != f || cursor.Position == null) throw new CryptographicException();
                 if (cursor.ExpiresAt <= clock.GetUtcNow()) throw new StructureException("CURSOR_EXPIRED", "Start a new search.");
                 position = cursor.Position;
@@ -111,31 +107,20 @@ public static class DiscoveryCatalogueEndpoints
         var slice = await catalogue.List(f, position, ct);
         var items = slice.Items.Take(f.Limit).ToArray();
         var nextCursor = slice.Items.Length > items.Length ? protector.Protect(JsonSerializer.Serialize(
-            new Cursor(f, new(slice.CatalogueVersion, items[^1].SiteId), clock.GetUtcNow().AddMinutes(10)))) : null;
+            new CatalogueCursor(f, new(slice.CatalogueVersion, items[^1].SiteId), clock.GetUtcNow().AddMinutes(10)))) : null;
         return Results.Ok(new { success=true, data=new { items, nextCursor, slice.CatalogueVersion, slice.AsOf },
             traceId=ctx.TraceIdentifier });
-    });
-
-    private static async Task<IResult> Run(HttpContext ctx, Func<Task<IResult>> operation)
-    {
-        ctx.Response.Headers.CacheControl = "no-store";
-        try { return await operation(); }
-        catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested) { throw; }
-        catch (StructureException e)
-        {
-            var status = e.Code switch
-            {
-                "UNAUTHENTICATED" => 401, "FORBIDDEN" => 403, "SITE_NOT_FOUND" => 404,
-                "SEARCH_CHANGED" or "CURSOR_EXPIRED" or "STRUCTURE_CONFLICT" => 409,
-                "IDENTITY_UNAVAILABLE" or "CATALOGUE_UNAVAILABLE" => 503, _ => 400
-            };
-            return Error(ctx, status, e.Code, e.Message);
-        }
-        catch (TimeoutException) { return Error(ctx, 504, "DEPENDENCY_TIMEOUT", "Catalogue request timed out."); }
-        catch (Exception e) when (e is NpgsqlException or InvalidOperationException or InvalidCastException)
-        { return Error(ctx, 503, "DEPENDENCY_UNAVAILABLE", "Catalogue is unavailable."); }
-        catch (Exception) { return Error(ctx, 500, "INTERNAL_ERROR", "Discovery request could not complete."); }
     }
-    private static IResult Error(HttpContext ctx, int status, string code, string message) =>
-        Results.Json(new { success=false, code, message, errors=Array.Empty<string>(), traceId=ctx.TraceIdentifier }, statusCode:status);
+
+    private static async Task<IResult> Publish(Guid siteId, PublishSite fields, DiscoveryCatalogue catalogue, CancellationToken ct)
+    {
+        await catalogue.Publish(siteId, fields, ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> Withdraw(Guid siteId, DiscoveryCatalogue catalogue, CancellationToken ct)
+    {
+        await catalogue.Withdraw(siteId, ct);
+        return Results.NoContent();
+    }
 }

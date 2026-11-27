@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using SmartParking.FacilityService.Application;
 
@@ -8,12 +10,14 @@ namespace SmartParking.FacilityService.Persistence;
 // processed_events deduplicates by eventId, slot_sequence_watermarks rejects stale sequence
 // numbers for the same slot, and occupancy_release_ledger guarantees a session is released
 // at most once even if release events are redelivered.
-public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOccupancyProjectionRepository
+public sealed class OccupancyProjectionRepository(ParkingDbContext database) : IOccupancyProjectionRepository
 {
     public async Task<bool> ApplyAsync(OccupancyProjectionEvent projectionEvent, CancellationToken ct)
     {
-        await using var db = await source.OpenConnectionAsync(ct);
-        await using var tx = await db.BeginTransactionAsync(ct);
+        var transaction = database.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("Occupancy projection requires the owning transaction.");
+        var db = (NpgsqlConnection)database.Database.GetDbConnection();
+        var tx = (NpgsqlTransaction)transaction.GetDbTransaction();
 
         // G5 rule 1: a duplicate eventId is recorded once and never re-applied.
         await using (var mark = new NpgsqlCommand("""
@@ -26,21 +30,18 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
             mark.Parameters.AddWithValue(projectionEvent.EventId);
             mark.Parameters.AddWithValue(projectionEvent.EventType);
             if (await mark.ExecuteScalarAsync(ct) is null)
-            {
-                await tx.RollbackAsync(ct);
                 return false;
-            }
         }
 
         var applied = false;
         if (projectionEvent.SlotId is { } slot)
         {
+            // The reservation snapshot includes operational slot state. Share the site fence before
+            // reading the watermark or changing eligibility. A busy token rolls back the event receipt.
+            await PhysicalSiteGuard.RequireAvailableAsync(db, tx, projectionEvent.SiteId, ct);
             // G5 rules 2-4: apply only when the sequence number advances the slot watermark.
             if (!await IsFreshAsync(db, tx, slot, projectionEvent.SequenceNumber, ct))
-            {
-                await tx.CommitAsync(ct);
                 return false;
-            }
 
             switch (projectionEvent.EventType)
             {
@@ -56,7 +57,6 @@ public sealed class OccupancyProjectionRepository(NpgsqlDataSource source) : IOc
             applied = true;
         }
 
-        await tx.CommitAsync(ct);
         return applied;
     }
 
