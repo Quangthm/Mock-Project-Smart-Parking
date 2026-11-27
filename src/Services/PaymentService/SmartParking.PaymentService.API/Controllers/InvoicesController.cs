@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SmartParking.PaymentService.API.Common;
 using SmartParking.PaymentService.Application.DTOs.Invoices;
 using SmartParking.PaymentService.Application.Usecase.GetInvoice;
 using SmartParking.PaymentService.Application.Usecase.GetInvoicePdf;
@@ -62,12 +63,10 @@ public class InvoicesController : ControllerBase
     {
         if (!sessionId.HasValue || sessionId.Value == Guid.Empty)
         {
-            return BadRequest(new
-            {
-                success = false,
-                code = "MISSING_SESSION_ID",
-                message = "The sessionId query parameter is required."
-            });
+            return new PaymentApiErrorActionResult(PaymentErrorResponse.Error(
+                StatusCodes.Status400BadRequest,
+                "MISSING_SESSION_ID",
+                "The sessionId query parameter is required."));
         }
 
         var query = new GetInvoiceBySessionIdQuery(sessionId.Value);

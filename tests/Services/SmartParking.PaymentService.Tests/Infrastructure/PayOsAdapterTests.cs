@@ -276,4 +276,73 @@ public class PayOsAdapterTests
         Assert.False(result.IsValidSignature);
         Assert.Equal("FAILED", result.PaymentStatus);
     }
+
+    [Fact]
+    public async Task InitiatePaymentAsync_HttpTimeoutWithoutCallerAbort_ReturnsGatewayTimeout()
+    {
+        var httpClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+            throw new TaskCanceledException("HttpClient timeout expired")))
+        {
+            BaseAddress = new Uri("https://api-merchant.payos.vn")
+        };
+        var options = Options.Create(new PayOsOptions
+        {
+            ClientId = "live-client-id",
+            ApiKey = "live-api-key",
+            ChecksumKey = "live-checksum-key"
+        });
+
+        var adapter = new PayOsAdapter(httpClient, options, NullLogger<PayOsAdapter>.Instance);
+        var request = new PaymentInitiateRequest(
+            TransactionId: Guid.NewGuid(),
+            OrderCode: 20261020002,
+            AmountVnd: 25000,
+            Description: "SP 20261020002",
+            ReturnUrl: "https://example.com/return",
+            CancelUrl: "https://example.com/cancel",
+            ExpiresAt: DateTimeOffset.UtcNow.AddMinutes(15)
+        );
+
+        var result = await adapter.InitiatePaymentAsync(request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("GATEWAY_TIMEOUT", result.ErrorCode);
+        Assert.DoesNotContain("live-", result.ErrorMessage ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InitiatePaymentAsync_ProviderErrorStatus_SanitizesErrorBody()
+    {
+        var httpClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("{\"secret\":\"raw-payos-secret-body\"}")
+            })))
+        {
+            BaseAddress = new Uri("https://api-merchant.payos.vn")
+        };
+        var options = Options.Create(new PayOsOptions
+        {
+            ClientId = "live-client-id",
+            ApiKey = "live-api-key",
+            ChecksumKey = "live-checksum-key"
+        });
+
+        var adapter = new PayOsAdapter(httpClient, options, NullLogger<PayOsAdapter>.Instance);
+        var request = new PaymentInitiateRequest(
+            TransactionId: Guid.NewGuid(),
+            OrderCode: 20261020003,
+            AmountVnd: 25000,
+            Description: "SP 20261020003",
+            ReturnUrl: "https://example.com/return",
+            CancelUrl: "https://example.com/cancel",
+            ExpiresAt: DateTimeOffset.UtcNow.AddMinutes(15)
+        );
+
+        var result = await adapter.InitiatePaymentAsync(request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("PAYOS_500", result.ErrorCode);
+        Assert.DoesNotContain("secret", result.ErrorMessage ?? "", StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -147,6 +147,8 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
 }) {
   const [attempt, setAttempt] = useState<Attempt | null>(() => readReservationAttempt(storageKey))
   const [reviewed, setReviewed] = useState<{ quote: ReviewedReservationQuote; selection: ReviewedReservationSelection } | null>(null)
+  const [quoteLoading, setQuoteLoading] = useState(() => Boolean(selection && !attempt))
+  const [quoteRetry, setQuoteRetry] = useState(0)
   const [accepted, setAccepted] = useState(false)
   const [receipt, setReceipt] = useState<ReservationReceipt | null>(null)
   const { snapshot, checkout, connected, reconnect } = useReservationProgress(attempt?.requestId, true)
@@ -208,25 +210,41 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
     setReceipt(next)
   }
 
-  function review() {
-    if (!selection) return
-    void run(async () => {
-      const quote = await reservationsApi.reviewQuote(selection)
-      if (quote.canonicalPlate !== selection.licensePlate ||
-          quote.requestedSlotId.toLowerCase() !== selection.requestedSlotId.toLowerCase() ||
-          Date.parse(quote.start) !== Date.parse(selection.start) ||
-          Date.parse(quote.end) !== Date.parse(selection.end) ||
-          quote.paymentMethod !== selection.paymentMethod ||
-          !Number.isFinite(Date.parse(quote.validUntil))) {
-        throw new Error("The quote does not match your selection. Review it again.")
-      }
-      if (current()) {
+  useEffect(() => {
+    if (attempt || !selection) {
+      setQuoteLoading(false)
+      return
+    }
+    let active = true
+    const canApply = () => active && current()
+    setQuoteLoading(true)
+    setError("")
+    setReviewed(null)
+    setAccepted(false)
+    // Let the Strict Mode probe clean up before asking for a quote.
+    void Promise.resolve().then(async () => {
+      if (!canApply()) return
+      try {
+        const quote = await reservationsApi.reviewQuote(selection)
+        if (!canApply()) return
+        if (quote.canonicalPlate !== selection.licensePlate ||
+            quote.requestedSlotId.toLowerCase() !== selection.requestedSlotId.toLowerCase() ||
+            Date.parse(quote.start) !== Date.parse(selection.start) ||
+            Date.parse(quote.end) !== Date.parse(selection.end) ||
+            quote.paymentMethod !== selection.paymentMethod ||
+            !Number.isFinite(Date.parse(quote.validUntil))) {
+          throw new Error("The quote does not match your selection. Refresh the price and terms.")
+        }
         setNow(Date.now())
         setReviewed({ quote, selection })
-        setAccepted(false)
+      } catch (cause) {
+        if (canApply()) setError(cause instanceof Error ? cause.message : "Could not load the price and terms.")
+      } finally {
+        if (canApply()) setQuoteLoading(false)
       }
     })
-  }
+    return () => { active = false }
+  }, [attempt, selection, quoteRetry])
 
   function confirm() {
     if (!reviewed || !accepted) return
@@ -278,10 +296,12 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
 
   const holdExpired = Boolean(snapshot?.holdExpiresAt && Date.parse(snapshot.holdExpiresAt) <= now)
   const paymentState = checkout === "UNAVAILABLE" ? checkout : checkout?.state
+  const paidOrderId = checkout && checkout !== "UNAVAILABLE" && checkout.state === "PAID" ? checkout.orderId : null
   const orderId = connected && !failed && snapshot?.reservationState === "PENDING_PAYMENT" &&
     checkout && checkout !== "UNAVAILABLE" && checkout.state === "PAYABLE" && checkout.holdExpiresAt &&
     Date.parse(checkout.holdExpiresAt) === Date.parse(snapshot.holdExpiresAt ?? "") && snapshot.holdExpiresAt &&
     Date.parse(snapshot.holdExpiresAt) > now ? checkout.orderId : null
+  const displayOrderId = paidOrderId ?? orderId
   const needsReview = reviewed && (Date.parse(reviewed.quote.validUntil) <= now ||
     JSON.stringify(selection) !== JSON.stringify(reviewed.selection))
 
@@ -299,7 +319,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
   const start = quote ? new Date(quote.start) : null
   const end = quote ? new Date(quote.end) : null
   const sameDay = start && end && start.toDateString() === end.toDateString()
-  const progressTone = failed ? "error" : confirmed || orderId ? "success"
+  const progressTone = failed ? "error" : confirmed || paidOrderId || orderId ? "success"
     : busy || (attempt?.requestId && connected && !holdExpired) ? "loading" : "paused"
 
   return <>
@@ -310,7 +330,8 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
     </header>
     {error && !attempt && <p className="reservation-checkout-notice is-error" role="alert"><UntitledIcon name="alert" size={18} />{error}</p>}
 
-    {!attempt && !reviewed && <p>Load the current price and deposit terms before confirming your reservation.</p>}
+    {!attempt && quoteLoading && <p className="reservation-checkout-notice" role="status"><UntitledIcon name="clock" size={18} />Loading price and terms…</p>}
+    {!attempt && !selection && <p role="status">Go back to choose a parking space, vehicle and time.</p>}
     {!attempt && quote && start && end && <div className="reservation-quote">
       <dl className="reservation-quote-price">
         <div className="reservation-quote-due"><dt>Deposit due now</dt><dd>{money(quote.depositAmount, quote.currency)}</dd></div>
@@ -332,7 +353,7 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
       </dl>
       {quote.disclosure && <p className="reservation-checkout-notice"><UntitledIcon name="alert" size={18} />{quote.disclosure}</p>}
       <OperationalTerms policy={quote.operationalPolicy} />
-      {needsReview && <p className="reservation-checkout-notice" role="status">Review the price again before reserving this space.</p>}
+      {needsReview && <p className="reservation-checkout-notice" role="status">Refresh the price and terms before reserving this space.</p>}
       <label className="reservation-quote-consent" data-accepted={accepted && !needsReview}>
         <input type="checkbox" checked={accepted && !needsReview} disabled={Boolean(needsReview) || busy} onChange={event => setAccepted(event.target.checked)} />
         I accept this price and the reservation terms.
@@ -341,14 +362,19 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
 
     {attempt ? <button ref={progressButton} type="button" className="btn-outline" onClick={() => setProgressHidden(false)}>View reservation progress</button>
       : <div className="reservation-checkout-actions">
-        <button type="button" className="btn-outline" disabled={busy} onClick={onBack}>Back to payment methods</button>
-        <button type="button" className="btn-primary" disabled={busy || !selection || Boolean(reviewed && !needsReview && !accepted)} onClick={reviewed && !needsReview ? confirm : review}>
-          {busy ? "Loading…" : reviewed && !needsReview ? "Accept terms and reserve" : "Review price and terms"}
-        </button>
+        <button type="button" className="btn-outline" disabled={busy} onClick={onBack}>Back</button>
+        {reviewed && !needsReview
+          ? <button type="button" className="btn-primary" disabled={busy || quoteLoading || !accepted} onClick={confirm}>
+              {busy ? "Loading…" : "Accept terms and reserve"}
+            </button>
+          : !quoteLoading && selection && (error || needsReview) &&
+            <button type="button" className="btn-primary" onClick={() => setQuoteRetry(value => value + 1)}>
+              {needsReview ? "Refresh price and terms" : "Retry loading price and terms"}
+            </button>}
       </div>}
   </section>
 
-  {attempt && <dialog ref={progressDialog} className="reservation-progress-dialog" data-payment-ready={Boolean(orderId)} aria-labelledby="reservation-progress-title"
+  {attempt && <dialog ref={progressDialog} className="reservation-progress-dialog" data-payment-ready={Boolean(displayOrderId)} aria-labelledby="reservation-progress-title"
     onCancel={event => { event.preventDefault(); setProgressHidden(true) }}>
     <header className="reservation-progress-header">
       <h3 id="reservation-progress-title">Reservation progress</h3>
@@ -361,10 +387,10 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
       </span>
       <p>{confirmed ? "Reservation confirmed." : failed
         ? formatStatus(snapshot?.outcomeCode || receipt?.code || snapshot?.reservationState || snapshot?.admissionState || receipt?.state || "Reservation failed")
+        : paidOrderId ? "Payment received. Awaiting reservation confirmation."
         : attempt.requestId && !connected ? "Waiting for live reservation updates."
         : snapshot?.reservationState === "PENDING_PAYMENT"
-          ? paymentState === "PAID" ? "Payment received. Awaiting reservation confirmation."
-            : holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
+          ? holdExpired ? "The payment deadline has passed. Awaiting the reservation outcome."
             : orderId ? "Your payment order is ready."
             : paymentState === "FAILED" ? "Payment order creation failed."
             : paymentState === "CLOSED" ? "This payment order is closed."
@@ -391,18 +417,18 @@ export function ReservationCheckout({ storageKey, selection, onBack, onDone }: {
           </div>}
         </dl>}
         {snapshot.reservationId && <dl className="reservation-payment-totals">
-          <div className="reservation-payment-due"><dt>Due now</dt><dd>{money(snapshot.depositAmount, snapshot.currency ?? "VND")}</dd></div>
+          <div className="reservation-payment-due"><dt>{paidOrderId ? "Deposit paid" : "Due now"}</dt><dd>{money(snapshot.depositAmount, snapshot.currency ?? "VND")}</dd></div>
           <div><dt>Booked total</dt><dd>{money(snapshot.bookedAmount, snapshot.currency ?? "VND")}</dd></div>
         </dl>}
-        {snapshot.reservationId && snapshot.holdExpiresAt && <p className="reservation-payment-deadline">
+        {!paidOrderId && snapshot.reservationId && snapshot.holdExpiresAt && <p className="reservation-payment-deadline">
           <UntitledIcon name="clock" size={16} />
           <span>Payment deadline</span>
           <time dateTime={snapshot.holdExpiresAt}>{new Date(snapshot.holdExpiresAt).toLocaleString()}</time>
         </p>}
       </section>}
 
-    {orderId && <PaymentCheckout key={orderId} showMethodPicker={false} reservationOrderId={orderId}
-      reservationRequestId={attempt?.requestId} holdExpiresAt={snapshot?.holdExpiresAt} />}
+    {displayOrderId && <PaymentCheckout key={displayOrderId} showMethodPicker={false} reservationOrderId={displayOrderId}
+      paymentConfirmed={Boolean(paidOrderId)} reservationRequestId={attempt?.requestId} holdExpiresAt={snapshot?.holdExpiresAt} />}
 
     {(failed || confirmed || !attempt.requestId || !connected || paymentState === "UNAVAILABLE") && <div className="reservation-checkout-actions">
       {attempt && !failed && !confirmed && (!attempt.requestId || !connected || paymentState === "UNAVAILABLE") && <button type="button" className="btn-outline" disabled={busy} onClick={() => "intent" in attempt ? void run(() => submit(attempt)) : reconnect()}>

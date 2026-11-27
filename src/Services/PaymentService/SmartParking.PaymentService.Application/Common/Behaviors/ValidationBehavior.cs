@@ -27,13 +27,7 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
             var result = await validator.ValidateAsync(context, cancellationToken).ConfigureAwait(false);
             if (result?.Errors is { Count: > 0 })
             {
-                foreach (var error in result.Errors)
-                {
-                    if (error != null)
-                    {
-                        errors.Add(error);
-                    }
-                }
+                errors.AddRange(result.Errors.Where(error => error is not null));
             }
         }
 

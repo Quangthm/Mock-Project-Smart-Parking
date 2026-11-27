@@ -10,7 +10,6 @@ namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 public sealed class ScanParkingSessionCommandHandler(
     IOperatorIdentityClient identity,
     IParkingSessionRepository sessions,
-    IReservationRepository reservations,
     ISlotAllocationRepository allocations,
     IOperationsConcurrency guards,
     IUnitOfWork work,
@@ -35,20 +34,18 @@ public sealed class ScanParkingSessionCommandHandler(
             ?? throw SessionNotFound();
         if (session.ExitTime is not null || session.LocationScannedAt is not null)
             throw new ReservationGateException(409, "INVALID_SESSION_STATE", "The session changed during the scan. Refresh before retrying.");
-        var slotId = request.SlotId;
+        var scannedAt = clock.GetUtcNow();
         SlotAllocationRow? allocation = null;
-        if (session.ReservationId is { } bookedReservationId)
+        if (session.ReservationId is { } reservationId)
         {
-            slotId = (await reservations.FindByIdAsync(scope.TenantId, request.SiteId, bookedReservationId, ct))?.SlotId
-                ?? throw AllocationUnavailable();
-            var active = await allocations.FindActiveForSessionAsync(scope.TenantId, request.SiteId, session.Id, ct);
-            allocation = active.SingleOrDefault(row => row.SlotId == slotId && row.ReservationId == bookedReservationId)
-                ?? throw AllocationUnavailable();
+            var active = await allocations.FindActiveForVisitAsync(scope.TenantId, request.SiteId, session.Id, reservationId, ct);
+            allocation = active.SingleOrDefault(row => row.ReservationId == reservationId && row.SlotId == request.SlotId &&
+                row.AllocatedStartTime <= scannedAt && scannedAt < row.AllocatedEndTime);
         }
-        await using var lease = await occupancy.ClaimAsync(session, slotId, clock.GetUtcNow(), ct);
+        await using var lease = await occupancy.ClaimAsync(session, request.SlotId, scannedAt, ct);
         if (allocation is { AllocationStatus: "RESERVED" })
             allocation.Occupy(session.Id);
-        session.RecordSlotScan(slotId, clock.GetUtcNow());
+        session.RecordSlotScan(request.SlotId, scannedAt);
         await work.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         lease.Commit();
@@ -63,7 +60,4 @@ public sealed class ScanParkingSessionCommandHandler(
 
     private static ReservationGateException SessionNotFound() =>
         new(404, "PARKING_SESSION_NOT_FOUND", "Active parking session was not found.");
-
-    private static ReservationGateException AllocationUnavailable() =>
-        new(409, "ALLOCATION_UNAVAILABLE", "The assigned slot is no longer available for this session.");
 }

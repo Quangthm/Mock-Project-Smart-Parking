@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { classifyPaymentStatus, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
 import { useServerRefresh } from "../../../lib/serverRefresh"
+import { getSessionGeneration } from "../../../lib/authApi"
 import qrLogo from "../../../assets/payment-qr.png"
 import "./payment-checkout.css"
 
@@ -13,6 +14,7 @@ type PaymentCheckoutProps = {
   bookingOrderId?: string
   reservationRequestId?: string
   holdExpiresAt?: string | null
+  paymentConfirmed?: boolean
 }
 
 export function PaymentCheckout({
@@ -21,6 +23,7 @@ export function PaymentCheckout({
   bookingOrderId,
   reservationRequestId,
   holdExpiresAt,
+  paymentConfirmed = false,
 }: PaymentCheckoutProps) {
   const [manualOrderId, setManualOrderId] = useState(() =>
     showMethodPicker
@@ -30,9 +33,11 @@ export function PaymentCheckout({
   )
   const providedOrderId = reservationOrderId ?? bookingOrderId
   const orderId = providedOrderId ?? manualOrderId
+  const autoGenerate = !showMethodPicker && Boolean(providedOrderId)
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
   const submitting = useRef(false)
+  const autoStartedFor = useRef<string | null>(null)
   const mounted = useRef(false)
   const [error, setError] = useState("")
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null)
@@ -68,13 +73,19 @@ export function PaymentCheckout({
       }
   }, 5000)
 
-  async function pay(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selected || !isPaymentOrderId(orderId) || submitting.current) return
-    if (holdExpiresAt && Date.parse(holdExpiresAt) <= Date.now()) {
+  const startCheckout = useCallback(async (automatic: boolean) => {
+    if (paymentConfirmed || !selected || !isPaymentOrderId(orderId) || submitting.current) return
+    const deadline = holdExpiresAt ? Date.parse(holdExpiresAt) : null
+    if (automatic && deadline === null) {
+      setError("The reservation payment deadline is unavailable. Refresh the reservation status.")
+      return
+    }
+    if (deadline !== null && !(deadline > Date.now())) {
       setError("The reservation payment deadline has passed. Refresh the reservation status.")
       return
     }
+    const generation = getSessionGeneration()
+    const current = () => mounted.current && generation === getSessionGeneration()
     submitting.current = true
     setBusy(true)
     setError("")
@@ -83,7 +94,7 @@ export function PaymentCheckout({
       const previous = paymentApi.rememberedCheckout(normalized)
       if (previous) {
         const result = await paymentApi.status(previous.paymentTransactionId)
-        if (providedOrderId && !mounted.current) return
+        if (!current()) return
         if (result.orderId.toLowerCase() !== normalized) throw new Error("Payment Service returned a different order.")
         if (classifyPaymentStatus(result) === "success") throw new Error("This payment order has already been paid.")
         if (result.status === "PENDING" && new Date(previous.expiresAt).getTime() > Date.now()) {
@@ -95,20 +106,45 @@ export function PaymentCheckout({
         if (result.status === "PENDING" || result.status === "UNKNOWN") {
           throw new Error("This payment is still being checked. Do not start another payment for this order.")
         }
-        if (result.status === "FAILED" || result.status === "CANCELLED") paymentApi.resetAttempt(normalized)
+        if (result.status === "FAILED" || result.status === "CANCELLED") {
+          if (automatic) throw new Error("The previous payment did not complete. Try again to create a new QR code.")
+          paymentApi.resetAttempt(normalized)
+        }
+      }
+      if (deadline !== null && !(deadline > Date.now())) {
+        throw new Error("The reservation payment deadline has passed. Refresh the reservation status.")
       }
       const created = await paymentApi.checkout(normalized, providedOrderId ? reservationRequestId ?? null : undefined)
+      if (!current()) return
       setCheckout(created)
       setStatus("pending")
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Payment could not be started.")
+      if (current()) setError(failure instanceof Error ? failure.message : "Payment could not be started.")
     } finally {
       submitting.current = false
-      setBusy(false)
+      if (current()) setBusy(false)
     }
+  }, [paymentConfirmed, selected, orderId, holdExpiresAt, providedOrderId, reservationRequestId])
+
+  useEffect(() => {
+    if (paymentConfirmed || !autoGenerate || !isPaymentOrderId(orderId)) return
+    let active = true
+    const normalized = orderId.trim().toLowerCase()
+    // Defer until the Strict Mode probe has cleaned up.
+    void Promise.resolve().then(() => {
+      if (!active || autoStartedFor.current === normalized) return
+      autoStartedFor.current = normalized
+      void startCheckout(true)
+    })
+    return () => { active = false }
+  }, [paymentConfirmed, autoGenerate, orderId, startCheckout])
+
+  function pay(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void startCheckout(false)
   }
 
-  const holdExpired = !!holdExpiresAt && Date.parse(holdExpiresAt) <= now
+  const holdExpired = !!holdExpiresAt && !(Date.parse(holdExpiresAt) > now)
   const expired = holdExpired || (checkout ? new Date(checkout.expiresAt).getTime() <= now : false)
   const payable = !!checkout && status === "pending" && !expired
   const showQr = payable && Boolean(checkout?.qrCode?.trim())
@@ -117,9 +153,12 @@ export function PaymentCheckout({
   return <section className="card payos-checkout" aria-labelledby="payos-checkout-title">
     <header className="payos-checkout-heading">
       <h3 id="payos-checkout-title">Pay with payOS VietQR</h3>
-      {!checkout && <p>Generate a QR code for this payment order.</p>}
+      {!paymentConfirmed && !checkout && !autoGenerate && <p>Generate a QR code for this payment order.</p>}
     </header>
-    {!checkout && !showMethodPicker && !providedOrderId ? <div className="payos-checkout-unavailable" role="status">
+    {paymentConfirmed ? <div className="payos-transfer-summary">
+      <strong>Payment received</strong>
+      <span className="payos-transfer-status" data-status="success" role="status">Payment confirmed</span>
+    </div> : !checkout && !showMethodPicker && !isPaymentOrderId(orderId) ? <div className="payos-checkout-unavailable" role="status">
       <strong>QR payment is not available for this booking yet.</strong>
       <p>SmartParking needs a payment order from the booking service before it can request a real payOS QR code. Check your reservation status before trying again.</p>
     </div> : !checkout ? <form onSubmit={pay} className="payos-checkout-form">
@@ -135,7 +174,11 @@ export function PaymentCheckout({
       </div>}
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
       {holdExpired && <p role="status">The reservation payment deadline has passed.</p>}
-      <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || busy || holdExpired}>{busy ? "Generating QR…" : "Generate payment QR"}</button>
+      {autoGenerate
+        ? !holdExpired && (busy || !error
+          ? <p role="status">Generating payment QR…</p>
+          : error && holdExpiresAt && <button type="submit" className="btn-primary payos-pay-button">Retry generating QR</button>)
+        : <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || busy || holdExpired}>{busy ? "Generating QR…" : "Generate payment QR"}</button>}
     </form> : <div className="payos-checkout-details" data-qr={showQr}>
       {showQr && <figure className="payos-qr-panel">
         <div><QRCodeSVG value={checkout.qrCode} size={232} marginSize={4} title="Scan this payOS VietQR to pay" /></div>
@@ -170,6 +213,6 @@ export function PaymentCheckout({
       </div>
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
     </div>}
-    <p className="payos-checkout-note">SmartParking confirms payment only after Payment Service verifies the transaction. Scanning the QR alone does not mark it paid.</p>
+    {!paymentConfirmed && <p className="payos-checkout-note">SmartParking confirms payment only after Payment Service verifies the transaction. Scanning the QR alone does not mark it paid.</p>}
   </section>
 }

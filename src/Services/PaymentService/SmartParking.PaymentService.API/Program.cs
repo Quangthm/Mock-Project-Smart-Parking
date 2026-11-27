@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.PaymentService.API.Authentication;
+using SmartParking.PaymentService.API.Extensions;
 using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.API;
 using SmartParking.PaymentService.Application;
@@ -122,19 +123,19 @@ else
 
 builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
 builder.Services.AddUserJwtAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddPaymentApiErrorResponses();
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
 builder.Services.AddDiscoveryPriceReads();
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaymentOutbox(builder.Configuration));
-builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
-builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-app.UseExceptionHandler();
+app.UseRouting();
+app.UsePaymentApiErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {

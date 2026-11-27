@@ -18,8 +18,14 @@ public sealed class GateSlotOccupancy(
             throw new ReservationGateException(decision.Indeterminate ? 503 : 409, decision.Rejection!,
                 "The requested slot is unavailable or requires reconciliation.");
 
+        // Facility can consume a RESERVED marker only when this reservation has a claim on this bay.
+        var allowReservedSlot = session.ReservationId is { } owner &&
+            (facts.Allocations.Any(a => a.ReservationId == owner && a.SlotId == slotId &&
+                (a.ParkingSessionId == null || a.ParkingSessionId == session.Id)) ||
+             facts.Reservations.Any(r => r.Id == owner && (r.ActiveClaimSlotId ?? r.TargetSlotId) == slotId &&
+                 r.ExpectedStartTime <= at && at < (r.ClaimEndTime ?? r.ExpectedEndTime)));
         var lease = await gateSlots.ClaimAvailableAsync(session.TenantId, session.SiteId, session.VehicleType,
-            slotId, null, session.ReservationId is not null, ct);
+            slotId, null, allowReservedSlot, ct);
         if (lease.Slot.Id == slotId)
             return lease;
 
