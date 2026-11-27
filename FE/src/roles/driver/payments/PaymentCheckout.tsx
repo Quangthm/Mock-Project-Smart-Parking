@@ -1,9 +1,48 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { QRCodeSVG } from "qrcode.react"
+import { UntitledIcon } from "../../../components/icon/UntitledIcon"
+import { Modal } from "../../../components/ui/Modal"
 import { classifyPaymentStatus, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
 import { useServerRefresh } from "../../../lib/serverRefresh"
 import qrLogo from "../../../assets/payment-qr.png"
 import "./payment-checkout.css"
+
+const paymentDemoScenarios = {
+  reservation: { label: "Reservation deposit", outcome: "Reservation confirmed" },
+  pass: { label: "Parking pass purchase", outcome: "Parking pass activated" },
+  checkout: { label: "Parking check-out fee", outcome: "Check-out completed" },
+}
+
+function PaymentDemo({ onClose }: { onClose: () => void }) {
+  const [scenario, setScenario] = useState<keyof typeof paymentDemoScenarios>("reservation")
+  const [completed, setCompleted] = useState(false)
+
+  return <Modal title="Payment simulation" onClose={onClose}>
+    <div className="grid gap-4">
+      <p className="text-sm text-[var(--muted)]">Preview the payment outcome for each demo scenario. No money is transferred or order updated.</p>
+      <label className="grid gap-2 text-sm font-semibold">
+        Payment flow
+        <select className="input min-h-11 w-full" value={scenario} onChange={event => {
+          setScenario(event.target.value as keyof typeof paymentDemoScenarios)
+          setCompleted(false)
+        }}>
+          {Object.entries(paymentDemoScenarios).map(([value, { label }]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <div role="status" className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
+        <UntitledIcon name={completed ? "check-circle" : "clock"} size={20} className={completed ? "shrink-0 text-[var(--badge-success-fg)]" : "shrink-0 text-[var(--muted)]"} />
+        <div className="grid gap-1">
+          <p className="font-semibold">{completed ? "Simulated payment successful" : "Awaiting simulated payment"}</p>
+          {completed && <p className="text-sm text-[var(--muted)]">{paymentDemoScenarios[scenario].outcome} in this demo.</p>}
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className="btn-outline min-h-11" onClick={onClose}>{completed ? "Done" : "Cancel"}</button>
+        {!completed && <button type="button" className="btn-primary min-h-11" onClick={() => setCompleted(true)}>Simulate success</button>}
+      </div>
+    </div>
+  </Modal>
+}
 
 // Both prop names are used by reservation checkout callers during the branch merge.
 // Keep one authoritative order ID; remove the alias after callers are standardized.
@@ -33,6 +72,7 @@ export function PaymentCheckout({
   const [error, setError] = useState("")
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null)
   const [status, setStatus] = useState<"pending" | "success" | "failed">("pending")
+  const [demoOpen, setDemoOpen] = useState(false)
   const [now, setNow] = useState(Date.now)
 
   useEffect(() => {
@@ -98,6 +138,7 @@ export function PaymentCheckout({
   const holdExpired = !!holdExpiresAt && Date.parse(holdExpiresAt) <= now
   const expired = holdExpired || (checkout ? new Date(checkout.expiresAt).getTime() <= now : false)
   const payable = !!checkout && status === "pending" && !expired
+  const showDemo = import.meta.env.DEV && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
 
   return <section className="card payos-checkout" aria-labelledby="payos-checkout-title">
     <div className="payos-checkout-heading"><span>PAYMENT SERVICE</span><h3 id="payos-checkout-title">Pay by QR</h3><p>{showMethodPicker ? "Generate a real VietQR from an existing Payment Service order." : "Your payment details will appear here when the booking creates a payment order."}</p></div>
@@ -143,5 +184,7 @@ export function PaymentCheckout({
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
     </div>}
     <p className="payos-checkout-note">SmartParking confirms payment only after Payment Service verifies the transaction. Scanning the QR alone does not mark it paid.</p>
+    {showDemo && <button type="button" className="btn-outline min-h-11 justify-self-start" aria-haspopup="dialog" onClick={() => setDemoOpen(true)}>ByPass · Demo</button>}
+    {showDemo && demoOpen && <PaymentDemo onClose={() => setDemoOpen(false)} />}
   </section>
 }
