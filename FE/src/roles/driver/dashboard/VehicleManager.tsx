@@ -23,6 +23,7 @@ export function VehicleManager() {
   const [claims, setClaims] = useState<RegistrationClaim[]>([])
   const [vehicles, setVehicles] = useState<RegisteredVehicle[]>([])
   const [reload, setReload] = useState(0)
+  const [photoRevision, setPhotoRevision] = useState(0)
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState("")
   const [removalPlate, setRemovalPlate] = useState("")
@@ -68,14 +69,15 @@ export function VehicleManager() {
     setBusy(true)
     setError("")
     try {
-      await vehiclesApi.save({
+      const created = await vehiclesApi.save({
         plate: form.plate,
         vehicleType: form.vehicleType,
         imageAssetId: form.imageAssetId,
       })
       if (getSessionGeneration() !== generation) return
+      setVehicles(current => [...current.filter(item => item.id !== created.id), created])
       setForm({ plate: "", vehicleType: "CAR", imageAssetId: "" })
-      setReload((n) => n + 1)
+      setPhotoRevision(value => value + 1)
       showUiToast("Vehicle saved", "Your registered vehicle is saved.")
     } catch (e) {
       if (getSessionGeneration() !== generation) return
@@ -132,7 +134,7 @@ export function VehicleManager() {
 
           <section aria-label="Vehicle photo" className="space-y-3 pt-2">
             <h4 className="font-semibold">Vehicle Photo</h4>
-            <VehicleImageInput key={`${getSessionGeneration()}-new-${reload}`}
+            <VehicleImageInput key={`${getSessionGeneration()}-new-${reload}-${photoRevision}`}
               showEmptyPreview disabled={busy}
               onUploaded={assetId => setForm(current => ({ ...current, imageAssetId: assetId }))} />
           </section>

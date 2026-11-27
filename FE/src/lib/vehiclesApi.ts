@@ -1,4 +1,4 @@
-import { request } from "./authApi"
+import { getSessionGeneration, request } from "./authApi"
 
 export type RegisteredVehicle = {
   id: string
@@ -18,6 +18,17 @@ export type VehicleInput = {
 }
 
 type ApiResponse<T> = { success: boolean; data: T }
+
+const registrationListeners = new Set<(vehicle: RegisteredVehicle) => void>()
+
+export function subscribeVehicleRegistration(onRegistered: (vehicle: RegisteredVehicle) => void) {
+  const generation = getSessionGeneration()
+  const listener = (vehicle: RegisteredVehicle) => {
+    if (generation === getSessionGeneration()) onRegistered(vehicle)
+  }
+  registrationListeners.add(listener)
+  return () => { registrationListeners.delete(listener) }
+}
 
 export function canonicalVietnamesePlate(plate: string) {
   return plate.trim().toUpperCase().replace(/[\s.-]/g, "")
@@ -90,6 +101,7 @@ export const vehiclesApi = {
 
   async save(input: VehicleInput, id?: string): Promise<RegisteredVehicle> {
     if (!input.imageAssetId) throw new Error("Upload a vehicle image first.")
+    const generation = getSessionGeneration()
     const response = await request<ApiResponse<RegisteredVehicle>>(
       id ? `/${encodeURIComponent(id)}` : "",
       id ? "PATCH" : "POST",
@@ -98,6 +110,9 @@ export const vehiclesApi = {
     )
     if (!response.success || !response.data?.id)
       throw new Error("Invalid vehicle response.")
+    if (!id && generation === getSessionGeneration()) {
+      registrationListeners.forEach(listener => listener(response.data))
+    }
     return response.data
   },
 }
