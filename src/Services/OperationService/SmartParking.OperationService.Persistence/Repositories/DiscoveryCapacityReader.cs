@@ -11,7 +11,7 @@ internal sealed class DiscoveryCapacityReader(ReservationDbContext db, IReservat
     : IDiscoveryCapacityReader
 {
     public async Task<CarCapacityRead> ReadCarsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<Guid> candidateSlots,
-        ReservationInterval? requestedStay, CancellationToken ct)
+        ReservationInterval? requestedStay, CancellationToken ct, IReadOnlySet<Guid>? physicallyOccupied = null)
     {
         if (tenantId == Guid.Empty || siteId == Guid.Empty)
             throw new ArgumentException("Trusted tenant and site are required for a capacity read.");
@@ -51,6 +51,12 @@ internal sealed class DiscoveryCapacityReader(ReservationDbContext db, IReservat
             await snapshot.CommitAsync(ct);
         }
 
+        if (physicallyOccupied is not null)
+        {
+            var located = facts.Sessions.Where(s => s.CurrentSlotId.HasValue)
+                .Select(s => s.CurrentSlotId!.Value).ToHashSet();
+            if (!physicallyOccupied.SetEquals(candidateSlots.Where(located.Contains))) return new(at, null);
+        }
         return new(at, facts.CountAvailableCars(candidateSlots, effective, at, projection, ct));
     }
 }

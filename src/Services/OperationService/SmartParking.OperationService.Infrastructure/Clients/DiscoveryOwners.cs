@@ -6,20 +6,14 @@ using SmartParking.OperationService.Application.Discovery;
 
 namespace SmartParking.OperationService.Infrastructure.Clients;
 
-public sealed class DiscoveryOrigins(Uri? facility, Uri? payment, string? paymentKey)
-{
-    public Uri? Facility { get; } = facility;
-    public Uri? Payment { get; } = payment;
-    public string? PaymentKey { get; } = paymentKey;
-}
-public sealed class DiscoveryOwners(IHttpClientFactory clients, DiscoveryOrigins origins) : IDiscoveryOwners
+public sealed class DiscoveryOwners(IHttpClientFactory clients, DiscoveryOrigins origins, Microsoft.Extensions.Configuration.IConfiguration configuration) : IDiscoveryOwners
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         RespectRequiredConstructorParameters = true,
         NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict
     };
-    private sealed record Envelope<T>(bool Success, T Data);
+
 
     public async Task<FacilityPage> Sites(SearchFilter filter, string? cursor, CancellationToken ct)
     {
@@ -37,6 +31,18 @@ public sealed class DiscoveryOwners(IHttpClientFactory clients, DiscoveryOrigins
         using var request = new HttpRequestMessage(HttpMethod.Get,
             new Uri(origins.Facility, QueryHelpers.AddQueryString("/api/public/parking-sites", query)));
         return await Read<FacilityPage>("discovery-facility", request, ct);
+    }
+
+    public async Task<CandidateBatch> Candidates(DiscoverySite[] sites, SearchFilter filter, DateTimeOffset at, CancellationToken ct)
+    {
+        if (origins.Facility is null) throw DiscoveryFailure.Unavailable();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(origins.Facility, "/internal/discovery/v1/slot-candidates:read"));
+        try { request.Headers.Authorization = Reservations.FacilityServiceToken.Create(configuration, "discovery:slot-candidates:read"); }
+        catch (Exception error) when (error is System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException or ArgumentException)
+        { throw DiscoveryFailure.Unavailable(); }
+        request.Content = JsonContent.Create(new { sites = sites.Select(s => new { s.SiteId, s.ConfigurationVersion }),
+            filter.VehicleType, at, startAt = filter.StartAt?.ToUniversalTime(), endAt = filter.EndAt?.ToUniversalTime() });
+        return await Read<CandidateBatch>("discovery-facility", request, ct);
     }
 
     public async Task<PriceBatch> Prices(Guid[] ids, SearchFilter filter, DateTimeOffset at, CancellationToken ct)
@@ -72,7 +78,7 @@ public sealed class DiscoveryOwners(IHttpClientFactory clients, DiscoveryOrigins
             await response.Content.LoadIntoBufferAsync(maxBytes, ct);
             var bytes = await response.Content.ReadAsByteArrayAsync(ct);
             if (bytes.Length > maxBytes) throw DiscoveryFailure.Unavailable();
-            var envelope = JsonSerializer.Deserialize<Envelope<T>>(bytes, Json);
+            var envelope = JsonSerializer.Deserialize<DiscoveryEnvelope<T>>(bytes, Json);
             return envelope is { Success: true, Data: not null } ? envelope.Data : throw DiscoveryFailure.Unavailable();
         }
         catch (Exception e) when (e is HttpRequestException or IOException or JsonException or NotSupportedException)

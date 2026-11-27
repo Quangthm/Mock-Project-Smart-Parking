@@ -1,45 +1,11 @@
 using MediatR;
 using System.Security.Cryptography;
 using System.Text.Json;
-using SmartParking.OperationService.Domain;
 
 namespace SmartParking.OperationService.Application.Discovery;
 
-public sealed record SearchFilter(double Lat, double Lon, string VehicleType, double RadiusKm, string? LotType,
-    bool AvailableOnly, DateTimeOffset? StartAt, DateTimeOffset? EndAt, string TimeZone, long? MinTotalVnd,
-    long? MaxTotalVnd, int Limit);
-public sealed record SearchParking(SearchFilter Filter, string? Cursor) : IRequest<SearchPage>;
-public sealed record DiscoveryCursor(string FilterHash, string CatalogueVersion, DateTimeOffset Anchor,
-    double Distance, Guid SiteId);
-public interface IDiscoveryCursors
-{
-    string Encode(DiscoveryCursor cursor);
-    DiscoveryCursor Decode(string cursor);
-}
-public sealed record FacilityWindow(DateTimeOffset From, DateTimeOffset To, string State, DateTimeOffset AsOf);
-public sealed record DiscoverySite(Guid SiteId, string Name, string Address, double Latitude, double Longitude,
-    string LotType, string[] SupportedVehicleTypes, string ConfigurationVersion, DateTimeOffset AsOf, FacilityWindow? ServiceWindow = null);
-public sealed record FacilityPage(DiscoverySite[] Items, string? NextCursor, string CatalogueVersion, DateTimeOffset AsOf);
-public sealed record DiscoveryPrice(string Kind, long AmountVnd, string BillingUnit, int PolicyVersion, DateTimeOffset AsOf);
-public sealed record SitePrice(Guid SiteId, DiscoveryPrice? Price, string? Reason);
-public sealed record PriceBatch(SitePrice[] Items, DateTimeOffset AsOf);
-public interface IDiscoveryOwners
-{
-    Task<FacilityPage> Sites(SearchFilter filter, string? cursor, CancellationToken ct);
-    Task<PriceBatch> Prices(Guid[] ids, SearchFilter filter, DateTimeOffset at, CancellationToken ct);
-}
-
-public sealed record Availability(string Kind, int? AvailableCount, DateTimeOffset? AsOf, string? Reason);
-public sealed record FieldState(string Freshness, string? Reason);
-public sealed record SourceTimes(DateTimeOffset Facility, DateTimeOffset? Operations, DateTimeOffset Payment);
-public sealed record FieldStates(FieldState Facility, FieldState Availability, FieldState Price);
-public sealed record ParkingSummary(Guid SiteId, string Name, string Address, double Latitude, double Longitude,
-    string LotType, string[] SupportedVehicleTypes, double DistanceMeters, Availability Availability,
-    DiscoveryPrice? Price, SourceTimes SourceAsOf, FieldStates FieldStatus);
-public sealed record SearchPage(ParkingSummary[] Items, string? NextCursor, DateTimeOffset AsOf);
-public sealed record DiscoveryPolicy(bool Enabled, TimeSpan MaxAge, TimeSpan Skew);
 public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCursors cursors,
-    TimeProvider clock, DiscoveryPolicy policy, IDiscoveryCapacitySource capacity) : IRequestHandler<SearchParking, SearchPage>
+    TimeProvider clock, DiscoveryPolicy policy, IDiscoveryCapacityReader capacity) : IRequestHandler<SearchParking, SearchPage>
 {
     public async Task<SearchPage> Handle(SearchParking request, CancellationToken ct)
     {
@@ -62,6 +28,11 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
         try
         {
             return await Assemble(filter, hash, after, at, deadline.Token);
+        }
+        catch (System.Data.Common.DbException) when (!ct.IsCancellationRequested)
+        {
+            if (deadline.IsCancellationRequested) throw new DiscoveryFailure(504, "DEPENDENCY_TIMEOUT");
+            throw DiscoveryFailure.Unavailable();
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -99,10 +70,15 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
                 throw DiscoveryFailure.Unavailable();
         } while (cursor is not null);
 
+        var registeredSlots = new HashSet<Guid>();
+        var facilityTimes = new Dictionary<Guid, DateTimeOffset>();
         var ranked = new List<ParkingSummary>();
         foreach (var batch in candidates.Chunk(100))
         {
             ct.ThrowIfCancellationRequested();
+            var requested = batch.Where(site => filter.VehicleType == "CAR" &&
+                site.SupportedVehicleTypes.Contains("CAR") && !Closed(site.ServiceWindow, filter, at)).ToArray();
+            var counts = await ReadAvailability(requested, filter, at, facilityTimes, registeredSlots, ct);
             var prices = await owners.Prices(batch.Select(s => s.SiteId).ToArray(), filter, at, ct);
             if (prices.AsOf == default || prices.Items is null || prices.Items.Length != batch.Length)
                 throw DiscoveryFailure.Unavailable();
@@ -113,30 +89,15 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
             {
                 if (!byId.TryGetValue(site.SiteId, out var row)) throw DiscoveryFailure.Unavailable();
                 var summary = Project(site, row, prices.AsOf, filter, at);
-                if (summary.Availability.Reason != "closed")
-                {
-                    var evidence = await capacity.Read(site, filter, at, ct);
-                    CapacityResult result;
-                    try
+                if (counts.TryGetValue(site.SiteId, out var availability) && summary.FieldStatus.Availability.Freshness != "stale")
+                    summary = summary with
                     {
-                        result = DiscoveryCapacity.Evaluate(site.SiteId, filter.VehicleType, site.ConfigurationVersion,
-                            filter.StartAt ?? at, filter.EndAt ?? at.AddTicks(1), clock.GetUtcNow(),
-                            policy.MaxAge, policy.Skew, evidence, ct);
-                    }
-                    catch (InvalidCapacityEvidenceException) { throw DiscoveryFailure.Unavailable(); }
-                    // Stale Facility restrictions cannot be refreshed by local count evidence.
-                    if (summary.FieldStatus.Availability.Freshness != "stale")
-                        summary = summary with
-                        {
-                            Availability = new(summary.Availability.Kind, result.Count, result.AsOf, result.Reason),
-                            SourceAsOf = summary.SourceAsOf with { Operations = result.AsOf },
-                            FieldStatus = summary.FieldStatus with
-                            {
-                                Availability = new(result.Count is not null ? "fresh" : result.Reason == "stale" ? "stale" : "unknown",
-                                    result.Count is not null ? null : result.Reason)
-                            }
-                        };
-                }
+                        Availability = availability,
+                        SourceAsOf = summary.SourceAsOf with { Operations = availability.AsOf },
+                        FieldStatus = summary.FieldStatus with { Availability = new(
+                            availability.AvailableCount.HasValue ? "fresh" : availability.Reason == "stale" ? "stale" : "unknown",
+                            availability.Reason) }
+                    };
                 if (!site.SupportedVehicleTypes.Contains(filter.VehicleType) ||
                     filter.LotType is not null && filter.LotType != site.LotType ||
                     summary.DistanceMeters > filter.RadiusKm * 1000 ||
@@ -150,7 +111,7 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
         }
         ct.ThrowIfCancellationRequested();
         foreach (var site in candidates) CheckSite(site, clock.GetUtcNow());
-        var delivered = ranked.Select(row => AtDelivery(row, clock.GetUtcNow()))
+        var delivered = ranked.Select(row => AtDelivery(row, clock.GetUtcNow(), facilityTimes.GetValueOrDefault(row.SiteId)))
             .Where(row => (!filter.AvailableOnly || row.Availability.AvailableCount > 0) &&
                 (filter.MinTotalVnd is null || row.Price?.AmountVnd >= filter.MinTotalVnd) &&
                 (filter.MaxTotalVnd is null || row.Price?.AmountVnd <= filter.MaxTotalVnd));
@@ -161,14 +122,64 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
         return new(items, next, clock.GetUtcNow());
     }
 
+    private async Task<Dictionary<Guid, Availability>> ReadAvailability(DiscoverySite[] requested, SearchFilter filter,
+        DateTimeOffset at, Dictionary<Guid, DateTimeOffset> facilityTimes, HashSet<Guid> registeredSlots, CancellationToken ct)
+    {
+        var counts = new Dictionary<Guid, Availability>();
+        if (requested.Length > 0)
+        {
+            var evidence = await owners.Candidates(requested, filter, at, ct);
+            var slotsInBatch = 0;
+            if (evidence.AsOf == default || evidence.At != at || evidence.StartAt != filter.StartAt ||
+                evidence.EndAt != filter.EndAt || evidence.Items?.Length != requested.Length)
+                throw DiscoveryFailure.Unavailable();
+            foreach (var (site, item) in requested.Zip(evidence.Items))
+            {
+                if (item is null || item.SiteId != site.SiteId || item.TenantId == Guid.Empty ||
+                    !Guid.TryParse(site.ConfigurationVersion, out var version) || version != item.ConfigurationVersion ||
+                    item.Slots is null) throw DiscoveryFailure.Unavailable();
+                foreach (var slot in item.Slots)
+                    if (slot is null || slot.SlotId == Guid.Empty || !registeredSlots.Add(slot.SlotId) || ++slotsInBatch > 2048 ||
+                        slot.SlotUpdatedAt == default || slot.PhysicalState is not ("AVAILABLE" or "OCCUPIED" or "UNKNOWN" or "MAINTENANCE" or "UNAVAILABLE") ||
+                        slot.Outcome is not ("ELIGIBLE" or "INELIGIBLE" or "DEPENDENCY_UNAVAILABLE") ||
+                        slot.Outcome == "DEPENDENCY_UNAVAILABLE" && item.Complete ||
+                        slot.Outcome == "ELIGIBLE" && slot.PhysicalState is not ("AVAILABLE" or "OCCUPIED"))
+                        throw DiscoveryFailure.Unavailable();
+                var kind = filter.StartAt is null ? "current" : "interval";
+                facilityTimes.Add(site.SiteId, evidence.AsOf);
+                DateTimeOffset? stamp = null;
+                int? count = null;
+                if (item.Complete && Fresh(evidence.AsOf, clock.GetUtcNow()))
+                {
+                    var eligible = item.Slots.Where(s => s.Outcome == "ELIGIBLE").ToArray();
+                    var read = await capacity.ReadCarsAsync(item.TenantId, site.SiteId, eligible.Select(s => s.SlotId).ToArray(),
+                        filter.StartAt is {} start ? new(start, filter.EndAt!.Value) : null, ct,
+                        eligible.Where(s => s.PhysicalState == "OCCUPIED").Select(s => s.SlotId).ToHashSet());
+                    if (read.AsOf == default) throw DiscoveryFailure.Unavailable();
+                    stamp = read.AsOf;
+                    count = read.AvailableCount;
+                }
+                var fresh = Fresh(evidence.AsOf, clock.GetUtcNow()) && (stamp == null || Fresh(stamp.Value, clock.GetUtcNow()));
+                counts.Add(site.SiteId, new(kind, fresh ? count : null, stamp,
+                    !fresh ? "stale" : count is null ? "unknown" : null));
+            }
+        }
+        return counts;
+    }
+
+    private bool Closed(FacilityWindow? window, SearchFilter f, DateTimeOffset at) =>
+        window?.State == "closed" && Fresh(window.AsOf, clock.GetUtcNow()) &&
+            (f.StartAt is null ? window.From <= at && at < window.To : window.From < f.EndAt && f.StartAt < window.To);
+
     private bool Fresh(DateTimeOffset stamp, DateTimeOffset now) =>
         stamp != default && now - stamp <= policy.MaxAge && stamp - now <= policy.Skew;
 
-    private ParkingSummary AtDelivery(ParkingSummary row, DateTimeOffset now)
+    private ParkingSummary AtDelivery(ParkingSummary row, DateTimeOffset now, DateTimeOffset candidateTime)
     {
         if (row.Price is not null && !Fresh(row.Price.AsOf, now))
             row = row with { Price = null, FieldStatus = row.FieldStatus with { Price = new("stale", "stale") } };
-        if (row.Availability.AvailableCount is not null && row.Availability.AsOf is { } stamp && !Fresh(stamp, now))
+        if (row.Availability.AvailableCount is not null && row.Availability.AsOf is { } stamp &&
+            (!Fresh(stamp, now) || candidateTime != default && !Fresh(candidateTime, now)))
             row = row with
             {
                 Availability = row.Availability with { AvailableCount = null, Reason = "stale" },
@@ -203,8 +214,7 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
         var priceStatus = !Fresh(priceTime, now) || !Fresh(batchAsOf, now) ? new FieldState("stale", "stale")
             : price is null ? new("unknown", row.Reason) : new("fresh", null);
         var window = site.ServiceWindow;
-        var closed = window?.State == "closed" && Fresh(window.AsOf, now) &&
-            (f.StartAt is null ? window.From <= at && at < window.To : window.From < f.EndAt && f.StartAt < window.To);
+        var closed = Closed(window, f, at);
         var availabilityState = closed ? new FieldState("fresh", null)
             : window is not null && !Fresh(window.AsOf, now) ? new("stale", "stale") : new("unknown", "unknown");
         return new(site.SiteId, site.Name, site.Address, site.Latitude, site.Longitude, site.LotType,

@@ -103,3 +103,68 @@ The Facility API build passed with zero errors and four NuGet audit warnings. A 
 Checkpoint 1's successful Operations build and 49 distinct passing tests, including the 26 availability/gate regressions and two-connection PostgreSQL snapshot verification, were retained without re-execution. Cumulative total through Checkpoint 2 is 57 distinct passes.
 
 Ready for Checkpoint 3 review. Facility and Operations observe independent snapshots. A physical-state change may occur between reads. The inventory cap can reject a large batch or a single oversized site, and latency under the search deadline is unmeasured. Checkpoint 3 must use the discovery permission, handle publication conflicts and incomplete evidence, and preserve Operations ownership of reservation calculations. Cross-service integration, Postman, performance and manual acceptance are deferred to the final tester handoff. Public search integration awaits approval. Work remains uncommitted.
+## Checkpoint 3 — approved interval ownership
+
+Facility checks structural eligibility and maintenance on the requested half-open stay [S,E). Payment prices the same stay. Operations applies its site buffer B to named-slot conflicts and quota on [S,E+B). Admission sends intent.Start and intent.End in ProcessAdmissionSignalHandler and constructs the buffered claim in CommitQuoteHoldHandler. The earlier proposal to reorder reads and split intervals was declined.
+
+The chatbot client requires a fresh timestamp matching sourceAsOf.operations for a known count, consistent field state, positive availableOnly results and ordering by distance then site ID. The Driver web client still queries /parking-lots in FE/src/lib/driverDiscoveryApi.ts. Moving Driver discovery to the canonical Operations endpoint remains with SPARK-276.
+
+### Checkpoint 3 implementation and verification
+
+The existing GET /api/parking-search handler reads the paged catalogue and processes batches of up to 100. Published closures retain their existing result. For applicable CAR sites the owner client sends the requested UTC stay or current instant to the Facility candidate route with a one-minute Operations JWT and the dedicated permission. Its HTTP client retains the 512 KiB response limit, sanitized errors and search deadline. The handler validates echoed times, site IDs, versions, tenant attribution, completeness, unique slot identities across the search and bounded slot outcomes. A Facility 409 propagates as SEARCH_CHANGED. A site or batch exceeding the Facility 2,048 registered-slot limit can fail the search. There is no splitting or retry.
+
+Complete fresh CAR evidence enters the read-only Operations snapshot. The reader compares Facility occupied eligible slots with open sessions located on the eligible candidates. A disagreement yields unknown. The shared availability rule handles commitments, allocations, located visits and quota. Current counts use the instant. Interval counts intersect free slots across the buffered Operations interval and apply the minimum remaining commercial quota. A missing quota adds no commercial limit and zero quota gives zero. Pricing still receives the requested stay. The original projection, filters, distance sort and cursor complete the search. Motorcycle retains its catalogue, pricing and published closure handling with unknown pooled capacity. No reservation, session, allocation, financial order or quote is created by search.
+
+Facility and Operations snapshots can diverge between reads. Freshness checks cover the Facility snapshot and Operations database time through delivery. A known Operations count carries its snapshot time in both availability.asOf and sourceAsOf.operations. The slot row timestamp is metadata. It cannot establish physical observation age. Existing Operations service signing and Facility key verification must be enabled and the configured Facility origin must reach the private route. Large-batch latency under the five-second deadline remains unmeasured.
+
+The fixed-resource evaluator, unsupported source and their old standalone evaluator tests were retired. A C# caller search returned no references to the retired source, evaluator entry point or evidence interface. Validation moved to the owner contract and search HTTP tests; the shared-rule and read-only database baseline remains recorded above.
+
+The Operations API and changed projects built through the focused test runs. The final parking-search HTTP suite passed 41/41. An earlier run passed 34/36 and revealed a multi-site fixture reusing slot IDs. The fixture now supplies distinct identities outside its deliberate duplicate case. The final run also covers malformed tenant, bounds, contradictory slot evidence, empty capacity and motorcycle search. The unchanged chatbot client's focused owner-response contract checks passed 9/9. The new Facility/Operations checkout-boundary test passed 1/1 on disposable PostgreSQL, and the Operations physical-evidence agreement test passed 1/1 on a separate disposable database. The boundary test invokes the two Facility persistence readers and the two shared Operations domain entry points; the Saga's requested-end and buffered-claim wiring were verified in source. Builds emitted existing dependency-audit and compiler warnings.
+
+Checkpoint 3 adds 52 distinct passes. The 57 earlier passes were retained without re-execution. Cumulative result is 109 distinct passes, zero outstanding failures or skips. No architecture deviation or blocker remains. Review precedes Checkpoint 4. Cross-service runtime, Postman, browser/Driver integration, live chatbot, load and comprehensive reservation/gate scenarios remain deferred to the final tester handoff.
+
+### Checkpoint 3 file inventory
+
+- Modified `ai/tasks/active/TASK-SPARK-272-SESSION-20261127.md`
+- Modified `src/Services/OperationService/SmartParking.OperationService.API/DiscoveryHosting.cs`
+- Removed `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/CapacitySource.cs`
+- Modified `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/IDiscoveryCapacityReader.cs`
+- Removed `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/ParkingSearch.cs`
+- Removed `src/Services/OperationService/SmartParking.OperationService.Domain/DiscoveryCapacity.cs`
+- Modified `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Clients/DiscoveryOwners.cs`
+- Modified `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/ReservationFacilityClient.cs`
+- Modified `src/Services/OperationService/SmartParking.OperationService.Persistence/Repositories/DiscoveryCapacityReader.cs`
+- Modified `tests/Services/SmartParking.FacilityService.Tests/DiscoverySlotCandidateTests.cs`
+- Modified `tests/Services/SmartParking.OperationService.Tests/DiscoveryCapacitySnapshotTests.cs`
+- Removed `tests/Services/SmartParking.UserService.Tests/DiscoveryCapacityTests.cs`
+- Modified `tests/Services/SmartParking.UserService.Tests/ParkingSearchHttpTests.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/Availability.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/CandidateBatch.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/CandidateSite.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/CandidateSlot.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/DiscoveryCursor.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/DiscoveryPolicy.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/DiscoveryPrice.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/DiscoverySite.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/FacilityPage.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/FacilityWindow.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/FieldState.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/FieldStates.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/IDiscoveryCursors.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/IDiscoveryOwners.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/ParkingSearchHandler.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/ParkingSummary.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/PriceBatch.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/SearchFilter.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/SearchPage.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/SearchParking.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/SitePrice.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Application/Discovery/SourceTimes.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Clients/DiscoveryEnvelope.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Clients/DiscoveryOrigins.cs`
+- Added `src/Services/OperationService/SmartParking.OperationService.Infrastructure/Reservations/FacilityServiceToken.cs`
+- Added `tests/Services/SmartParking.UserService.Tests/SearchTestCapacity.cs`
+- Added `tests/Services/SmartParking.UserService.Tests/SearchTestClock.cs`
+- Added `tests/Services/SmartParking.UserService.Tests/SearchTestHost.cs`
+- Added `tests/Services/SmartParking.UserService.Tests/SearchTestLogs.cs`
+- Added `tests/Services/SmartParking.UserService.Tests/SearchTestOwners.cs`

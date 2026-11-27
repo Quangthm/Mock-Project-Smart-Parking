@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using SmartParking.OperationService.Domain.Reservations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -33,6 +35,35 @@ public sealed class DiscoverySlotCandidateTests
             UPDATE parking_slots SET supported_vehicle_type='CAR' WHERE id='{f.SlotId}';
             """);
         return new([new(f.SiteId, version)], "CAR", At, null, null);
+    }
+
+    [StructurePostgresFact]
+    public async Task MaintenanceAtCheckoutAllowsStayWhileBufferedConflictBlocksBothOperationsPaths()
+    {
+        await using var f = await OccupancyProjectionFixture.CreateAsync(PublicationSchema);
+        var end = At.AddHours(1);
+        var query = (await Publish(f)) with { StartAt = At, EndAt = end };
+        await f.ExecuteAsync($"""
+            INSERT INTO structure_maintenance_windows(tenant_id,site_id,service_window,reason,created_by,enforcement_state)
+                VALUES ('{f.TenantId}','{f.SiteId}',tstzrange('{end:O}','{end.AddHours(1):O}','[)'),'test','{Guid.NewGuid()}','acknowledged');
+            """);
+        var site = Assert.Single((await new DiscoverySlotCandidateReader(f.DataSource).ReadAsync(query, default)).Items);
+        Assert.True(site.Complete);
+        Assert.Equal("ELIGIBLE", Assert.Single(site.Slots).Outcome);
+        await using var db = new ParkingDbContext(new DbContextOptionsBuilder<ParkingDbContext>().UseNpgsql(f.DataSource).Options);
+        var selected = await new ReservationSlotReader(db).CheckSlotEligibilityAsync(f.SlotId, At, end, default);
+        Assert.Equal("ELIGIBLE", selected?.Outcome);
+        var buffered = end.AddMinutes(15);
+        var proposed = new CapacityDemand(Guid.NewGuid(), f.SlotId, At, buffered);
+        foreach (var start in new[] { end, buffered })
+        {
+            CapacityDemand[] conflicts = [new(Guid.NewGuid(), f.SlotId, start, start.AddHours(1))];
+            var admission = ReservationAvailability.Evaluate(proposed, conflicts, [], null, At, TimeSpan.Zero);
+            var count = ReservationAvailability.CountAvailable([f.SlotId], new(At, buffered), At,
+                TimeSpan.Zero, conflicts, [], [], null, default);
+            Assert.Equal(start == buffered, admission.Allowed);
+            Assert.Equal(admission.Allowed ? 1 : 0, count);
+        }
     }
 
     [StructurePostgresFact]

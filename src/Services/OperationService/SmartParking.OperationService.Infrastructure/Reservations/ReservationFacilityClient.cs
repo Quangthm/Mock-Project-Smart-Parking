@@ -26,22 +26,8 @@ public sealed class ReservationFacilityClient(HttpClient client, IConfiguration 
             !configuration.GetValue<bool>("ReservationIntegration:AllowHttp")) throw Unavailable();
         try
         {
-            var pem = configuration["ReservationIntegration:OperationsPrivateKeyPem"];
-            if (configuration["ReservationIntegration:OperationsPrivateKeyPath"] is { Length: > 0 } privatePath)
-                pem = File.ReadAllText(privatePath);
-            if (string.IsNullOrWhiteSpace(pem)) throw Unavailable();
-            using var rsa = RSA.Create();
-            rsa.ImportFromPem(pem);
-            if (rsa.KeySize < 2048) throw Unavailable();
-            // Each call owns and disposes its RSA key. A cached signature provider would retain it.
-            var key = new RsaSecurityKey(rsa) { CryptoProviderFactory = new() { CacheSignatureProviders = false } };
-            var now = DateTime.UtcNow;
-            var token = new JwtSecurityToken("SmartParking.OperationService", "SmartParking.FacilityService",
-                [new Claim("sub", "SmartParking.OperationService"), new Claim("sender", "SmartParking.OperationService"),
-                 new Claim("permission", "reservation:facility-dependency"), new Claim("jti", Guid.NewGuid().ToString("N"))],
-                now, now.AddMinutes(1), new SigningCredentials(key, SecurityAlgorithms.RsaSha256));
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{Route}slots/{slotId:D}");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
+            request.Headers.Authorization = FacilityServiceToken.Create(configuration, "reservation:facility-dependency");
             using var response = await client.SendAsync(request, ct);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {

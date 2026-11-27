@@ -13,6 +13,31 @@ public sealed class DiscoveryCapacitySnapshotTests : IReservationPolicyRepositor
 {
     private Func<CancellationToken, Task>? duringPolicyRead;
 
+    [QuoteDatabaseFact]
+    public async Task FacilityPhysicalStateAndLocatedSessionMustAgreeForExactCount()
+    {
+        await using var services = Services();
+        using var scope = services.CreateScope();
+        var reader = scope.ServiceProvider.GetRequiredService<IDiscoveryCapacityReader>();
+        var db = scope.ServiceProvider.GetRequiredService<ReservationDbContext>();
+        var tenant = Guid.NewGuid();
+        var site = Guid.NewGuid();
+        var slot = Guid.NewGuid();
+        var occupied = new HashSet<Guid> { slot };
+        var free = new HashSet<Guid>();
+        async Task<int?> Count(IReadOnlySet<Guid> physical) =>
+            (await reader.ReadCarsAsync(tenant, site, [slot], null, default, physical)).AvailableCount;
+        Assert.Null(await Count(occupied));
+        Assert.Equal(1, await Count(free));
+        var now = DateTimeOffset.UtcNow;
+        db.ParkingSessions.Add(new ParkingSessionRow { Id = Guid.NewGuid(), SiteId = site, TenantId = tenant,
+            CurrentSlotId = slot, LocationScannedAt = now, EntryTime = now, CreatedAt = now, VehicleType = "CAR",
+            Version = 1, SessionStatus = "ACTIVE" });
+        await db.SaveChangesAsync();
+        Assert.Null(await Count(free));
+        Assert.Equal(0, await Count(occupied));
+    }
+
     private ServiceProvider Services()
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {

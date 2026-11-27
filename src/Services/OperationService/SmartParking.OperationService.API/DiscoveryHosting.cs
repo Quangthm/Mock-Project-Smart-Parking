@@ -28,7 +28,6 @@ public static class DiscoveryHosting
         builder.Services.AddSingleton(new DiscoveryPolicy(enabled, TimeSpan.FromSeconds(age), TimeSpan.FromSeconds(skew)));
         builder.Services.AddSingleton<IDiscoveryCursors, DiscoveryCursors>();
         builder.Services.AddScoped<IDiscoveryOwners, DiscoveryOwners>();
-        builder.Services.TryAddScoped<IDiscoveryCapacitySource, UnsupportedDiscoveryCapacity>();
         foreach (var name in new[] { "discovery-facility", "discovery-payment" })
             builder.Services.AddHttpClient(name).RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() =>
                 new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, ActivityHeadersPropagator = null });
