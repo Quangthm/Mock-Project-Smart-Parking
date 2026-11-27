@@ -10,22 +10,30 @@ public sealed record ReservationAvailabilityFacts(IReadOnlyList<ReservationRow> 
     internal AvailabilityDecision EvaluateReservation(ReservationRow proposed, DateTimeOffset evaluatedAt,
         TimeSpan projection, CancellationToken ct)
     {
-        var (commitments, visits, unresolved, proposal) = BuildInputs(proposed);
+        var (commitments, visits, unresolved, proposal) = BuildInputs(proposed.VehicleType, proposed);
         return ReservationAvailability.Evaluate(proposal!, commitments, visits,
             MaxReservationQuota, evaluatedAt, projection, unresolved, ct);
     }
 
     internal AvailabilityDecision EvaluatePhysical(Guid slotId, ParkingSessionRow arrivingSession, DateTimeOffset evaluatedAt)
     {
-        var (commitments, visits, unresolved, _) = BuildInputs(null);
+        var (commitments, visits, unresolved, _) = BuildInputs(null, null);
         // Reserved scans already established their own assignment. Check competing commitments and visits.
         return ReservationAvailability.EvaluatePhysicalOccupancy(slotId, evaluatedAt,
             commitments.Where(commitment => commitment.Id != arrivingSession.ReservationId).ToArray(),
             visits.Where(visit => visit.Id != arrivingSession.Id).ToArray(), unresolved);
     }
 
+    public int? CountAvailableCars(IReadOnlyCollection<Guid> candidateSlots, ReservationInterval? effectiveInterval,
+        DateTimeOffset evaluatedAt, TimeSpan projection, CancellationToken ct)
+    {
+        var (commitments, visits, unresolved, _) = BuildInputs("CAR", null);
+        return ReservationAvailability.CountAvailable(candidateSlots, effectiveInterval, evaluatedAt, projection,
+            commitments, visits, unresolved, MaxReservationQuota, ct);
+    }
+
     private (CapacityDemand[] Commitments, CapacityVisit[] Visits, CapacityAllocation[] Unresolved, CapacityDemand? Proposal)
-        BuildInputs(ReservationRow? proposed)
+        BuildInputs(string? quotaCategory, ReservationRow? proposed)
     {
         var byReservation = Allocations.ToLookup(a => a.ReservationId);
         var bySession = Allocations.ToLookup(a => a.ParkingSessionId);
@@ -41,7 +49,7 @@ public sealed record ReservationAvailabilityFacts(IReadOnlyList<ReservationRow> 
 
         CapacityDemand Demand(ReservationRow row) => new(row.Id, row.ActiveClaimSlotId,
             row.ExpectedStartTime, row.ClaimEndTime ?? row.ExpectedEndTime,
-            row.VehicleType == proposed?.VehicleType, row.VehicleType, byReservation[row.Id].Select(Interval).ToArray(),
+            row.VehicleType == quotaCategory, row.VehicleType, byReservation[row.Id].Select(Interval).ToArray(),
             row.TargetSlotId);
         var commitments = Reservations.Select(Demand).ToArray();
         var visits = Sessions.Select(s => new CapacityVisit(s.Id, s.ReservationId, s.CurrentSlotId, s.EntryTime,

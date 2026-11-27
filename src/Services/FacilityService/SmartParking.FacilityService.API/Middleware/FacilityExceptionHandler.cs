@@ -71,6 +71,7 @@ public sealed class FacilityExceptionHandler(ILogger<FacilityExceptionHandler> l
                     "SEARCH_CHANGED" or "CURSOR_EXPIRED" or "STRUCTURE_CONFLICT" => 409,
                     "IDENTITY_UNAVAILABLE" or "CATALOGUE_UNAVAILABLE" => 503, _ => 400
                 }, e.Code, e.Message),
+                ValidationException => new(400, "VALIDATION_FAILED", "Invalid discovery request."),
                 BadHttpRequestException e => new(e.StatusCode, "VALIDATION_FAILED", "Discovery request could not complete."),
                 TimeoutException => new(504, "DEPENDENCY_TIMEOUT", "Catalogue request timed out."),
                 NpgsqlException or InvalidOperationException or InvalidCastException =>

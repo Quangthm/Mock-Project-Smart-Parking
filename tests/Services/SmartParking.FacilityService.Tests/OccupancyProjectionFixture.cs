@@ -35,7 +35,7 @@ internal sealed class OccupancyProjectionFixture : IAsyncDisposable
         DataSource = NpgsqlDataSource.Create(settings.ConnectionString);
     }
 
-    public static async Task<OccupancyProjectionFixture> CreateAsync()
+    public static async Task<OccupancyProjectionFixture> CreateAsync(params string[] additionalDdl)
     {
         var admin = Environment.GetEnvironmentVariable("SMARTPARK_STRUCTURE_TEST_CONNECTION")
             ?? throw new InvalidOperationException(
@@ -52,7 +52,7 @@ internal sealed class OccupancyProjectionFixture : IAsyncDisposable
         try
         {
             var root = FindRepositoryRoot();
-            foreach (var file in DdlFiles)
+            foreach (var file in DdlFiles.Concat(additionalDdl))
                 await fixture.ExecuteAsync(await File.ReadAllTextAsync(Path.Combine(root, file)));
             await fixture.SeedAsync();
             return fixture;

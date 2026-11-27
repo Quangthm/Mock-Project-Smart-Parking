@@ -43,6 +43,7 @@ public static class FacilityHost
         builder.Services.AddScoped<IOwnerOnboardingStore, OwnerOnboardingStore>();
         builder.Services.AddScoped<IFacilityDirectoryStore, FacilityDirectoryStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+        builder.Services.AddScoped<Application.Discovery.IDiscoverySlotCandidateReader, DiscoverySlotCandidateReader>();
         builder.Services.AddScoped<IReservationSlotReader, ReservationSlotReader>();
         builder.Services.AddSingleton(_ => new ParkingGateConnectionPool(
             builder.Configuration.GetConnectionString("Parking")
@@ -107,7 +108,10 @@ public static class FacilityHost
         app.Use(async (context, next) =>
         {
             if (context.Request.Path.StartsWithSegments("/internal") &&
-                !context.Request.Path.StartsWithSegments("/internal/reservation-dependencies") && !CryptographicOperations.FixedTimeEquals(
+                !context.Request.Path.StartsWithSegments("/internal/reservation-dependencies") &&
+                context.GetEndpoint()?.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>()
+                    ?.ControllerTypeInfo.AsType() != typeof(Controllers.DiscoverySlotCandidatesController) &&
+                !CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }
             await next(context);

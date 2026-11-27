@@ -1,42 +1,4 @@
-using System.Collections.ObjectModel;
-
 namespace SmartParking.OperationService.Domain.Reservations;
-
-public sealed record PolicyBound(int Minimum, int Maximum);
-public sealed record ReservationPolicyRevision(Guid Id, int Version, Guid? TenantId, Guid? SiteId,
-    IReadOnlyDictionary<string, int> Values, IReadOnlyDictionary<string, PolicyBound> OverrideBounds,
-    bool? ArrivalLateToleranceEnabled, string? CancellationTimezone);
-
-public sealed record PolicyRevisionReference(Guid Id, int Version);
-
-public sealed class EffectiveReservationPolicy
-{
-    public PolicyRevisionReference Platform { get; }
-    public PolicyRevisionReference Site { get; }
-    public IReadOnlyDictionary<string, int> Values { get; }
-    public bool ArrivalLateToleranceEnabled { get; }
-    public string CancellationTimezone { get; }
-
-    internal EffectiveReservationPolicy(ReservationPolicyRevision platform, ReservationPolicyRevision site, Dictionary<string, int> values)
-    {
-        Platform = new(platform.Id, platform.Version);
-        Site = new(site.Id, site.Version);
-        Values = new ReadOnlyDictionary<string, int>(new Dictionary<string, int>(values));
-        ArrivalLateToleranceEnabled = site.ArrivalLateToleranceEnabled!.Value;
-        CancellationTimezone = platform.CancellationTimezone!;
-    }
-
-    public ReservationDeadlines DeadlinesFor(ReservationInterval interval, DateTimeOffset holdCreatedAt) => new(interval,
-        holdCreatedAt, TimeSpan.FromMinutes(Values["ALLOCATION_LEAD_TIME"]),
-        TimeSpan.FromMinutes(Values["FACILITY_FAILURE_REFUND_LEAD_TIME"]),
-        TimeSpan.FromMinutes(Values["PAYMENT_HOLD_DURATION"]));
-
-    public bool AllowsWindow(ReservationInterval interval, DateTimeOffset now) => interval.MeetsBookingWindow(now,
-        TimeSpan.FromMinutes(Values["RESERVATION_MIN_DURATION"]), TimeSpan.FromMinutes(Values["RESERVATION_MAX_DURATION"]),
-        TimeSpan.FromMinutes(Values["MAX_ADVANCE_BOOKING"]));
-}
-
-public sealed class ReservationPolicyUnavailableException(string message) : Exception(message);
 
 public static class ReservationPolicyResolver
 {
@@ -48,6 +10,16 @@ public static class ReservationPolicyResolver
         "FACILITY_FAILURE_REFUND_LEAD_TIME", "OCCUPANCY_VALIDITY_TIMESPAN", "ARRIVAL_LATE_TOLERANCE",
         "RAPID_CANCELLATION_COUNT", "RAPID_CANCELLATION_WINDOW", "RAPID_CANCELLATION_RESTRICTION_DURATION", "DAILY_CANCELLATION_LIMIT"
     });
+
+    public static EffectiveReservationPolicy ResolveForSite(IReadOnlyList<ReservationPolicyRevision> revisions,
+        Guid tenantId, Guid siteId)
+    {
+        var platform = revisions.Where(x => x.TenantId is null && x.SiteId is null).ToArray();
+        var site = revisions.Where(x => x.TenantId == tenantId && x.SiteId == siteId).ToArray();
+        if (platform.Length != 1 || site.Length > 1)
+            throw new ReservationPolicyUnavailableException("Effective policy history is absent or ambiguous.");
+        return Resolve(platform[0], site.SingleOrDefault());
+    }
 
     public static EffectiveReservationPolicy Resolve(ReservationPolicyRevision? platform, ReservationPolicyRevision? site)
     {

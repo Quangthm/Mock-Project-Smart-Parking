@@ -9,6 +9,8 @@ namespace SmartParking.FacilityService.Infrastructure;
 public static class ReservationServiceAuthentication
 {
     public const string Scheme = "OperationsService";
+    public const string DiscoveryCandidates = "discovery:slot-candidates:read";
+
     public static void AddReservationServiceAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         var pem = configuration["ReservationIntegration:OperationsPublicKeyPem"];
@@ -46,10 +48,16 @@ public static class ReservationServiceAuthentication
             };
             // Unconfigured capability fails closed; no legacy key or user-token fallback.
         });
-        services.AddAuthorization(options => options.AddPolicy(Scheme, policy =>
+        services.AddAuthorization(options =>
+        {
+            AddPermission(Scheme, "reservation:facility-dependency");
+            AddPermission(DiscoveryCandidates, DiscoveryCandidates);
+
+            void AddPermission(string policyName, string permission) => options.AddPolicy(policyName, policy =>
             policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()
                 .RequireClaim("sub", "SmartParking.OperationService")
                 .RequireClaim("sender", "SmartParking.OperationService")
-                .RequireClaim("permission", "reservation:facility-dependency")));
+                .RequireClaim("permission", permission));
+        });
     }
 }

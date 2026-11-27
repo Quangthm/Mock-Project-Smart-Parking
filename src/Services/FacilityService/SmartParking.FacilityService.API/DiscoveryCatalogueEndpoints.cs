@@ -69,6 +69,7 @@ public static class DiscoveryCatalogueEndpoints
             Withdraw);
     }
     public static bool IsDiscoveryPath(PathString path) => path.StartsWithSegments("/api/public/parking-sites") ||
+        path.StartsWithSegments(Controllers.DiscoverySlotCandidatesController.RoutePath) ||
         path.StartsWithSegments("/api/parking-lots") && path.Value!.EndsWith("/publication", StringComparison.Ordinal);
 
 
