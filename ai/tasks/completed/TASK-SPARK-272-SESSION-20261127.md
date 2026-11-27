@@ -2,7 +2,7 @@
 
 ## 1. Session Information
 
-SPARK-272, main agent, branch `feature/SPARK-272-driver-view-parking-information-and-availability`. Active.
+SPARK-272, main agent, branch `feature/SPARK-272-driver-view-parking-information-and-availability`. Completed and accepted for the AI backend implementation phase.
 
 ## 2. Objectives
 
@@ -168,3 +168,21 @@ Checkpoint 3 adds 52 distinct passes. The 57 earlier passes were retained withou
 - Added `tests/Services/SmartParking.UserService.Tests/SearchTestHost.cs`
 - Added `tests/Services/SmartParking.UserService.Tests/SearchTestLogs.cs`
 - Added `tests/Services/SmartParking.UserService.Tests/SearchTestOwners.cs`
+
+## Checkpoint 4 — final delivery
+
+Checkpoint 3 was approved. A focused source review confirmed the canonical public Operations `GET /api/parking-search`, Facility publication and structural candidate read, Operations shared SPARK-273 availability evaluation, Payment-owned price read, and existing public response and chatbot validation. The Facility request and Payment estimate use the requested half-open stay `[S,E)`; Operations applies its site booking buffer to named-slot conflicts and applicable quota over `[S,E+B)`. Search uses read-only local facts and owner HTTP reads. Reservation admission remains a separate authoritative path. The obsolete fixed-resource evaluator and unsupported production source are gone. This review made no production-code changes.
+
+Added `docs/03-design/api/SPARK-272-parking-search.md` and marked the older S06 availability proposal as historical in `docs/03-design/api/assistant-s06-availability-authority.md`. Added `docs/04-testing/postman/SPARK-272-Parking-Search.postman_collection.json`, `SPARK-272-Local.postman_environment.example.json`, and `SPARK-272-manual-test-guide.md`. Added frontend and chatbot handoffs in `docs/05-project-management/handoffs/SPARK-276-discovery-frontend.md` and `SPARK-272-chatbot-search.md`. Added `docs/04-testing/reports/SPARK-272-final-tester-handoff.md`.
+
+The Postman environment contains blank coordinates, interval, price bounds and cursor. Its localhost Operations URL follows the existing SPARK-273 local example and must be checked against the running stack. Fixture-specific requests describe their prerequisites and do not assert invented counts or prices. Postman and live acceptance were not run. Checkpoint 4 only validated artifact syntax and repository diff hygiene. The cumulative automated result remains 109 distinct passes, zero outstanding failures and zero skips; no earlier tests or builds were repeated.
+
+Backend is ready for manual acceptance, subject to the tester's runtime checks. No deployment readiness claim is made. Remaining limitations are independent snapshots and accepted eventual consistency, lack of physical-observation age in slot row timestamps, 100-site/2,048-slot Facility bounds with failure on overflow, unmeasured large-batch latency under five seconds, unsupported motorcycle pooled counts, unlocated walk-ins without a speculative named claim, and SPARK-276 Driver integration. Final admission remains necessary. There was no deviation from the approved interval ownership or service contracts.
+
+Suggested commit summary for the user's later Git action: `feat(discovery): integrate CAR availability and add SPARK-272 handoffs`.
+
+Suggested pull request description for the user's later Git action: `Integrates Facility's registered CAR candidates with Operations shared SPARK-273 availability in the canonical parking search. Reuses Payment pricing, retires the obsolete capacity evaluator, and documents public and private contracts, Postman scenarios, and tester handoffs. Automated verification across checkpoints passed 109 distinct tests. Manual cross-service, UI, chatbot, and load acceptance remains with the tester.`
+
+## Completion classification
+
+The user accepted all four SPARK-272 implementation checkpoints and explicitly ended further AI implementation in this session. The 109 distinct automated passes remain the recorded baseline; no tests were rerun for this classification. Manual acceptance, full cross-service runtime checks, live chatbot verification, performance testing and SPARK-276 frontend integration remain NOT RUN or delegated as recorded in the final tester handoff. The accepted architectural limitations remain. The worktree is left for user review and commit, with no staging, commit, push, pull request or Jira status change by the agent.

@@ -1,0 +1,384 @@
+{
+  "info": {
+    "_postman_id": "bedc0124-55c0-4f82-8d56-cb39227a69fa",
+    "name": "SPARK-272 Parking Search",
+    "description": "Run requests individually against a configured development stack. Fixture-specific cases need deliberate local setup described in the guide.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "01 Current CAR availability",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR",
+        "description": "Known positive or zero requires fresh complete evidence."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Interval CAR availability",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&startAt={{startAt}}&endAt={{endAt}}",
+        "description": "Use a future requested stay of at most 24 hours."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Radius and lot type",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&radiusKm={{radiusKm}}&lotType={{lotType}}",
+        "description": "All returned sites satisfy radius and lot type."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Positive availability only",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&availableOnly=true",
+        "description": "Every returned site has a fresh count above zero."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });",
+              "pm.test('Positive only', () => body.data.items.forEach(item => { pm.expect(item.availability.availableCount).to.be.above(0); pm.expect(item.fieldStatus.availability.freshness).to.eql('fresh'); }));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Interval price range",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&startAt={{startAt}}&endAt={{endAt}}&minTotalVnd={{minTotalVnd}}&maxTotalVnd={{maxTotalVnd}}",
+        "description": "A returned item has an interval estimate in range."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Cursor first page",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&limit=1",
+        "description": "Copy data.nextCursor into the environment when nonnull."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });",
+              "if (body.data.nextCursor) pm.environment.set('cursor', body.data.nextCursor);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Cursor continuation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&limit=1&cursor={{cursor}}",
+        "description": "Use the same coordinates and filters as request 06."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Published full site",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR",
+        "description": "Fixture needs a published site with complete evidence and zero available slots."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Published closed site",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR",
+        "description": "Fixture needs a currently published closure. Expect known zero and closed reason."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Unknown or incomplete",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR",
+        "description": "Fixture needs incomplete or indeterminate candidate evidence. Expect null count and unknown state."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Motorcycle catalogue and price",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=MOTORCYCLE",
+        "description": "Expect catalogue and applicable tariff, with null pooled availability."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });",
+              "pm.test('Pooled count unsupported', () => body.data.items.forEach(item => pm.expect(item.availability.availableCount).to.be.null));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Quota limited interval",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&startAt={{startAt}}&endAt={{endAt}}",
+        "description": "Fixture needs active CAR quota below free named slots."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Maintenance at stay end",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&startAt={{startAt}}&endAt={{endAt}}",
+        "description": "Fixture needs maintenance beginning exactly at endAt and an Operations buffer. Compare with SPARK-273 admission."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(true); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Search page contract', () => { pm.expect(body.data.items).to.be.an('array'); pm.expect(body.data).to.have.property('nextCursor'); pm.expect(body.data.asOf).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Invalid radius",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&radiusKm=51",
+        "description": "Expect VALIDATION_FAILED and no owner dispatch."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(400));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Invalid input', () => pm.expect(body.code).to.eql('VALIDATION_FAILED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Publication drift",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR",
+        "description": "Controlled fixture must change publication after catalogue read; expect SEARCH_CHANGED."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(409));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Publication change', () => pm.expect(body.code).to.eql('SEARCH_CHANGED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Facility or Payment unavailable",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR",
+        "description": "Controlled owner outage or malformed evidence; expect sanitized DEPENDENCY_UNAVAILABLE."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Expected HTTP status', () => pm.response.to.have.status(503));",
+              "const body = pm.response.json();",
+              "pm.test('Safe envelope', () => { pm.expect(body.success).to.eql(false); pm.expect(body.traceId).to.be.a('string'); });",
+              "pm.test('Sanitized dependency failure', () => pm.expect(body.code).to.eql('DEPENDENCY_UNAVAILABLE'));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

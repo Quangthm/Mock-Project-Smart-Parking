@@ -64,7 +64,9 @@ Recommendation is not approval. Do not add a synthetic snapshot endpoint, privil
 
 The user authorized preparation of this packet. These unresolved semantic/source decisions are OPEN. They do not reopen TOKEN/REQUEST/SERVICE, D01 or D05. Deployment credentials, SQL application, containers and release activation remain separately unrequested.
 
-## API specification — existing route, proposed known-count behavior
+## API specification — historical proposal
+
+SPARK-272 now implements registered CAR availability. The current route, field meanings, owner contract, and limitations are documented in [SPARK-272 parking search](SPARK-272-parking-search.md). The proposal and earlier test status below are retained as decision history.
 
 | Item | Contract |
 | --- | --- |

@@ -1,0 +1,7 @@
+# SPARK-272 chatbot search handoff
+
+The existing `OwnerReadClient.Search` in `src/Services/IoTService/SmartParking.IoTService.Infrastructure/Assistant/ParkingSearchClient.cs` calls Operations `GET /api/parking-search`. It sends coordinates, category, radius, optional lot type, `availableOnly`, paired stay, optional price bounds, a page limit of 19, and the opaque continuation. The client checks sort order by distance then site ID, unique sites, radius, matching category and interval kind, and price filters.
+
+Known CAR counts can be positive or zero. Null counts represent unknown or stale evidence; motorcycle pooled availability remains unknown. Current pricing is a nullable hourly tariff and interval pricing is a nullable total estimate. The chatbot checks that known counts have fresh `availability.asOf` matching `sourceAsOf.operations`, and that fresh/unknown/stale field status agrees with nullable values. A known price has a fresh Payment timestamp. It must not interpret a null count as a full site or guarantee admission.
+
+Nine focused chatbot owner-response contract tests passed in Checkpoint 3. Live acceptance remains open: ask for current and interval CAR search, full and closed sites, unknown and stale counts, nullable prices, `availableOnly`, filters and cursor continuation, then verify that the assistant conveys the observed state without fabricating a slot or booking. The chatbot implementation was unchanged.
