@@ -20,6 +20,11 @@ internal sealed class SearchTestOwners(SearchTestClock clock, string? mode) : Ht
 {
     public Guid Version = ParkingSearchHttpTests.FirstVersion;
     public bool Empty, StalePrice, StaleFacility, BadPayment, Stall, SawCancellation, Wrap, Loop, Drift, Future;
+    public string FarName = "Example", NearName = "Example";
+    public decimal FarLatitude = 10.13m;
+    public long? FarPrice;
+    public long NearPrice = 10000;
+    public int CandidateCalls, PriceCalls;
     public int Calls, PaymentStatus, Stalled;
     public TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -27,6 +32,7 @@ internal sealed class SearchTestOwners(SearchTestClock clock, string? mode) : Ht
         Interlocked.Increment(ref Calls);
         if (request.RequestUri!.AbsolutePath == "/internal/discovery/v1/slot-candidates:read")
         {
+            Interlocked.Increment(ref CandidateCalls);
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
             var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(request.Headers.Authorization!.Parameter);
@@ -60,7 +66,7 @@ internal sealed class SearchTestOwners(SearchTestClock clock, string? mode) : Ht
             Assert.False(request.Headers.Contains("X-Discovery-Service-Key"));
             var first = !request.RequestUri.Query.Contains("cursor=");
             var stamp = StaleFacility ? clock.Now.AddHours(-1) : Future ? clock.Now.AddMinutes(1) : clock.Now;
-            object row = new { siteId = first ? ParkingSearchHttpTests.Far : ParkingSearchHttpTests.Near, name = "Example", address = "Synthetic", latitude = first ? 10.13m : 10.123456m,
+            object row = new { siteId = first ? ParkingSearchHttpTests.Far : ParkingSearchHttpTests.Near, name = first ? FarName : NearName, address = "Synthetic", latitude = first ? FarLatitude : 10.123456m,
                 longitude = 106m, lotType = "outdoor", supportedVehicleTypes = new[] { "CAR", "MOTORCYCLE" }, configurationVersion = ParkingSearchHttpTests.FirstVersion, asOf = stamp,
                 serviceWindow = first ? null : new { state = "closed", from = clock.Now.AddDays(-1), to = clock.Now.AddDays(1), asOf = stamp } };
             if (Wrap) row = new { siteId = ParkingSearchHttpTests.Near, name = "Wrap", address = "Synthetic", latitude = 0,
@@ -71,6 +77,7 @@ internal sealed class SearchTestOwners(SearchTestClock clock, string? mode) : Ht
         }
         else
         {
+            Interlocked.Increment(ref PriceCalls);
             Assert.Equal("payment.invalid", request.RequestUri.Host);
             Assert.Equal("/internal/discovery/prices:read", request.RequestUri.AbsolutePath);
             Assert.Equal(HttpMethod.Post, request.Method);
@@ -90,9 +97,11 @@ internal sealed class SearchTestOwners(SearchTestClock clock, string? mode) : Ht
             var interval = body.GetProperty("startAt").ValueKind != JsonValueKind.Null;
             var stamp = StalePrice ? clock.Now.AddMinutes(-10) : clock.Now;
             var rows = body.GetProperty("siteIds").EnumerateArray().Select(id => new { siteId = id.GetGuid(),
-                price = id.GetGuid() == ParkingSearchHttpTests.Near ? new { kind = interval ? "estimate" : "tariff", billingUnit = interval ? "total" : "hour",
-                    amountVnd = interval ? 0 : 10000, policyVersion = 1, asOf = stamp } : null,
-                reason = id.GetGuid() == ParkingSearchHttpTests.Near ? null : "not_configured" }).ToArray();
+                price = id.GetGuid() == ParkingSearchHttpTests.Near || FarPrice.HasValue
+                    ? new { kind = interval ? "estimate" : "tariff", billingUnit = interval ? "total" : "hour",
+                        amountVnd = id.GetGuid() == ParkingSearchHttpTests.Near ? (interval ? 0 : NearPrice) : FarPrice!.Value,
+                        policyVersion = 1, asOf = stamp } : null,
+                reason = id.GetGuid() == ParkingSearchHttpTests.Near || FarPrice.HasValue ? null : "not_configured" }).ToArray();
             data = new { items = BadPayment ? rows.Take(1).ToArray() : rows, asOf = stamp };
         }
         return new(HttpStatusCode.OK) { Content = JsonContent.Create(new { success = true, data }) };

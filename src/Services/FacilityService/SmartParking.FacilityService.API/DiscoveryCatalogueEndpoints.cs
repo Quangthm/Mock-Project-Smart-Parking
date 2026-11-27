@@ -70,6 +70,7 @@ public static class DiscoveryCatalogueEndpoints
     }
     public static bool IsDiscoveryPath(PathString path) => path.StartsWithSegments("/api/public/parking-sites") ||
         path.StartsWithSegments(Controllers.DiscoverySlotCandidatesController.RoutePath) ||
+        path.StartsWithSegments("/internal/discovery/v1/sites") ||
         path.StartsWithSegments("/api/parking-lots") && path.Value!.EndsWith("/publication", StringComparison.Ordinal);
 
 

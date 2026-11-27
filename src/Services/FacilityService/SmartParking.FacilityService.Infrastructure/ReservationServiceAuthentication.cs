@@ -10,6 +10,7 @@ public static class ReservationServiceAuthentication
 {
     public const string Scheme = "OperationsService";
     public const string DiscoveryCandidates = "discovery:slot-candidates:read";
+    public const string DiscoverySiteLocation = "discovery:site-location:read";
 
     public static void AddReservationServiceAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
@@ -52,6 +53,7 @@ public static class ReservationServiceAuthentication
         {
             AddPermission(Scheme, "reservation:facility-dependency");
             AddPermission(DiscoveryCandidates, DiscoveryCandidates);
+            AddPermission(DiscoverySiteLocation, DiscoverySiteLocation);
 
             void AddPermission(string policyName, string permission) => options.AddPolicy(policyName, policy =>
             policy.AddAuthenticationSchemes(Scheme).RequireAuthenticatedUser()

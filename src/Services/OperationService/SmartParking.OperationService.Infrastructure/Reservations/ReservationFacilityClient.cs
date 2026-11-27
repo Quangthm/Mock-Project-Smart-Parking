@@ -8,17 +8,47 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
+using SmartParking.OperationService.Application.Discovery;
 
 namespace SmartParking.OperationService.Infrastructure.Reservations;
 
 public sealed class ReservationFacilityClient(HttpClient client, IConfiguration configuration)
-    : IReservationFacilityOwner
+    : IReservationFacilityOwner, IHistoricalSiteLocationOwner
 {
     private const string Route = "internal/reservation-dependencies/v1/";
     private static readonly JsonSerializerOptions SlotReadJson = new(JsonSerializerDefaults.Web)
     {
         RespectRequiredConstructorParameters = true
     };
+    public async Task<FacilitySiteLocation?> ReadPublishedAsync(Guid siteId, CancellationToken ct)
+    {
+        if (!configuration.GetValue<bool>("ReservationIntegration:Enabled") ||
+            client.BaseAddress is null || client.BaseAddress.Scheme != Uri.UriSchemeHttps &&
+            !configuration.GetValue<bool>("ReservationIntegration:AllowHttp")) throw Unavailable();
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"internal/discovery/v1/sites/{siteId:D}/location");
+            request.Headers.Authorization = FacilityServiceToken.Create(configuration, "discovery:site-location:read");
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (response.StatusCode != System.Net.HttpStatusCode.OK) throw Unavailable();
+            await response.Content.LoadIntoBufferAsync(4096, ct);
+            using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(ct));
+            var root = document.RootElement;
+            if (!root.TryGetProperty("success", out var success) || success.ValueKind != JsonValueKind.True ||
+                !root.TryGetProperty("data", out var data)) throw Unavailable();
+            if (data.ValueKind == JsonValueKind.Null) return null;
+            var site = data.Deserialize<FacilitySiteLocation>(SlotReadJson);
+            if (site is null || site.SiteId != siteId || string.IsNullOrWhiteSpace(site.SiteName) ||
+                site.SiteName.Length > 255 || site.Latitude is < -90 or > 90 ||
+                site.Longitude is < -180 or > 180) throw Unavailable();
+            return site;
+        }
+        catch (Exception error) when (error is HttpRequestException or JsonException or CryptographicException or
+            IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        { throw Unavailable(); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw Unavailable(); }
+    }
     public async Task<SelectedSlotMetadata> ResolveSlotAsync(Guid slotId, CancellationToken ct)
     {
         if (!configuration.GetValue<bool>("ReservationIntegration:Enabled")) throw Unavailable();

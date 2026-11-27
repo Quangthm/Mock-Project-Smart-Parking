@@ -20,6 +20,7 @@ internal sealed class SearchTestCapacity(SearchTestClock clock, string mode) : I
 {
     public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public bool Cancelled;
+    public int? CountOverride;
     public async Task<CarCapacityRead> ReadCarsAsync(Guid tenantId, Guid siteId, IReadOnlyCollection<Guid> slots,
         SmartParking.OperationService.Domain.Reservations.ReservationInterval? stay, CancellationToken ct, IReadOnlySet<Guid>? physicallyOccupied = null)
     {
@@ -31,6 +32,6 @@ internal sealed class SearchTestCapacity(SearchTestClock clock, string mode) : I
             finally { Cancelled = ct.IsCancellationRequested; }
         }
         Assert.NotEqual(Guid.Empty, tenantId);
-        return new(clock.Now, mode == "full" ? 0 : stay == null ? Math.Max(0, slots.Count - 1) : slots.Count);
+        return new(clock.Now, CountOverride ?? (mode == "full" ? 0 : stay == null ? Math.Max(0, slots.Count - 1) : slots.Count));
     }
 }

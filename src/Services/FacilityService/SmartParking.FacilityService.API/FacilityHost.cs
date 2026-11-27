@@ -44,6 +44,7 @@ public static class FacilityHost
         builder.Services.AddScoped<IFacilityDirectoryStore, FacilityDirectoryStore>();
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<Application.Discovery.IDiscoverySlotCandidateReader, DiscoverySlotCandidateReader>();
+        builder.Services.AddScoped<Application.Discovery.IPublishedSiteLocationReader, PublishedSiteLocationReader>();
         builder.Services.AddScoped<IReservationSlotReader, ReservationSlotReader>();
         builder.Services.AddSingleton(_ => new ParkingGateConnectionPool(
             builder.Configuration.GetConnectionString("Parking")
@@ -107,10 +108,13 @@ public static class FacilityHost
         ApiErrors.Use(app);
         app.Use(async (context, next) =>
         {
+            var endpointType = context.GetEndpoint()?.Metadata
+                .GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>()
+                ?.ControllerTypeInfo.AsType();
             if (context.Request.Path.StartsWithSegments("/internal") &&
                 !context.Request.Path.StartsWithSegments("/internal/reservation-dependencies") &&
-                context.GetEndpoint()?.Metadata.GetMetadata<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>()
-                    ?.ControllerTypeInfo.AsType() != typeof(Controllers.DiscoverySlotCandidatesController) &&
+                endpointType != typeof(Controllers.DiscoverySlotCandidatesController) &&
+                endpointType != typeof(Controllers.PublishedSiteLocationController) &&
                 !CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(context.Request.Headers["X-Service-Key"].ToString()), Encoding.UTF8.GetBytes(key)))
             { context.Response.StatusCode = 401; return; }

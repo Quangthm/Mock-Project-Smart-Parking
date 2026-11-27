@@ -82,8 +82,12 @@ public sealed class ReservationExceptionHandler(ILogger<ReservationExceptionHand
                 context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
                 context.Request.Path.StartsWithSegments("/api/me/reservations") ||
+                context.Request.Path.StartsWithSegments("/api/me/discovery/last-booked-location") ||
                 context.Request.Path.StartsWithSegments("/api/parking-sessions")))
             result = (503, "PROTOTYPE_SCHEMA_NOT_READY", "Reservation data is unavailable until database reconciliation is complete.");
+        else if (exception is System.Data.Common.DbException &&
+            context.Request.Path.StartsWithSegments("/api/me/discovery/last-booked-location"))
+            result = (503, "DEPENDENCY_UNAVAILABLE", "Reservation history is unavailable.");
         else if (FindMapping(exception.GetType()) is { } map) result = map(exception);
         else if (exception is BadHttpRequestException bad)
             result = (bad.StatusCode, "INVALID_REQUEST", "The request body or parameters are invalid.");

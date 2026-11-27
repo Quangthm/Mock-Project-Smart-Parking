@@ -30,6 +30,7 @@ public static class PersistenceDependencyInjection
         services.AddScoped<Application.Reservations.IReservationPolicyRepository, ReservationPolicyRepository>();
         services.AddScoped<Application.Reservations.IReservationAvailabilityRepository, ReservationAvailabilityRepository>();
         services.AddScoped<Application.Discovery.IDiscoveryCapacityReader, DiscoveryCapacityReader>();
+        services.AddScoped<Application.Discovery.IHistoricalBookingSiteReader, HistoricalBookingSiteReader>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped<IStructureRepository, StructureRepository>();
         services.AddScoped<OperationsConcurrency>();

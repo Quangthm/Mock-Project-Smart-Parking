@@ -80,6 +80,8 @@ public static class DiscoveryHosting
         if (request.ContentLength > 0 || request.Headers.TransferEncoding.Count != 0) throw DiscoveryFailure.Invalid();
         string? Get(string key) => !request.Query.TryGetValue(key, out var values) ? null :
             values.Count == 1 && !string.IsNullOrWhiteSpace(values[0]) ? values[0] : throw DiscoveryFailure.Invalid();
+        string? Keyword() => !request.Query.TryGetValue("keyword", out var values) ? null :
+            values.Count == 1 ? values[0] : throw DiscoveryFailure.Invalid();
         double Number(string key, double? fallback = null) => Get(key) is not string value
             ? fallback ?? throw DiscoveryFailure.Invalid() : double.TryParse(value, NumberStyles.Float,
                 CultureInfo.InvariantCulture, out var number) ? number : throw DiscoveryFailure.Invalid();
@@ -98,6 +100,6 @@ public static class DiscoveryHosting
             int.TryParse(rawLimit, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n : throw DiscoveryFailure.Invalid();
         return new(new(Number("lat"), Number("lon"), Get("vehicleType") ?? throw DiscoveryFailure.Invalid(),
             Number("radiusKm", 5), Get("lotType"), flag, Time("startAt"), Time("endAt"), Get("timeZone") ?? "Asia/Ho_Chi_Minh",
-            Money("minTotalVnd"), Money("maxTotalVnd"), limit), Get("cursor"));
+            Money("minTotalVnd"), Money("maxTotalVnd"), limit, Keyword(), Get("sort") ?? "distance"), Get("cursor"));
     }
 }

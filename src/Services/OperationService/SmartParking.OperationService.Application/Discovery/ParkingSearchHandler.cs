@@ -1,6 +1,8 @@
 using MediatR;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Globalization;
+using System.Text;
 
 namespace SmartParking.OperationService.Application.Discovery;
 
@@ -9,15 +11,18 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
 {
     public async Task<SearchPage> Handle(SearchParking request, CancellationToken ct)
     {
-        var filter = request.Filter;
         var at = clock.GetUtcNow();
-        Validate(filter, at);
+        Validate(request.Filter, at);
+        var filter = request.Filter with { Keyword = Normalize(request.Filter.Keyword) };
         if (!policy.Enabled) throw DiscoveryFailure.Unavailable();
         var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(filter)));
         var after = request.Cursor is null ? null : cursors.Decode(request.Cursor);
         if (after is not null)
         {
-            if (after.FilterHash != hash) throw new DiscoveryFailure(400, "INVALID_CURSOR");
+            if (after.FilterHash != hash || after.Sort != filter.Sort ||
+                (filter.Sort == "distance" ? after.Primary is not null || after.RankingDigest is not null :
+                    after.RankingDigest is null || after.RankingDigest.Length != 64))
+                throw new DiscoveryFailure(400, "INVALID_CURSOR");
             if (after.Anchor > at + policy.Skew || after.Anchor == default || !double.IsFinite(after.Distance) ||
                 after.Distance < 0 || after.SiteId == Guid.Empty || string.IsNullOrWhiteSpace(after.CatalogueVersion))
                 throw new DiscoveryFailure(400, "INVALID_CURSOR");
@@ -70,6 +75,8 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
                 throw DiscoveryFailure.Unavailable();
         } while (cursor is not null);
 
+        if (filter.Keyword is not null)
+            candidates = candidates.Where(site => Normalize(site.Name)?.Contains(filter.Keyword, StringComparison.Ordinal) == true).ToList();
         var registeredSlots = new HashSet<Guid>();
         var facilityTimes = new Dictionary<Guid, DateTimeOffset>();
         var ranked = new List<ParkingSummary>();
@@ -104,8 +111,6 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
                     filter.AvailableOnly && summary.Availability.AvailableCount.GetValueOrDefault() <= 0 ||
                     filter.MinTotalVnd is long min && !(summary.Price?.AmountVnd >= min) ||
                     filter.MaxTotalVnd is long max && !(summary.Price?.AmountVnd <= max)) continue;
-                if (after is not null && (summary.DistanceMeters < after.Distance ||
-                    summary.DistanceMeters == after.Distance && summary.SiteId.CompareTo(after.SiteId) <= 0)) continue;
                 ranked.Add(summary);
             }
         }
@@ -114,11 +119,35 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
         var delivered = ranked.Select(row => AtDelivery(row, clock.GetUtcNow(), facilityTimes.GetValueOrDefault(row.SiteId)))
             .Where(row => (!filter.AvailableOnly || row.Availability.AvailableCount > 0) &&
                 (filter.MinTotalVnd is null || row.Price?.AmountVnd >= filter.MinTotalVnd) &&
-                (filter.MaxTotalVnd is null || row.Price?.AmountVnd <= filter.MaxTotalVnd));
-        var rows = delivered.OrderBy(s => s.DistanceMeters).ThenBy(s => s.SiteId).Take(filter.Limit + 1).ToArray();
+                (filter.MaxTotalVnd is null || row.Price?.AmountVnd <= filter.MaxTotalVnd)).ToArray();
+        long? Primary(ParkingSummary row) => filter.Sort switch
+        {
+            "price" => row.Price?.AmountVnd,
+            "availability" => row.Availability.AvailableCount,
+            _ => null
+        };
+        var ordered = filter.Sort switch
+        {
+            "price" => delivered.OrderBy(row => Primary(row) is null).ThenBy(row => Primary(row))
+                .ThenBy(row => row.DistanceMeters).ThenBy(row => row.SiteId).ToArray(),
+            "availability" => delivered.OrderBy(row => Primary(row) is null).ThenByDescending(row => Primary(row))
+                .ThenBy(row => row.DistanceMeters).ThenBy(row => row.SiteId).ToArray(),
+            _ => delivered.OrderBy(row => row.DistanceMeters).ThenBy(row => row.SiteId).ToArray()
+        };
+        var digest = filter.Sort == "distance" ? null : Convert.ToHexString(SHA256.HashData(
+            JsonSerializer.SerializeToUtf8Bytes(ordered.Select(row => new { row.SiteId, Rank = Primary(row), row.DistanceMeters }))));
+        if (after is not null && digest != after.RankingDigest) throw DiscoveryFailure.Changed();
+        var remaining = after is null ? ordered : filter.Sort == "distance"
+            ? ordered.Where(row => row.DistanceMeters > after.Distance ||
+                row.DistanceMeters == after.Distance && row.SiteId.CompareTo(after.SiteId) > 0).ToArray()
+            : ordered.SkipWhile(row => row.SiteId != after.SiteId).Skip(1).ToArray();
+        if (after is not null && filter.Sort != "distance" &&
+            !ordered.Any(row => row.SiteId == after.SiteId && row.DistanceMeters == after.Distance &&
+                Primary(row) == after.Primary)) throw DiscoveryFailure.Changed();
+        var rows = remaining.Take(filter.Limit + 1).ToArray();
         var items = rows.Take(filter.Limit).ToArray();
         var next = rows.Length > filter.Limit ? cursors.Encode(new(hash, version!, after?.Anchor ?? at,
-            items[^1].DistanceMeters, items[^1].SiteId)) : null;
+            items[^1].DistanceMeters, items[^1].SiteId, filter.Sort, Primary(items[^1]), digest)) : null;
         return new(items, next, clock.GetUtcNow());
     }
 
@@ -226,6 +255,16 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
 
     private static bool Coordinates(double lat, double lon) =>
         double.IsFinite(lat) && lat is >= -90 and <= 90 && double.IsFinite(lon) && lon is >= -180 and <= 180;
+    private static string? Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var decomposed = value.Trim().Replace('đ', 'd').Replace('Đ', 'D').Normalize(NormalizationForm.FormD);
+        var result = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                result.Append(char.ToLowerInvariant(character));
+        return result.ToString().Normalize(NormalizationForm.FormC);
+    }
     private static double Distance(double lat1, double lon1, double lat2, double lon2)
     {
         const double rad = Math.PI / 180;
@@ -242,6 +281,7 @@ public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCurs
             f.TimeZone != "Asia/Ho_Chi_Minh" || f.Limit is < 1 or > 50 ||
             f.StartAt.HasValue != f.EndAt.HasValue || f.StartAt.HasValue &&
                 (f.EndAt <= f.StartAt || f.EndAt - f.StartAt > TimeSpan.FromDays(1) || f.StartAt - now > TimeSpan.FromDays(7)) ||
+            f.Keyword?.Trim().Length > 100 || f.Sort is not ("distance" or "price" or "availability") ||
             f.MinTotalVnd is < 0 || f.MaxTotalVnd is < 0 || f.MinTotalVnd > f.MaxTotalVnd ||
             f.StartAt is null && (f.MinTotalVnd is not null || f.MaxTotalVnd is not null))
             throw DiscoveryFailure.Invalid();

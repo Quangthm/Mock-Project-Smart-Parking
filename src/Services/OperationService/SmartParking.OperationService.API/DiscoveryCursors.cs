@@ -7,7 +7,7 @@ namespace SmartParking.OperationService.API;
 
 public sealed class DiscoveryCursors(IDataProtectionProvider provider) : IDiscoveryCursors
 {
-    private readonly IDataProtector protector = provider.CreateProtector("Operations.PublicDiscovery.Cursor.v1");
+    private readonly IDataProtector protector = provider.CreateProtector("Operations.PublicDiscovery.Cursor.v2");
     public string Encode(DiscoveryCursor value) => protector.Protect(JsonSerializer.Serialize(value));
     public DiscoveryCursor Decode(string value)
     {
