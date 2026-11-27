@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { BrandLogo, BrandWordmark } from "../../../components/brand/BrandLogo"
 import { useApp } from "../../../context/AppContext"
@@ -9,13 +8,11 @@ import {
   classifyPaymentStatus,
   isPaymentOrderId,
   paymentApi,
+  type ReservationCheckoutState,
   type PaymentStatusResponse,
 } from "../../../lib/paymentApi"
-import {
-  reservationsApi,
-  type OwnReservation,
-} from "../../../lib/reservationsApi"
-import { useServerRefresh } from "../../../lib/serverRefresh"
+import { reservationsApi } from "../../../lib/reservationsApi"
+import { useReservationProgress } from "../../../lib/reservationProgress"
 import "./payment-checkout.css"
 
 type ResultState =
@@ -25,96 +22,87 @@ type ResultState =
   | "pending"
   | "unavailable"
 
+type ReservationLookup = Pick<ReservationCheckoutState, "reservationId" | "state"> & {
+  orderId: string
+  requestId: string | null
+}
+
 export function PaymentResultPage() {
+  const { user, authReady } = useApp()
+  if (!authReady) return <main aria-busy="true">Loading payment details…</main>
+  return <AccountPaymentResult key={`${getSessionGeneration()}:${user?.id ?? ""}:${window.location.search}`} />
+}
+
+const closedReservations = new Set(["CANCELLED", "EXPIRED", "UNFULFILLABLE", "INVALIDATED", "NO_SHOW", "REJECTED"])
+
+function AccountPaymentResult() {
   const { user, setView } = useApp()
   const navigate = useNavigate()
 
   const params = new URLSearchParams(window.location.search)
   const orderId = params.get("orderId") ?? ""
   const transactionId = params.get("transactionId") ?? ""
+  const hint = params.get("requestId")
 
-  const [result, setResult] = useState<ResultState>("checking")
+  const [lastResult, setResult] = useState<ResultState>("checking")
   const [detail, setDetail] = useState<PaymentStatusResponse | null>(null)
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
 
-  const [reservation, setReservation] = useState<OwnReservation | null>(null)
+  const [lookup, setLookup] = useState<ReservationLookup | null>(null)
   const [reservationError, setReservationError] = useState("")
 
-  // Operations is the authority for reservation confirmation.
-  async function refreshReservation(isCurrent: () => boolean) {
-    if (user?.role !== "driver" || !isPaymentOrderId(orderId)) return
-
-    const generation = getSessionGeneration()
-
-    try {
-      let matched: OwnReservation | null = null
-
-      // Develop: use the saved reservation ID when available.
-      try {
-        const reservationId = sessionStorage.getItem(
-          `sp_reservation_order:${orderId}`
-        )
-
-        if (reservationId) {
-          const booking = await reservationsApi.booking(reservationId)
-
-          if (booking.orderId?.toLowerCase() === orderId.toLowerCase()) {
-            matched = booking
-          }
-        }
-      } catch {
-        // Missing/stale browser reference: fall back to server lookup.
-      }
-
-      // SPARK-273: find the reservation by its authoritative order ID.
-      if (!matched) {
-        const items = await reservationsApi.list()
-        matched = items.find(
-          item => item.orderId?.toLowerCase() === orderId.toLowerCase()
-        ) ?? null
-      }
-
-      if (!isCurrent() || generation !== getSessionGeneration()) return
-
-      setReservation(matched)
-      setReservationError("")
-    } catch {
-      if (isCurrent() && generation === getSessionGeneration()) {
-        setReservationError(
-          "Could not refresh reservation confirmation. Check Current Booking."
-        )
-      }
-    }
-  }
-
+  const boundOrder = orderId || detail?.orderId || ""
+  const boundLookup = lookup?.orderId === boundOrder ? lookup : null
+  const requestId = boundLookup?.requestId ?? null
+  const progress = useReservationProgress(requestId, Boolean(requestId && boundLookup?.state !== "HISTORICAL"))
+  const checkout = progress.checkout
+  const matchingCheckout = checkout && checkout !== "UNAVAILABLE" &&
+    checkout.orderId?.toLowerCase() === boundOrder.toLowerCase() ? checkout : null
+  const result = matchingCheckout?.state === "PAID" ? "success" : lastResult
+  const snapshot = progress.snapshot
+  const reservation = requestId && snapshot?.requestId === requestId &&
+    snapshot.reservationId?.toLowerCase() === boundLookup?.reservationId?.toLowerCase() &&
+    (!snapshot.orderId || snapshot.orderId.toLowerCase() === boundOrder.toLowerCase()) ? snapshot : null
+  const reservationState = reservation?.reservationState
   useEffect(() => {
+    if (user?.role !== "driver" || !isPaymentOrderId(boundOrder)) return
     let active = true
-
-    setReservation(null)
-    setReservationError("")
-    void refreshReservation(() => active)
-
-    return () => {
-      active = false
-    }
-  }, [orderId, user?.id, user?.role, refresh, result])
-
-  // Keep checking Operations even after Payment succeeds.
-  useServerRefresh(
-    user?.role === "driver" &&
-      isPaymentOrderId(orderId) &&
-      reservation?.state !== "CONFIRMED"
-      ? orderId
-      : undefined,
-    refreshReservation,
-    5000
-  )
+    const generation = getSessionGeneration()
+    const current = () => active && generation === getSessionGeneration()
+    void paymentApi.orderReservation(boundOrder).then(async ({ state, reservationId, orderId: returnedOrderId }) => {
+      if (!current()) return
+      // Payment omits the order ID for a closed provisioning fence.
+      const closedFence = state === "CLOSED" && returnedOrderId === null
+      if (!closedFence && returnedOrderId?.toLowerCase() !== boundOrder.toLowerCase()) {
+        throw new Error("Payment Service returned a different order.")
+      }
+      let bookingRequestId: string | null = null
+      if (state !== "STANDALONE" && !closedFence) {
+        if (!reservationId || !isPaymentOrderId(reservationId)) throw new Error("Invalid reservation reference.")
+        const candidate = state === "HISTORICAL"
+          ? (await reservationsApi.requestForOrder(boundOrder)).requestId : reservationId
+        if (!candidate || !isPaymentOrderId(candidate)) throw new Error("Invalid booking request reference.")
+        bookingRequestId = candidate
+      }
+      if (current()) {
+        setLookup({ orderId: boundOrder, requestId: bookingRequestId, reservationId, state })
+        setReservationError("")
+      }
+    }).catch(() => {
+      if (current()) {
+        setLookup(null)
+        setReservationError("Could not load the reservation confirmation. Check Current Booking.")
+      }
+    })
+    return () => { active = false }
+  }, [boundOrder, refresh, user?.role])
 
   // Payment status is independent of reservation confirmation.
   useEffect(() => {
     let active = true
-    let timeout: number | undefined
+    const generation = getSessionGeneration()
+    const current = () => active && generation === getSessionGeneration()
 
     const checkout = isPaymentOrderId(orderId)
       ? paymentApi.rememberedCheckout(orderId)
@@ -135,13 +123,11 @@ export function PaymentResultPage() {
     setResult("checking")
     setError("")
 
-    let attempts = 0
-
     async function check() {
       try {
         const status = await paymentApi.status(statusTransactionId)
 
-        if (!active) return
+        if (!current()) return
 
         if (
           isPaymentOrderId(orderId) &&
@@ -154,19 +140,9 @@ export function PaymentResultPage() {
 
         const outcome = classifyPaymentStatus(status)
 
-        if (outcome === "success" || outcome === "failed") {
-          setResult(outcome)
-          return
-        }
-
-        if (++attempts < 12) {
-          timeout = window.setTimeout(check, 5000)
-          return
-        }
-
-        setResult("pending")
+        setResult(outcome)
       } catch (failure) {
-        if (!active) return
+        if (!current()) return
 
         setError(
           failure instanceof Error
@@ -181,18 +157,30 @@ export function PaymentResultPage() {
 
     return () => {
       active = false
-      if (timeout !== undefined) window.clearTimeout(timeout)
     }
   }, [orderId, refresh, transactionId])
 
-  const title =
+  // Only standalone Payment workflows keep their bounded transaction-status retries.
+  const standalone = !hint && (user?.role !== "driver" ||
+    boundLookup?.state === "STANDALONE")
+  const retries = useRef(0)
+  useEffect(() => {
+    if (!standalone || result !== "pending" || retries.current >= 11) return
+    const timeout = window.setTimeout(() => {
+      retries.current++
+      setRefresh(value => value + 1)
+    }, 5000)
+    return () => window.clearTimeout(timeout)
+  }, [standalone, result, detail])
+
+  const paymentTitle =
     result === "success" ? "Payment successful"
     : result === "failed" ? "Payment not completed"
     : result === "checking" ? "Checking your payment"
     : result === "pending" ? "Payment is still processing"
     : "Payment status unavailable"
 
-  const description =
+  const paymentDescription =
     result === "success"
       ? "Payment Service confirmed your transaction with payOS."
     : result === "failed"
@@ -203,6 +191,17 @@ export function PaymentResultPage() {
       ? "The payment has not been confirmed yet. Please check again before trying to pay."
     : error
 
+  const orderState = matchingCheckout?.state ?? boundLookup?.state
+  const confirmed = reservationState === "CONFIRMED" && lastResult !== "failed" && orderState !== "FAILED" && orderState !== "CLOSED"
+  const closed = reservationState && closedReservations.has(reservationState)
+  const orderClosed = orderState === "CLOSED"
+  const title = confirmed ? "Reservation confirmed" : closed ? `Reservation ${formatStatus(reservationState).toLowerCase()}`
+    : orderClosed ? "Reservation payment order closed"
+    : requestId && result === "success" ? "Payment received. Awaiting reservation confirmation." : paymentTitle
+  const description = confirmed ? "Operations confirmed your booking. You can view it in Current Booking."
+    : closed || orderClosed ? "Check Current Booking for the reservation details." : paymentDescription
+  const iconState = confirmed ? "success" : closed || orderClosed ? "failed" : result
+
   return (
     <main className="payment-result-page">
       <section className="card payment-result-card" aria-live="polite">
@@ -212,22 +211,24 @@ export function PaymentResultPage() {
         </div>
 
         <span
-          className={`payment-result-icon is-${result}`}
+          className={`payment-result-icon is-${iconState}`}
           aria-hidden="true"
         >
-          {result === "success" ? "✓" : result === "failed" ? "×" : "·"}
+          {iconState === "success" ? "✓" : iconState === "failed" ? "×" : "·"}
         </span>
 
         <h1>{title}</h1>
         <p>{description}</p>
 
-        {reservation && (
+        {reservationState && reservationState !== "CONFIRMED" && !closed && (
           <p role="status">
-            {reservation.state === "CONFIRMED"
-              ? "Reservation confirmed. You can view it in Current Booking."
-              : `Reservation: ${formatStatus(reservation.state)}. Payment and booking confirmation are checked separately.`}
+            {formatStatus(reservationState)}
           </p>
         )}
+        {(confirmed || closed || orderClosed) && <p role="status">Last payment check: {paymentTitle}.</p>}
+        {requestId && !progress.connected && <p role="status">Waiting for live reservation updates.
+          {" "}<button type="button" className="btn-outline" onClick={progress.reconnect}>Reconnect</button>
+        </p>}
 
         {reservationError && (
           <p role="status">{reservationError}</p>
@@ -244,8 +245,8 @@ export function PaymentResultPage() {
               <dd>{detail.amount.toLocaleString("vi-VN")} VND</dd>
             </div>
             <div>
-              <dt>Status</dt>
-              <dd>{formatStatus(detail.status)}</dd>
+              <dt>Last reported payment status</dt>
+              <dd>{formatStatus(result === "success" ? "SUCCESS" : detail.status)}</dd>
             </div>
           </dl>
         )}
@@ -264,7 +265,7 @@ export function PaymentResultPage() {
             <button
               type="button"
               className="btn-primary"
-              onClick={() => setRefresh(value => value + 1)}
+              onClick={() => { retries.current = 0; setRefresh(value => value + 1) }}
             >
               Check status again
             </button>

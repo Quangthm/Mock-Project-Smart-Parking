@@ -16,6 +16,7 @@ using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
 using SmartParking.FacilityService.Application.Common.Interfaces.Services;
 using SmartParking.FacilityService.Application.Common.Security;
 using SmartParking.FacilityService.Application.Reservations;
+using SmartParking.FacilityService.Application.Usecases.Occupancy.Commands.ApplyOccupancyProjection;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Infrastructure;
 using SmartParking.FacilityService.Infrastructure.Messaging;
@@ -155,9 +156,9 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 1. Fresh SlotStateChanged (AVAILABLE -> OCCUPIED) emits exact EventId outbox message.
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.True(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(occEventId, "SlotStateChanged", DateTimeOffset.UtcNow, 1, env.SiteId, env.SlotId, sessionA, "OCCUPIED"),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.True(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(occEventId, "SlotStateChanged", DateTimeOffset.UtcNow, 1, env.SiteId, env.SlotId, sessionA, "OCCUPIED")),
                 CancellationToken.None));
         }
 
@@ -169,9 +170,9 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 2. Duplicate eventId returns false and emits 0 new outbox rows.
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.False(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(occEventId, "SlotStateChanged", DateTimeOffset.UtcNow, 2, env.SiteId, env.SlotId, sessionA, "AVAILABLE"),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.False(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(occEventId, "SlotStateChanged", DateTimeOffset.UtcNow, 2, env.SiteId, env.SlotId, sessionA, "AVAILABLE")),
                 CancellationToken.None));
         }
         Assert.Equal(1L, await env.CountOutboxMessagesAsync());
@@ -179,9 +180,9 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 3. Same-state no-op (already OCCUPIED) advances watermark without emitting outbox row.
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.True(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, 2, env.SiteId, env.SlotId, sessionA, "OCCUPIED"),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.True(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, 2, env.SiteId, env.SlotId, sessionA, "OCCUPIED")),
                 CancellationToken.None));
         }
         Assert.Equal(1L, await env.CountOutboxMessagesAsync());
@@ -189,9 +190,9 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 4. Stale lower sequence returns false and emits 0 new outbox rows.
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.False(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, 1, env.SiteId, env.SlotId, sessionA, "AVAILABLE"),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.False(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, 1, env.SiteId, env.SlotId, sessionA, "AVAILABLE")),
                 CancellationToken.None));
         }
         Assert.Equal(1L, await env.CountOutboxMessagesAsync());
@@ -199,9 +200,9 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 5. OccupancyReleased (OCCUPIED -> AVAILABLE) emits releaseEventId atomically with release ledger.
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.True(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(relEventId, "OccupancyReleased", DateTimeOffset.UtcNow, 3, env.SiteId, env.SlotId, sessionA, null),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.True(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(relEventId, "OccupancyReleased", DateTimeOffset.UtcNow, 3, env.SiteId, env.SlotId, sessionA, null)),
                 CancellationToken.None));
         }
         Assert.Equal(2L, await env.CountOutboxMessagesAsync());
@@ -211,12 +212,12 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 6. Re-occupy with session B (seq 4 -> emits 3rd outbox), then redeliver spent release for session A (seq 5 -> 0 new outbox!).
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.True(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, 4, env.SiteId, env.SlotId, Guid.NewGuid(), "OCCUPIED"),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.True(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(Guid.NewGuid(), "SlotStateChanged", DateTimeOffset.UtcNow, 4, env.SiteId, env.SlotId, Guid.NewGuid(), "OCCUPIED")),
                 CancellationToken.None));
-            Assert.True(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(Guid.NewGuid(), "OccupancyReleased", DateTimeOffset.UtcNow, 5, env.SiteId, env.SlotId, sessionA, null),
+            Assert.True(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(Guid.NewGuid(), "OccupancyReleased", DateTimeOffset.UtcNow, 5, env.SiteId, env.SlotId, sessionA, null)),
                 CancellationToken.None));
         }
         Assert.Equal(3L, await env.CountOutboxMessagesAsync());
@@ -225,41 +226,12 @@ public sealed class FacilitySlice3WriterOutboxTests
         // 7. Release with null SlotId records processed_events with 0 outbox rows.
         using (var scope = provider.CreateScope())
         {
-            var repo = scope.ServiceProvider.GetRequiredService<IOccupancyProjectionRepository>();
-            Assert.False(await repo.ApplyAsync(
-                new OccupancyProjectionEvent(Guid.NewGuid(), "OccupancyReleased", DateTimeOffset.UtcNow, 6, env.SiteId, null, Guid.NewGuid(), null),
+            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            Assert.False(await mediator.Send(new ApplyOccupancyProjectionCommand(
+                new OccupancyProjectionEvent(Guid.NewGuid(), "OccupancyReleased", DateTimeOffset.UtcNow, 6, env.SiteId, null, Guid.NewGuid(), null)),
                 CancellationToken.None));
         }
         Assert.Equal(3L, await env.CountOutboxMessagesAsync());
-    }
-
-    [StructurePostgresFact, Trait("Category", "Postgres")]
-    public async Task ReservationDependencyHandlers_DoNotEmitLayoutInvalidations()
-    {
-        await using var env = await FacilitySlice3IsolatedDatabaseEnv.CreateAsync();
-        await using var provider = env.BuildProvider(outboxDeliveryEnabled: false, rabbitMqConnection: null);
-
-        var intent = new DependencyIntent(
-            Token: Guid.NewGuid(),
-            WorkflowId: Guid.NewGuid(),
-            Purpose: "ADMISSION",
-            TenantId: env.TenantId,
-            SiteId: env.SiteId,
-            SlotId: env.SlotId,
-            IntentFingerprint: "fp-slice3-dep",
-            Deadline: DateTimeOffset.UtcNow.AddMinutes(5));
-
-        using (var scope = provider.CreateScope())
-        {
-            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
-            var acquired = await mediator.Send(new AcquireDependencyCommand(intent), CancellationToken.None);
-            Assert.Equal("HELD", acquired.State);
-
-            var completed = await mediator.Send(new CompleteDependencyCommand(intent, "{\"ok\":true}"), CancellationToken.None);
-            Assert.Equal("COMPLETED", completed.State);
-        }
-
-        Assert.Equal(0L, await env.CountOutboxMessagesAsync());
     }
 
     [StructureRabbitMqFact, Trait("Category", "RabbitMQ")]

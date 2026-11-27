@@ -83,6 +83,16 @@ public static class ApiErrors
             await next();
         });
         app.UseMiddleware<RequestCompletionMiddleware>();
+        app.Use(async (context, next) =>
+        {
+            if (DiscoveryCatalogueEndpoints.IsDiscoveryPath(context.Request.Path))
+                context.Response.OnStarting(() =>
+                {
+                    context.Response.Headers.CacheControl = "no-store";
+                    return Task.CompletedTask;
+                });
+            await next();
+        });
         app.UseExceptionHandler();
         app.UseStatusCodePages(async status =>
         {

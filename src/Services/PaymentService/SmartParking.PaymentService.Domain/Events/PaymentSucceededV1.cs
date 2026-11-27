@@ -2,6 +2,8 @@ namespace SmartParking.PaymentService.Domain.Events;
 
 public sealed record PaymentSucceededV1
 {
+    public const string ReviewedReservationOrderPaid = "REVIEWED_RESERVATION_ORDER_PAID";
+
     public Guid EventId { get; init; } = Guid.NewGuid();
     public DateTimeOffset OccurredAt { get; init; } = DateTimeOffset.UtcNow;
     public string CorrelationId { get; init; } = string.Empty;
@@ -23,4 +25,5 @@ public sealed record PaymentSucceededV1
     public decimal? PenaltyFee { get; init; }
     public string? PenaltyReason { get; init; }
     public string Currency { get; init; } = "VND";
+    public string? SettlementClassification { get; init; }
 }

@@ -121,7 +121,6 @@ internal sealed partial class FacilitySlice3IsolatedDatabaseEnv : IAsyncDisposab
         services.AddScoped<IParkingStructureRepository, PostgresParkingStructureRepository>();
         services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
         services.AddScoped<IOccupancyProjectionRepository, OccupancyProjectionRepository>();
-        services.AddScoped<IReservationDependencyRepository, ReservationDependencyRepository>();
         services.AddApplicationServices();
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

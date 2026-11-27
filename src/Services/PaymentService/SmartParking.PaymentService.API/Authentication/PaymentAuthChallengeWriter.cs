@@ -29,16 +29,16 @@ internal static class PaymentAuthChallengeWriter
         {
             context.Response.Headers.TryAdd("WWW-Authenticate", "Bearer");
         }
+        if (HttpMethods.IsHead(context.Request.Method)) return;
 
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
         var payload = new
         {
             success = false,
-            errorCode,
+            code = errorCode,
             message,
             traceId,
-            errors = Array.Empty<object>(),
-            timestamp = DateTime.UtcNow
+            errors = Array.Empty<object>()
         };
 
         await context.Response.WriteAsync(

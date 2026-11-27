@@ -14,6 +14,28 @@ namespace SmartParking.OperationService.Tests;
 public class CheckoutReturnUrlTests
 {
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DepartureUsesPhysicalSessionAndPreservesItsExistingRetryKey(bool reserved)
+    {
+        var sessionId = Guid.NewGuid();
+        Guid? reservationId = reserved ? Guid.NewGuid() : null;
+        using var transport = new CapturePaymentRequest();
+        using var http = new HttpClient(transport) { BaseAddress = new Uri("http://payment.test") };
+        var client = new CheckoutPaymentClient(http, new HttpContextAccessor(), new ConfigurationBuilder().Build());
+        var now = DateTimeOffset.UtcNow;
+        await client.PrepareAsync(Guid.NewGuid(), Guid.NewGuid(), sessionId, reservationId, "CAR",
+            now.AddHours(-1), now, "51A12345", null, default);
+        using var request = JsonDocument.Parse(transport.Body!);
+        var body = request.RootElement;
+        Assert.Equal(sessionId, body.GetProperty("sessionId").GetGuid());
+        Assert.Equal(sessionId, body.GetProperty("referenceId").GetGuid());
+        Assert.Equal("PARKING_SESSION", body.GetProperty("referenceType").GetString());
+        var expectedKey = reserved ? $"checkout:reservation:{reservationId:N}" : $"checkout:parking_session:{sessionId:N}";
+        Assert.Equal(expectedKey, body.GetProperty("idempotencyKey").GetString());
+    }
+
+    [Theory]
     [InlineData("http://localhost:5173/operator/operation?checkoutReturn=payos&checkoutSiteId=site")]
     [InlineData("https://parking.example/operator/cashier?checkoutReturn=payos&checkoutSiteId=site")]
     [InlineData(null)]
@@ -65,6 +87,10 @@ public class CheckoutReturnUrlTests
         {
             Url = request.RequestUri!.AbsoluteUri;
             Body = await request.Content!.ReadAsStringAsync(ct);
+            if (request.RequestUri.AbsolutePath.EndsWith("/orders/prepare", StringComparison.Ordinal))
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { success = true,
+                    data = new { orderId = Guid.NewGuid(), orderCode = "12345", finalAmount = 2000,
+                        status = "PENDING", currency = "VND", expiresAt = DateTimeOffset.UtcNow.AddMinutes(10) } }) };
             IdempotencyKey = request.Headers.GetValues("Idempotency-Key").Single();
             Authorization = request.Headers.Authorization?.ToString();
             return new HttpResponseMessage(HttpStatusCode.OK)

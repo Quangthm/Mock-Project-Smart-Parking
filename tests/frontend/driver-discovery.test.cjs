@@ -175,17 +175,9 @@ test('maps an operational-layout projection into a bookable driver lot (Note 3)'
   assert.equal(canBook, true);
 });
 
-test('Find Parking resolves registered capacity before opening details, with at most three reads in flight', async () => {
-  const source = slotsOperationalEnvelope.data;
-  const sites = Array.from({ length: 4 }, (_, index) => ({
-    id: `a0000000-0000-4000-8000-00000000000${index}`,
-    name: `Site ${index}`, address: 'Address', type: 'outdoor', status: 'active', slots: [],
-    totalSlots: 0, lat: 10.7, lng: 106.7,
-  }));
-  const requests = [];
+function componentHooks() {
   const states = [], effects = [];
   let cursor = 0;
-  const jsx = (type, props) => ({ type, props });
   const react = {
     useState(initial) {
       const index = cursor++;
@@ -204,11 +196,32 @@ test('Find Parking resolves registered capacity before opening details, with at 
     },
     useEffect(effect) { effects.push(effect); },
   };
+  return { react, render(component, props) {
+    cursor = 0;
+    const tree = component(props);
+    effects.splice(0).forEach(effect => effect());
+    return tree;
+  } };
+}
+
+function discoveryScreen(sites, onBook, saveLot) {
+  const requests = [];
+  const search = componentHooks();
+  const panel = componentHooks();
+  const jsx = (type, props) => ({ type, props });
+  const runtime = { jsx, jsxs: jsx };
+  const { ParkingDetailsPanel } = load('roles/driver/parking/ParkingDetailsPanel.tsx', {
+    react: panel.react, 'react/jsx-runtime': runtime,
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
+    '../../../components/modals/LotPolicyModal': { LotPolicyModal: 'policy-dialog' },
+    '../../../lib/driverDiscoveryApi': api,
+    '../subcriptions/PassOffers': { PassOffersDialog: 'pass-dialog' },
+  });
   const { FindParking } = load('roles/driver/parking/FindParking.tsx', {
-    react, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    react: search.react, 'react/jsx-runtime': runtime,
     '@maptiler/sdk': {}, '@maptiler/sdk/dist/maptiler-sdk.css': {}, animejs: {},
-    '../data/data': { driverData: { getLots: () => sites, saveLot() { assert.fail('Preloading must not write to the store'); } } },
-    './ParkingDetailsPanel': { ParkingDetailsPanel: 'details' },
+    '../data/data': { driverData: { getLots: () => sites, saveLot } },
+    './ParkingDetailsPanel': { ParkingDetailsPanel },
     '../../../components/ui/RoundedSelect': { RoundedSelect: 'select' },
     '../../../components/ui/PageHeader': { PageHeader: 'header' },
     '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
@@ -218,17 +231,44 @@ test('Find Parking resolves registered capacity before opening details, with at 
     '../../../lib/driverSlotMapping': load('lib/driverSlotMapping.ts', {}),
     '../../../lib/parkingCoordinates': load('lib/parkingCoordinates.ts', {}),
     '../../../lib/parkingApi': { parkingApi: { operationalLayout: id => new Promise((resolve, reject) => requests.push({ id, resolve, reject })) } },
-  }, {}, { window: { addEventListener() {}, setTimeout() {} }, requestAnimationFrame() {} });
-  const render = () => {
-    cursor = 0;
-    const tree = FindParking({ onBook() {} });
-    effects.splice(0).forEach(effect => effect());
-    return tree;
+  }, {}, {
+    window: { addEventListener() {}, setTimeout() {}, matchMedia: () => ({ matches: false }) },
+    localStorage: { getItem: () => null, setItem() {} }, requestAnimationFrame() {},
+  });
+  const render = () => search.render(FindParking, { onBook });
+  return {
+    render, requests,
+    renderPanel() {
+      const selected = nodes(render()).find(node => node.type === ParkingDetailsPanel);
+      assert.ok(selected, 'Selecting a lot mounts the real details panel');
+      return panel.render(ParkingDetailsPanel, selected.props);
+    },
   };
-  function copy(node) {
-    if (Array.isArray(node)) return node.map(copy).join(' ');
-    return typeof node === 'object' && node !== null ? copy(node.props?.children) : String(node ?? '');
-  }
+}
+
+function nodes(node) {
+  if (Array.isArray(node)) return node.flatMap(nodes);
+  if (!node?.props) return [];
+  return [node, ...nodes(node.props.children)];
+}
+
+function copy(node) {
+  if (Array.isArray(node)) return node.map(copy).join(' ');
+  return typeof node === 'object' && node !== null ? copy(node.props?.children) : String(node ?? '');
+}
+
+function activeSites(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `a0000000-0000-4000-8000-00000000000${index}`,
+    name: `Site ${index}`, address: 'Address', type: 'outdoor', status: 'active', slots: [],
+    totalSlots: 0, lat: 10.7, lng: 106.7,
+  }));
+}
+
+test('Find Parking resolves registered capacity before opening details, with at most three reads in flight', async () => {
+  const source = slotsOperationalEnvelope.data;
+  const sites = activeSites(4);
+  const { render, requests } = discoveryScreen(sites, () => {}, () => assert.fail('Preloading must not write to the store'));
   const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.match(copy(render()), /Availability unknown/);
   assert.equal(requests.length, 3);
@@ -244,4 +284,40 @@ test('Find Parking resolves registered capacity before opening details, with at 
   assert.match(labels, /0 spaces available\s+· 0 registered/);
   assert.match(labels, /Availability unknown/);
   assert.equal(requests.length, 4);
+});
+
+test('selecting a lot renders independent pass and policy dialogs and books the selected site', async () => {
+  const sites = activeSites(2);
+  const selected = sites[1];
+  const booked = [], saved = [];
+  const { render, renderPanel, requests } = discoveryScreen(sites, lot => booked.push(lot), lot => saved.push(lot));
+  nodes(render()).find(node => node.props['aria-label'] === 'Open parking search').props.onClick();
+  nodes(render()).find(node => node.props.id === 'find-parking-query').props.onFocus();
+  for (const request of requests) request.resolve({ ...slotsOperationalEnvelope.data, siteId: request.id });
+  await new Promise(resolve => setImmediate(resolve));
+  nodes(render()).find(node => node.type === 'button' && node.props.className?.split(' ').includes('find-parking-result') &&
+    copy(node).includes(selected.name)).props.onClick();
+
+  const details = () => nodes(renderPanel());
+  const dialog = type => details().find(node => node.type === type);
+  const button = label => details().find(node => node.type === 'button' && copy(node).trim() === label);
+  assert.equal(details().find(node => node.type === 'h2').props.children, selected.name);
+  assert.equal(dialog('pass-dialog'), undefined);
+  assert.equal(dialog('policy-dialog'), undefined);
+  button('View parking passes').props.onClick();
+  assert.equal(dialog('pass-dialog').props.siteId, selected.id);
+  assert.equal(dialog('policy-dialog'), undefined);
+  button('Policy').props.onClick();
+  assert.equal(dialog('policy-dialog').props.lot.id, selected.id);
+  dialog('pass-dialog').props.onClose();
+  assert.equal(dialog('pass-dialog'), undefined);
+  assert.ok(dialog('policy-dialog'));
+  dialog('policy-dialog').props.onClose();
+  assert.equal(dialog('policy-dialog'), undefined);
+  const book = button('Book Now');
+  assert.equal(book.props.disabled, false);
+  book.props.onClick();
+  assert.deepEqual(booked.map(lot => lot.id), [selected.id]);
+  assert.deepEqual(saved.map(lot => lot.id), [selected.id]);
+  assert.ok(booked[0].slots.some(slot => slot.status === 'available'));
 });

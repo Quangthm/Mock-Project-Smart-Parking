@@ -9,13 +9,10 @@ public interface IReservationBookingRepository : IReservationRepository
     Task<BookingReadResult?> FindOwnBookingAsync(Guid accountId, Guid id, CancellationToken ct);
     Task<IReadOnlyList<BookingReadResult>> ListOwnBookingsAsync(Guid accountId, int take,
         DateTimeOffset? before, Guid? beforeId, CancellationToken ct, DateTimeOffset? from = null, DateTimeOffset? to = null);
-    Task<ReservationRow?> FindOrderProvisioningAsync(Guid reservationId, CancellationToken ct);
+    Task<ReservationRow?> FindBookingAsync(Guid reservationId, CancellationToken ct);
+    Task<string?> FindZeroDispositionReasonAsync(Guid reservationId, Guid accountId, CancellationToken ct);
+    Task<bool> HasQuoteBindingAsync(Guid quoteId, CancellationToken ct);
     Task<bool> OrderAssignedToAnotherReservationAsync(Guid orderId, Guid reservationId, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DueOrderProvisioningAsync(DateTimeOffset now, int take, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DueHoldExpiryAsync(DateTimeOffset now, int take, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DueZeroPriceAcceptanceAsync(DateTimeOffset now, int take, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DueNoPaymentConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct);
-    Task<IReadOnlyList<Guid>> DuePaidConfirmationAsync(DateTimeOffset now, int take, CancellationToken ct);
     Task<DateTimeOffset> DatabaseNowAsync(CancellationToken ct);
     Task RequireDurableConfirmationAsync(CancellationToken ct);
     Task RequirePlateAvailableAsync(ReservationRow proposed, DateTimeOffset now, CancellationToken ct);

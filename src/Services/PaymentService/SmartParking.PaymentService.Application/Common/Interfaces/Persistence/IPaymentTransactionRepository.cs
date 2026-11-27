@@ -1,11 +1,14 @@
 using SmartParking.PaymentService.Domain.Entities;
+using SmartParking.PaymentService.Domain.Enums;
 
 namespace SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
 
 public interface IPaymentTransactionRepository
 {
     Task<PaymentTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<PaymentTransaction?> GetStatusSnapshotAsync(Guid id, CancellationToken cancellationToken = default);
     Task<PaymentTransaction?> GetByGatewayTransactionIdAsync(string gatewayTxId, CancellationToken cancellationToken = default);
+    Task<PaymentTransaction?> GetByProviderCollectionReferenceAsync(PaymentMethod method, string reference, CancellationToken cancellationToken = default);
     Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PaymentTransaction>> GetByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default);
     Task AddAsync(PaymentTransaction transaction, CancellationToken cancellationToken = default);

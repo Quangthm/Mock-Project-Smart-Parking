@@ -15,11 +15,28 @@ namespace SmartParking.OperationService.Infrastructure.Reservations;
 public sealed class ReservationCommercialClient(
     HttpClient client,
     IHttpContextAccessor context,
-    IConfiguration configuration) : IReservationCommercialOwner
+    IConfiguration configuration) : IReservationCommercialOwner, IReservationQuoteOwner
 {
     private const string Issuer = "SmartParking.OperationService";
     private const string PaymentAudience = "SmartParking.PaymentService";
     private const string DepositOrderPermission = "reservation:deposit-order";
+
+    private const string QuotePermission = "reservation:quote";
+
+    public Task<PaymentReservationQuote> IssuePlateQuoteAsync(ReservationQuoteBinding binding, CancellationToken ct) =>
+        SendAsync<PaymentReservationQuote>(HttpMethod.Post, "/internal/reservation-quotes/v1", binding, ct,
+            servicePermission: QuotePermission);
+
+    public async Task<PaymentReservationQuote> ReadProofAsync(Guid accountId, Guid quoteId, CancellationToken ct)
+    {
+        var proof = await SendAsync<PaymentReservationQuote>(HttpMethod.Get,
+            $"/internal/reservation-quotes/v1/{quoteId:D}?accountId={accountId:D}",
+            null, ct, servicePermission: QuotePermission);
+        if (proof.QuoteId != quoteId || proof.Binding?.AccountId != accountId ||
+            proof.Binding.Coverage == null || proof.ValidUntil == default ||
+            proof.Status is not ("ISSUED" or "ACCEPTED" or "EXPIRED")) throw InvalidOwner();
+        return proof;
+    }
 
     public async Task<PricePreview> PreviewAsync(Guid accountId, ReservationPricePreview intent, CancellationToken ct)
     {
@@ -42,87 +59,6 @@ public sealed class ReservationCommercialClient(
             data.PricingVersion, data.RequiresCompleteSelection);
     }
 
-    public async Task<CommercialTerms> QuoteAsync(Guid accountId, Guid tenantId, BookingSelection intent, CancellationToken ct)
-    {
-        var data = await SendAsync<QuoteResponse>(
-            HttpMethod.Post,
-            "/api/v1/pricing/reservations/quote",
-            new
-            {
-                siteId = intent.SiteId,
-                requestedSlotId = intent.RequestedSlotId,
-                start = intent.Start,
-                end = intent.End,
-                vehicleId = intent.VehicleId,
-                paymentMethod = intent.PaymentMethod,
-                accountId,
-                tenantId = tenantId == Guid.Empty ? (Guid?)null : tenantId,
-                vehicleType = "CAR",
-                prepaymentMode = "FULL",
-                coverageVersion = "STANDARD_v1"
-            },
-            ct,
-            accountId,
-            tenantId,
-            intent.SiteId);
-        if (data.Selection is null) throw InvalidOwner();
-        var selection = new BookingSelection(data.Selection.VehicleId, data.Selection.SiteId,
-            data.Selection.RequestedSlotId, data.Selection.Start, data.Selection.End,
-            data.Selection.PaymentMethod);
-        return new(data.QuoteId, data.Version, data.ValidUntil, selection, data.AccountId,
-            data.BookedAmount, data.DepositAmount, data.Currency, data.PrepaymentMode,
-            data.CoverageVersion, data.Disclosure);
-    }
-
-    public async Task<DepositOrderResult> EnsureOrderAsync(DepositOrderRequest request, CancellationToken ct)
-    {
-        var accepted = request.AcceptedTerms;
-        var payload = new
-        {
-            operationId = request.OperationId,
-            reservationId = request.ReservationId,
-            accountId = request.AccountId,
-            tenantId = request.TenantId,
-            siteId = request.SiteId,
-            quoteId = accepted.QuoteId,
-            termsVersion = accepted.Version,
-            amount = accepted.DepositAmount,
-            currency = accepted.Currency,
-            paymentMethod = accepted.Selection.PaymentMethod,
-            expiresAt = request.ExpiresAt
-        };
-
-        try
-        {
-            var data = await SendAsync<OrderResponse>(
-                HttpMethod.Put,
-                $"/internal/reservation-deposit-orders/{request.OperationId:D}",
-                payload,
-                ct,
-                request.AccountId,
-                request.TenantId,
-                request.SiteId,
-                useServiceToken: true);
-            if (!Matches(data.AcceptedRequest, request))
-                return new("UNKNOWN", null, request, "PAYMENT_ORDER_RESPONSE_INVALID");
-            if (data.State == "CREATED" && data.OrderId is { } orderId && orderId != Guid.Empty)
-                return new("CREATED", orderId, request);
-            if (data.State == "CLOSED_NO_ORDER" && data.OrderId is null)
-                return new("CLOSED_NO_ORDER", null, request, "PAYMENT_ORDER_CLOSED_NO_ORDER");
-            if (data.State == "UNKNOWN" && data.OrderId is null)
-                return new("UNKNOWN", null, request, "PAYMENT_ORDER_OUTCOME_UNKNOWN");
-            return new("UNKNOWN", null, request, "PAYMENT_ORDER_RESPONSE_INVALID");
-        }
-        catch (ReservationGateException error) when (IsDefinitiveOrderRejection(error))
-        {
-            return new("CLOSED_NO_ORDER", null, request, error.Code);
-        }
-    }
-
-    public Task<ZeroPriceAcceptanceResult> AcceptZeroPriceAsync(ZeroPriceAcceptanceRequest request, CancellationToken ct) =>
-        throw new ReservationGateException(503, "OWNER_UNAVAILABLE",
-            "Zero-price reservation acceptance is not provided by PaymentService.");
-
     public async Task<CollectionLookup> CollectionsAsync(Guid reservationId, Guid orderId, CancellationToken ct)
     {
         var data = await SendAsync<CollectionResponse>(
@@ -130,24 +66,20 @@ public sealed class ReservationCommercialClient(
             $"/internal/reservation-deposit-orders/{orderId:D}/collections",
             null,
             ct,
-            useServiceToken: true);
+            servicePermission: DepositOrderPermission);
         if (data.Collections is null) throw InvalidOwner();
         var collections = new List<VerifiedCollection>(data.Collections.Count);
         foreach (var item in data.Collections)
         {
             if (item.CollectionId == Guid.Empty || item.OrderId != orderId || item.ReservationId != reservationId ||
                 item.AccountId == Guid.Empty || item.TenantId == Guid.Empty || item.SiteId == Guid.Empty ||
-                item.Amount <= 0 || item.Currency != "VND" || item.QuoteId == Guid.Empty ||
-                string.IsNullOrWhiteSpace(item.TermsVersion)) throw InvalidOwner();
+                item.Amount <= 0 || item.Currency != "VND" || item.QuoteId == Guid.Empty) throw InvalidOwner();
             collections.Add(new(item.CollectionId, item.OrderId, item.ReservationId, item.AccountId,
-                item.TenantId, item.SiteId, item.QuoteId, item.TermsVersion, item.Amount, item.Currency));
+                item.TenantId, item.SiteId, item.QuoteId, item.TermsVersion, item.Amount, item.Currency, item.Evidence is { Version: 1 } evidence &&
+                evidence.OperationId == reservationId && evidence.PaymentTransactionId == item.CollectionId));
         }
         return new(data.State, collections);
     }
-
-    public Task ReconcileAsync(Guid reservationId, VerifiedCollection collection, string reason, CancellationToken ct) =>
-        throw new ReservationGateException(503, "OWNER_UNAVAILABLE",
-            "Reservation reconciliation is not enabled.");
 
     private async Task<T> SendAsync<T>(
         HttpMethod method,
@@ -157,9 +89,9 @@ public sealed class ReservationCommercialClient(
         Guid? accountId = null,
         Guid? tenantId = null,
         Guid? siteId = null,
-        bool useServiceToken = false)
+        string? servicePermission = null)
     {
-        using var request = CreateRequest(method, path, accountId, tenantId, siteId, useServiceToken);
+        using var request = CreateRequest(method, path, accountId, tenantId, siteId, servicePermission);
         if (body is not null) request.Content = JsonContent.Create(body);
 
         try
@@ -167,6 +99,8 @@ public sealed class ReservationCommercialClient(
             using var response = await client.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
+                // A missing versioned route or rejected service credential gives no selection evidence.
+                if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) throw Unavailable();
                 if ((int)response.StatusCode < 500)
                 {
                     PaymentErrorEnvelope? paymentError = null;
@@ -178,9 +112,11 @@ public sealed class ReservationCommercialClient(
                     {
                     }
 
+                    if (servicePermission == QuotePermission && !(response.StatusCode == System.Net.HttpStatusCode.NotFound &&
+                        paymentError?.Code == "QUOTE_NOT_FOUND" && method == HttpMethod.Get)) throw Unavailable();
                     throw new ReservationGateException(
                         (int)response.StatusCode,
-                        paymentError?.ErrorCode ?? "PAYMENT_REQUEST_REJECTED",
+                        paymentError?.Code ?? "PAYMENT_REQUEST_REJECTED",
                         paymentError?.Message ?? "Payment service rejected the reservation request.");
                 }
 
@@ -208,12 +144,12 @@ public sealed class ReservationCommercialClient(
         Guid? accountId,
         Guid? tenantId,
         Guid? siteId,
-        bool useServiceToken)
+        string? servicePermission)
     {
         var request = new HttpRequestMessage(method, path);
-        if (useServiceToken)
+        if (servicePermission is not null)
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateServiceToken());
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", CreateServiceToken(servicePermission));
         }
         else
         {
@@ -231,7 +167,7 @@ public sealed class ReservationCommercialClient(
         return request;
     }
 
-    private string CreateServiceToken()
+    private string CreateServiceToken(string permission)
     {
         if (!configuration.GetValue<bool>("ReservationIntegration:Enabled")) throw Unavailable();
         if (client.BaseAddress is null || client.BaseAddress.Scheme != Uri.UriSchemeHttps &&
@@ -248,17 +184,19 @@ public sealed class ReservationCommercialClient(
             rsa.ImportFromPem(pem);
             if (rsa.KeySize < 2048) throw Unavailable();
 
+            // Each call owns and disposes its RSA key. A cached signature provider would retain it.
+            var key = new RsaSecurityKey(rsa) { CryptoProviderFactory = new() { CacheSignatureProviders = false } };
             var now = DateTime.UtcNow;
             var token = new JwtSecurityToken(Issuer, PaymentAudience,
                 [
                     new Claim("sub", Issuer),
                     new Claim("sender", Issuer),
-                    new Claim("permission", DepositOrderPermission),
+                    new Claim("permission", permission),
                     new Claim("role", "INTERNAL_SERVICE"),
                     new Claim("scope", "s2s"),
                     new Claim("jti", Guid.NewGuid().ToString("N"))
                 ],
-                now, now.AddMinutes(1), new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256));
+                now, now.AddMinutes(1), new SigningCredentials(key, SecurityAlgorithms.RsaSha256));
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
         catch (Exception error) when (error is CryptographicException or IOException or UnauthorizedAccessException
@@ -268,47 +206,9 @@ public sealed class ReservationCommercialClient(
         }
     }
 
-    private static bool Matches(AcceptedRequest? echoed, DepositOrderRequest request)
-    {
-        var accepted = request.AcceptedTerms;
-        return echoed is not null &&
-               echoed.OperationId == request.OperationId &&
-               echoed.ReservationId == request.ReservationId &&
-               echoed.AccountId == request.AccountId &&
-               echoed.TenantId == request.TenantId &&
-               echoed.SiteId == request.SiteId &&
-               echoed.QuoteId == accepted.QuoteId &&
-               echoed.TermsVersion == accepted.Version &&
-               echoed.Amount == accepted.DepositAmount &&
-               echoed.Currency == accepted.Currency &&
-               echoed.PaymentMethod == accepted.Selection.PaymentMethod &&
-               echoed.ExpiresAt == request.ExpiresAt;
-    }
-
-    private static bool IsDefinitiveOrderRejection(ReservationGateException error) =>
-        (error.StatusCode is 400 or 404 or 409) &&
-        (error.Code.StartsWith("QUOTE_", StringComparison.Ordinal) || error.Code == "TERMS_STALE");
-
     private static ReservationGateException InvalidOwner() =>
         new(503, "OWNER_CONTRACT_INVALID", "The owner response does not match the reservation contract.");
 
     private static ReservationGateException Unavailable() =>
         new(503, "OWNER_UNAVAILABLE", "Reservation commercial owner is unavailable.");
-
-    private sealed record PaymentEnvelope<T>(bool Success, T Data);
-    private sealed record PaymentErrorEnvelope(string? ErrorCode, string? Message);
-    private sealed record PreviewResponse(decimal BookedAmount, decimal? DepositAmount, string Currency,
-        string PricingVersion, bool RequiresCompleteSelection);
-    private sealed record QuoteSelection(Guid VehicleId, Guid SiteId, Guid RequestedSlotId,
-        DateTimeOffset Start, DateTimeOffset End, string PaymentMethod);
-    private sealed record QuoteResponse(Guid QuoteId, string Version, DateTimeOffset ValidUntil,
-        QuoteSelection Selection, Guid AccountId, decimal BookedAmount, decimal DepositAmount, string Currency,
-        string PrepaymentMode, string CoverageVersion, string Disclosure);
-    private sealed record AcceptedRequest(Guid OperationId, Guid ReservationId, Guid AccountId, Guid TenantId,
-        Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency, string PaymentMethod,
-        DateTimeOffset ExpiresAt);
-    private sealed record OrderResponse(string State, Guid? OrderId, AcceptedRequest? AcceptedRequest);
-    private sealed record CollectionItem(Guid CollectionId, Guid OrderId, Guid ReservationId, Guid AccountId,
-        Guid TenantId, Guid SiteId, Guid QuoteId, string TermsVersion, decimal Amount, string Currency);
-    private sealed record CollectionResponse(string State, IReadOnlyList<CollectionItem>? Collections);
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
+using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 using SmartParking.OperationService.Domain.Entities;
 using SmartParking.OperationService.Infrastructure.Messaging;
@@ -143,7 +144,10 @@ public class CheckoutRealtimeTests
         var hasBus = services.Any(s => s.ServiceType == typeof(IBusControl));
         var hasLayoutConsumer = services.Any(s => s.ServiceType == typeof(LayoutInvalidatedConsumer) || s.ImplementationType == typeof(LayoutInvalidatedConsumer));
         var hasPaymentConsumer = services.Any(s => s.ServiceType == typeof(PaymentSucceededConsumer) || s.ImplementationType == typeof(PaymentSucceededConsumer));
-        var hasAdmissionWorker = services.Any(s => s.ServiceType == typeof(IHostedService) && s.ImplementationType == typeof(ReservationAuthorizationWorker));
+        var hasAdmissionWorker = services.Any(s =>
+            s.ServiceType == typeof(IAdmissionMessages) ||
+            (s.ServiceType == typeof(IHostedService) &&
+             s.ImplementationType?.Namespace?.StartsWith("Quartz", StringComparison.Ordinal) == true));
 
         Assert.Equal(expectedBus, hasBus);
         Assert.Equal(expectedLayoutConsumer, hasLayoutConsumer);

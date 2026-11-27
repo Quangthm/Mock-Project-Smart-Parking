@@ -114,17 +114,11 @@ public sealed class PassPlanRepository(
             .FirstOrDefaultAsync(ct);
         if (tenantId is { } t3 && t3 != Guid.Empty) return t3;
 
-        tenantId = await db.Set<OperationalCapacityConfig>().AsNoTracking()
-            .Where(x => x.SiteId == siteId)
-            .Select(x => (Guid?)x.TenantId)
-            .FirstOrDefaultAsync(ct);
-        if (tenantId is { } t4 && t4 != Guid.Empty) return t4;
-
         tenantId = await db.Set<OperationalPolicyRow>().AsNoTracking()
             .Where(x => x.SiteId == siteId && x.TenantId != null)
             .Select(x => x.TenantId)
             .FirstOrDefaultAsync(ct);
-        return tenantId is { } t5 && t5 != Guid.Empty ? t5 : null;
+        return tenantId is { } t4 && t4 != Guid.Empty ? t4 : null;
     }
 
     public async Task<IReadOnlySet<PassVehicleType>> GetLocalSupportedVehicleTypesAsync(Guid siteId, CancellationToken ct)
@@ -156,17 +150,6 @@ public sealed class PassPlanRepository(
                 result.Add(parsed);
         }
 
-        var configTypes = await db.Set<OperationalCapacityConfig>().AsNoTracking()
-            .Where(x => x.SiteId == siteId && x.IsActive && x.TotalPhysicalCapacity > 0)
-            .Select(x => x.VehicleType)
-            .Distinct()
-            .ToListAsync(ct);
-        foreach (var raw in configTypes)
-        {
-            if (Enum.TryParse<PassVehicleType>(raw, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed))
-                result.Add(parsed);
-        }
-
         return result;
     }
 
@@ -175,7 +158,6 @@ public sealed class PassPlanRepository(
         return await db.StructureSiteStates.AsNoTracking().AnyAsync(x => x.SiteId == siteId, ct)
             || await db.SearchFacilityProjections.AsNoTracking().AnyAsync(x => x.SiteId == siteId, ct)
             || await db.SiteCapacityPools.AsNoTracking().AnyAsync(x => x.SiteId == siteId, ct)
-            || await db.Set<OperationalCapacityConfig>().AsNoTracking().AnyAsync(x => x.SiteId == siteId, ct)
             || await db.Set<OperationalPolicyRow>().AsNoTracking().AnyAsync(x => x.SiteId == siteId, ct)
             || await db.ParkingPassPlans.AsNoTracking().AnyAsync(x => x.SiteId == siteId, ct);
     }

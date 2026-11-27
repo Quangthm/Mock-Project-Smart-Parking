@@ -11,7 +11,7 @@ Create a parking reservation.
 
 ## Preconditions
 
-Authenticated eligible Driver with vehicle and reviewed terms.
+Authenticated Driver with selected or newly registered CAR and selected slot. The Driver accepts the authoritative versioned quote before submission.
 
 ## Authorization and pending-workflow boundary — approved 2026-11-04
 
@@ -21,15 +21,15 @@ See the [operation matrix](../srs/authorization-operation-classification.md) and
 
 ## Main flow
 
-1. Durably admit the authenticated Driver intent and return 202 with an own-scoped receipt. Resolve asynchronous Account-current Allowed. Validate caller-owned verified CAR, Specific Slot, effective duration/horizon/buffer, cross-lot vehicle/occupancy compatibility and booking restrictions. No Account booking cap.
-2. Apply valid monthly coverage to minimum; display extras, prepayment and cancellation terms.
-3. Atomically create compatible claim plus reservation: positive price PENDING_PAYMENT with H=min(creation + effective hold, T), default 5 minutes; genuine zero price CONFIRMED without monetary transaction.
-4. For positive price collect FULL/PERCENTAGE/FIXED accepted amount and confirm on verified outcome only if Operations confirmation commits strictly before T; convert claim once. Provider timestamps cannot backdate it.
-5. Issue booking/ticket details; allocate immediately if already within one-hour allocation lead.
+1. Resolve slot site/tenant, check prospective plate coverage and obtain Payment’s versioned quote and disclosures. Driver accepts before any hold.
+2. Durably admit the plate/slot/interval/method and accepted quote reference with a stable idempotency key. Return 202. Check Account-current, plate ownership and Facility eligibility concurrently. Show committed progress over SignalR with one recovery read per connection, reconnect or restoration.
+3. Guard local policy, unchanged quote/coverage, same-plate/site overlap, physical sessions and capacity. Atomically commit the claim, PENDING_PAYMENT reservation, terminal admission and hold outbox. H=min(creation + effective hold, T), ordinary default 5 minutes.
+4. Open checkout when the real order is ready. Require verified collection before guarded confirmation. Initial subscription eligibility returns false. Future covered bookings start PENDING_COMMERCIAL_ACCEPTANCE and require authoritative zero-amount acceptance with linked order and receipt evidence.
+5. Show CONFIRMED only after guarded Operations commit; the single evaluation timestamp must be strictly before T. Issue booking details; applicable allocation follows its own lifecycle.
 
 ## Alternatives and failures
 
-Positive deposit rounded to zero fails validation. Concurrent vehicle/capacity loser receives conflict; retry returns same result. After ordinary hold expiry, reacquire only if compatible and confirmation commits before T; at/after T expire and reconcile/refund verified money without entitlement; no general pay-on-arrival bypass.
+Positive deposit rounded to zero fails validation. Concurrent vehicle/capacity loser receives conflict; retry returns same result. After ordinary hold expiry, reacquire only if compatible and guarded confirmation is evaluated strictly before T; at/after T expire and reconcile/refund verified money without entitlement; no general pay-on-arrival bypass.
 
 ## Postconditions
 

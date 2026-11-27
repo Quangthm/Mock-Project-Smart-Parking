@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using SmartParking.Contracts.Facility;
 using SmartParking.FacilityService.Application;
@@ -11,15 +13,15 @@ namespace SmartParking.FacilityService.Persistence;
 // numbers for the same slot, and occupancy_release_ledger guarantees a session is released
 // at most once even if release events are redelivered.
 public sealed class OccupancyProjectionRepository(
-    NpgsqlDataSource source,
-    ParkingDbContext? context = null,
+    ParkingDbContext database,
     ILayoutInvalidationPublisher? layoutInvalidations = null) : IOccupancyProjectionRepository
 {
     public async Task<bool> ApplyAsync(OccupancyProjectionEvent projectionEvent, CancellationToken ct)
     {
-        await using var txScope = await FacilityOutboxTransaction.BeginAsync(source, context, ct);
-        var db = txScope.Connection;
-        var tx = txScope.Transaction;
+        var transaction = database.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("Occupancy projection requires the owning transaction.");
+        var db = (NpgsqlConnection)database.Database.GetDbConnection();
+        var tx = (NpgsqlTransaction)transaction.GetDbTransaction();
 
         // G5 rule 1: a duplicate eventId is recorded once and never re-applied.
         await using (var mark = new NpgsqlCommand("""
@@ -32,22 +34,19 @@ public sealed class OccupancyProjectionRepository(
             mark.Parameters.AddWithValue(projectionEvent.EventId);
             mark.Parameters.AddWithValue(projectionEvent.EventType);
             if (await mark.ExecuteScalarAsync(ct) is null)
-            {
-                await txScope.RollbackAsync(ct);
                 return false;
-            }
         }
 
         var applied = false;
         Guid? mutatedTenantId = null;
         if (projectionEvent.SlotId is { } slot)
         {
+            // The reservation snapshot includes operational slot state. Share the site fence before
+            // reading the watermark or changing eligibility. A busy token rolls back the event receipt.
+            await PhysicalSiteGuard.RequireAvailableAsync(db, tx, projectionEvent.SiteId, ct);
             // G5 rules 2-4: apply only when the sequence number advances the slot watermark.
             if (!await IsFreshAsync(db, tx, slot, projectionEvent.SequenceNumber, ct))
-            {
-                await txScope.CommitWithoutStagingAsync(ct);
                 return false;
-            }
 
             mutatedTenantId = projectionEvent.EventType switch
             {
@@ -63,19 +62,16 @@ public sealed class OccupancyProjectionRepository(
             applied = true;
         }
 
-        if (mutatedTenantId is { } tenantId)
+        if (mutatedTenantId is { } tenantId && layoutInvalidations is not null)
         {
-            await txScope.StageAndCommitAsync(
-                layoutInvalidations,
+            await layoutInvalidations.StageAsync(
+                projectionEvent.EventId,
                 tenantId,
                 projectionEvent.SiteId,
                 [LayoutInvalidationResources.FullLayout, LayoutInvalidationResources.CapacitySummary],
-                ct,
-                eventId: projectionEvent.EventId);
-        }
-        else
-        {
-            await txScope.CommitWithoutStagingAsync(ct);
+                ct);
+            if (database.ChangeTracker.HasChanges())
+                await database.SaveChangesAsync(ct);
         }
 
         return applied;

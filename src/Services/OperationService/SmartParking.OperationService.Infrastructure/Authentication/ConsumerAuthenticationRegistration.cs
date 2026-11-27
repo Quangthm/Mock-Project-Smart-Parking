@@ -71,11 +71,13 @@ public static class ConsumerAuthenticationRegistration
                 {
                     OnMessageReceived = context =>
                     {
-                        if (context.Request.Path.StartsWithSegments("/ws/parking-lots") &&
+                        if ((context.Request.Path.StartsWithSegments("/ws/parking-lots") ||
+                             context.Request.Path == "/hubs/reservation-progress") &&
                             context.Request.Query.TryGetValue("access_token", out var token) &&
-                            !string.IsNullOrWhiteSpace(token))
+                            token.Count == 1 &&
+                            !string.IsNullOrWhiteSpace(token[0]))
                         {
-                            context.Token = token.ToString();
+                            context.Token = token[0];
                         }
                         return Task.CompletedTask;
                     },

@@ -1,0 +1,79 @@
+using MediatR;
+using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
+using SmartParking.PaymentService.Application.DTOs.Payments;
+using SmartParking.PaymentService.Domain.Entities;
+using SmartParking.PaymentService.Domain.Enums;
+using SmartParking.PaymentService.Domain.Exceptions;
+
+namespace SmartParking.PaymentService.Application.Usecase.CreatePaymentOrder;
+
+public sealed class CreatePaymentOrderCommandHandler(
+    IPaymentOrderRepository orders,
+    IUnitOfWork unitOfWork) : IRequestHandler<CreatePaymentOrderCommand, PaymentOrderResponseDto>
+{
+    public async Task<PaymentOrderResponseDto> Handle(
+        CreatePaymentOrderCommand command,
+        CancellationToken cancellationToken)
+    {
+        var request = command.Request;
+        if (request.ReferenceType == ReferenceType.RESERVATION)
+        {
+            throw new PaymentDomainException(
+                "FORBIDDEN_RESERVATION_DEPOSIT_CREATION",
+                "Reservation deposit orders must be created by the reservation workflow from the accepted quote.");
+        }
+
+        if (request.Amount < 0)
+            throw new PaymentDomainException("INVALID_AMOUNT", "The payment amount is invalid.");
+
+        var effectiveOrderType = request.OrderType ?? OrderType.PARKING_FEE;
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var existing = await orders.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
+            if (existing is not null)
+            {
+                if (existing.IsProvisioningFence || existing.FinalAmount != request.Amount ||
+                    existing.ReferenceType != request.ReferenceType ||
+                    existing.ReferenceId != request.ReferenceId ||
+                    existing.AccountId != request.AccountId ||
+                    existing.SiteId != request.SiteId)
+                {
+                    throw new PaymentDomainException(
+                        "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                        "Idempotency key has already been used with a different request payload.");
+                }
+
+                return ToResponse(existing);
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var expiresAt = request.ExpiresAt ?? now.AddMinutes(15);
+
+        var order = new PaymentOrder
+        {
+            Id = Guid.NewGuid(),
+            TenantId = request.TenantId,
+            SiteId = request.SiteId,
+            AccountId = request.AccountId,
+            PlateNumber = request.PlateNumber,
+            OrderCode = $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+            IdempotencyKey = request.IdempotencyKey,
+            OrderType = effectiveOrderType,
+            ReferenceType = request.ReferenceType,
+            ReferenceId = request.ReferenceId,
+            Amount = request.Amount,
+            FinalAmount = request.Amount,
+            ExpiresAt = expiresAt,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        await orders.AddAsync(order, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return ToResponse(order);
+    }
+
+    private static PaymentOrderResponseDto ToResponse(PaymentOrder order) =>
+        new(order.Id, order.OrderCode, order.FinalAmount, order.RequireCommercialStatus().ToString(),
+            order.ExpiresAt ?? order.CreatedAt.AddMinutes(15));
+}

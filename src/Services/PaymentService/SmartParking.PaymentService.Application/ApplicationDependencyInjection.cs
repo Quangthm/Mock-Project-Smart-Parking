@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SmartParking.PaymentService.Application.Common.Behaviors;
+using SmartParking.PaymentService.Application.Reservations;
 using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
 using SmartParking.PaymentService.Domain.Pricing;
 
@@ -20,6 +21,7 @@ public static class ApplicationDependencyInjection
 
         services.AddValidatorsFromAssembly(typeof(CalculateParkingFeeQueryValidator).Assembly);
 
+        services.AddScoped<ReviewedPayOsSettlement>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IParkingPricingCalculator, ParkingPricingCalculator>();
 

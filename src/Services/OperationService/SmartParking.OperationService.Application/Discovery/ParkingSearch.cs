@@ -38,15 +38,6 @@ public sealed record ParkingSummary(Guid SiteId, string Name, string Address, do
     DiscoveryPrice? Price, SourceTimes SourceAsOf, FieldStates FieldStatus);
 public sealed record SearchPage(ParkingSummary[] Items, string? NextCursor, DateTimeOffset AsOf);
 public sealed record DiscoveryPolicy(bool Enabled, TimeSpan MaxAge, TimeSpan Skew);
-public sealed class DiscoveryFailure(int status, string code, int? retryAfter = null) : Exception(code)
-{
-    public int Status { get; } = status;
-    public string Code { get; } = code;
-    public int? RetryAfter { get; } = retryAfter;
-    public static DiscoveryFailure Invalid() => new(400, "VALIDATION_FAILED");
-    public static DiscoveryFailure Unavailable() => new(503, "DEPENDENCY_UNAVAILABLE");
-    public static DiscoveryFailure Changed() => new(409, "SEARCH_CHANGED");
-}
 public sealed class ParkingSearchHandler(IDiscoveryOwners owners, IDiscoveryCursors cursors,
     TimeProvider clock, DiscoveryPolicy policy, IDiscoveryCapacitySource capacity) : IRequestHandler<SearchParking, SearchPage>
 {

@@ -60,17 +60,35 @@ public sealed class FacilityExceptionHandler(ILogger<FacilityExceptionHandler> l
             (context.Request.Path.StartsWithSegments("/api/operator") ||
              context.Request.Path.StartsWithSegments("/internal/reservation-dependencies")))
             failure = new(503, "PROTOTYPE_SCHEMA_NOT_READY", "Facility data is unavailable until database reconciliation is complete.");
+        var discovery = DiscoveryCatalogueEndpoints.IsDiscoveryPath(context.Request.Path);
+        if (discovery)
+        {
+            failure = exception switch
+            {
+                StructureException e => new(e.Code switch
+                {
+                    "UNAUTHENTICATED" => 401, "FORBIDDEN" => 403, "SITE_NOT_FOUND" => 404,
+                    "SEARCH_CHANGED" or "CURSOR_EXPIRED" or "STRUCTURE_CONFLICT" => 409,
+                    "IDENTITY_UNAVAILABLE" or "CATALOGUE_UNAVAILABLE" => 503, _ => 400
+                }, e.Code, e.Message),
+                BadHttpRequestException e => new(e.StatusCode, "VALIDATION_FAILED", "Discovery request could not complete."),
+                TimeoutException => new(504, "DEPENDENCY_TIMEOUT", "Catalogue request timed out."),
+                NpgsqlException or InvalidOperationException or InvalidCastException =>
+                    new(503, "DEPENDENCY_UNAVAILABLE", "Catalogue is unavailable."),
+                _ => null
+            };
+        }
         var unexpected = failure is null;
-        if (failure is null && (exception as PostgresException ??
+        if (!discovery && failure is null && (exception as PostgresException ??
             (exception as DbUpdateException)?.InnerException as PostgresException) is
             { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ExclusionViolation })
         {
             failure = new(409, "STRUCTURE_CONFLICT", "A conflicting write has already claimed this resource.");
             unexpected = false;
         }
-        failure ??= new(500, "INTERNAL_SERVER_ERROR", "An unexpected error occurred.");
+        failure ??= new(500, discovery ? "INTERNAL_ERROR" : "INTERNAL_SERVER_ERROR", "An unexpected error occurred.");
         if (!await ApiErrors.WriteAsync(context, failure.Status, failure.Code, failure.Message,
-            failure.Errors, failure.Released, failure.Items, failure.Commitments, ct)) return false;
+            failure.Errors ?? (discovery ? Array.Empty<object>() : null), failure.Released, failure.Items, failure.Commitments, ct)) return false;
         if (unexpected)
             logger.LogError("Facility request failed ({FailureType}); correlation {CorrelationId}.",
                 exception.GetType().FullName, ApiErrors.Correlation(context));

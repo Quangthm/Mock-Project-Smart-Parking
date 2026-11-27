@@ -43,9 +43,10 @@ function notifyDemoSlotScan(
     normalizedPlate?: string
     status?: string
     slotId?: string | null
+    recordedSlotId?: string | null
   },
 ) {
-  if (action === "check-in" && typeof window !== "undefined") {
+  if (action === "check-in" && !session?.recordedSlotId && typeof window !== "undefined") {
     const storageKey = `smartpark:demo-pending-checkins:${siteId}`
     const pending = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]") as Array<{
       plate: string
@@ -98,6 +99,7 @@ function notifyDemoSlotScan(
         sessionId: session?.id,
         reservationId: session?.reservationId,
         slotId: session?.slotId ?? undefined,
+        recordedSlotId: session?.recordedSlotId ?? undefined,
         session: session
           ? {
               id: session.id,
@@ -588,20 +590,16 @@ export function CheckInOut({
       if (!lot) throw new Error("Select a parking site before processing the gate action.")
       let session: WalkInParkingSession
       if (action === "check-in") {
-        const selectedSlotId = preferredWalkInSlotId
+        const selectedSlotId = import.meta.env.DEV ? preferredWalkInSlotId || undefined : undefined
         const selectedSlotType = lot.slots.find((slot) => slot.id === selectedSlotId)?.vehicleType
         const requestedVehicleType = vehicleType ?? result.vehicleType ??
           (selectedSlotType === "CAR" || selectedSlotType === "MOTORCYCLE" ? selectedSlotType : "CAR")
-        const candidates = walkInSlotCandidates(requestedVehicleType)
-        const slotId = selectedSlotId || (candidates.length
-          ? candidates[Math.floor(Math.random() * candidates.length)].id
-          : undefined)
         session = await reservationApi.walkInCheckIn(
           lot.id,
           result.plate,
           imageData,
           requestedVehicleType,
-          slotId,
+          selectedSlotId,
         )
       } else {
         if (!result.session) throw new Error("The active walk-in session was not found.")
@@ -639,6 +637,7 @@ export function CheckInOut({
         ticketReference: `WALKIN-${session.id.slice(0, 8).toUpperCase()}`,
         originalPlate: session.licensePlate,
         slotId: session.slotId,
+        recordedSlotId: session.slotId,
       })
       onDataChanged?.()
     } catch (error) {
@@ -750,14 +749,14 @@ export function CheckInOut({
 
       {/* Manual entry follows the camera workflow in both directions. */}
       <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
-        {mode === "check-in" && (
+        {mode === "check-in" && import.meta.env.DEV && (
           <select
             aria-label="Choose a parking slot (optional)"
             className="mb-3 max-w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] sm:min-w-64"
             value={preferredWalkInSlotId}
             onChange={(event) => setPreferredWalkInSlotId(event.target.value)}
           >
-            <option value="">Random available slot</option>
+            <option value="">Assign during slot scan</option>
             {walkInSlotCandidates().map((slot) => (
               <option key={slot.id} value={slot.id}>{slot.number} · {slot.vehicleType}</option>
             ))}

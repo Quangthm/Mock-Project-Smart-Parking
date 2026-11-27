@@ -29,6 +29,7 @@ export function ParkingDetailsPanel({ lot, availabilityUnknown, vehicleCapacity,
   onClose: () => void
 }) {
   const [policyOpen, setPolicyOpen] = useState(false)
+  const [passOffersOpen, setPassOffersOpen] = useState(false)
   const hasSlots = !availabilityUnknown && Array.isArray(lot.slots)
   const available = hasSlots ? lot.slots.filter((slot) => slot.status === "available").length : null
   const canBook = lot.status === "active" && available !== null && available > 0

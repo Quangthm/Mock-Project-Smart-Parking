@@ -11,24 +11,6 @@ export interface ReservationSelection {
   paymentMethod: "PAYOS" | "CASH"
 }
 
-export interface ReservationTerms {
-  termsId: string
-  termsVersion: string
-  validUntil: string
-  commercial: {
-    bookedAmount: number
-    depositAmount: number
-    currency: string
-    disclosure: string
-  }
-}
-
-export interface ReservationIntent extends ReservationSelection {
-  mode: "SPECIFIC_SLOT"
-  termsId: string
-  termsVersion: string
-}
-
 export interface ReservationReceipt {
   requestId: string
   state: string
@@ -47,11 +29,10 @@ export interface DriverReservation {
   orderId: string | null
 }
 
-async function call<T>(path: string, body?: unknown, key?: string): Promise<T> {
+async function call<T>(path: string, body?: unknown): Promise<T> {
   try {
     const response = await request<{ success: boolean; data: T }>(
       path, body === undefined ? "GET" : "POST", body, "/api", server,
-      key ? { "Idempotency-Key": key } : undefined,
     )
     if (!response.success || response.data == null) throw new Error("Reservation Service returned an incomplete response.")
     return response.data
@@ -86,8 +67,6 @@ export const driverReservationApi = {
     previewAttempt = attempt
     return attempt.promise
   },
-  review: (selection: ReservationSelection) => call<ReservationTerms>("/reservation-terms", selection),
-  create: (intent: ReservationIntent, key: string) => call<ReservationReceipt>("/reservation-requests", intent, key),
   receipt: (id: string) => call<ReservationReceipt>(`/reservation-requests/${encodeURIComponent(id)}`),
   read: (id: string) => call<DriverReservation>(`/me/reservations/${encodeURIComponent(id)}`),
   list: () => call<DriverReservation[]>("/me/reservations"),

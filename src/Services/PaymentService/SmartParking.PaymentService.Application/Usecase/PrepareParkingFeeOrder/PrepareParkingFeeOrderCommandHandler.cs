@@ -66,7 +66,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
         var existingOrder = await _orderRepository.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
         if (existingOrder != null)
         {
-            if (existingOrder.TenantId != request.TenantId ||
+            if (existingOrder.IsProvisioningFence || existingOrder.TenantId != request.TenantId ||
                 existingOrder.SiteId != request.SiteId ||
                 existingOrder.ReferenceId != request.SessionId)
             {
@@ -113,7 +113,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
                     BaseParkingFee: existingInvoice?.BaseParkingFee ?? existingOrder.Amount,
                     PenaltyFee: existingInvoice?.OverstayPenaltyFee ?? (request.PenaltyAmount ?? 0m),
                     FinalAmount: existingOrder.FinalAmount,
-                    Status: existingOrder.Status.ToString(),
+                    Status: existingOrder.RequireCommercialStatus().ToString(),
                     TariffId: existingInvoice?.PricingSnapshot.TariffId ?? Guid.Empty,
                     TariffVersion: existingInvoice?.PricingSnapshot.TariffVersion ?? 1,
                     TotalParkedMinutes: existingInvoice?.TotalParkedMinutes ?? 0,
@@ -350,7 +350,7 @@ public sealed class PrepareParkingFeeOrderCommandHandler : IRequestHandler<Prepa
             BaseParkingFee: baseParkingFee,
             PenaltyFee: penaltyFee,
             FinalAmount: finalAmount,
-            Status: order.Status.ToString(),
+            Status: order.RequireCommercialStatus().ToString(),
             TariffId: snapshot.TariffId,
             TariffVersion: snapshot.TariffVersion,
             TotalParkedMinutes: invoice.TotalParkedMinutes,

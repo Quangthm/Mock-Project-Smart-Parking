@@ -12,6 +12,8 @@ public class ReservationQuoteConfiguration : IEntityTypeConfiguration<Reservatio
         builder.ToTable("reservation_quotes");
 
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.ReviewedEvidence).HasColumnName("reviewed_evidence").HasColumnType("jsonb")
+            .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Throw);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.SiteId).HasColumnName("site_id").IsRequired();
@@ -28,7 +30,7 @@ public class ReservationQuoteConfiguration : IEntityTypeConfiguration<Reservatio
 
         builder.Property(x => x.TariffId).HasColumnName("tariff_id");
         builder.Property(x => x.TariffRevisionId).HasColumnName("tariff_revision_id");
-        builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50).HasDefaultValue("v1").IsRequired();
+        builder.Property(x => x.TermsVersion).HasColumnName("terms_version").HasMaxLength(50);
         builder.Property(x => x.CoverageVersion).HasColumnName("coverage_version").HasMaxLength(100);
 
         builder.Property(x => x.ValidUntil).HasColumnName("valid_until").IsRequired();

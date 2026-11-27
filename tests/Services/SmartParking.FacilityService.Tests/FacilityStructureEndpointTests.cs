@@ -577,8 +577,8 @@ public sealed class FacilityStructureEndpointTests
 
                 services.RemoveAll<IStructureSynchronizationRepository>();
                 services.AddSingleton<IStructureSynchronizationRepository>(harness.Synchronization);
-                services.RemoveAll<IReservationDependencyRepository>();
-                services.AddSingleton<IReservationDependencyRepository>(harness.ReservationDependencies);
+                services.RemoveAll<IReservationSlotReader>();
+                services.AddSingleton<IReservationSlotReader>(harness.ReservationDependencies);
 
                 services.RemoveAll<IStructureOperationStore>();
                 services.AddSingleton<IStructureOperationStore>(harness.Operations);
