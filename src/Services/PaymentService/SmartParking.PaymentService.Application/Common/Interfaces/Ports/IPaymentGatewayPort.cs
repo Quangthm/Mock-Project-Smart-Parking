@@ -16,7 +16,8 @@ public interface IPaymentGatewayPort
     Task<PaymentVerificationResult> QueryTransactionAsync(
         long orderCode, 
         string? gatewayTransactionId, 
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? reviewedCheckoutQr = null);
 
     Task<PaymentCancellationResult> CancelPaymentAsync(
         long orderCode,

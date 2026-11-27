@@ -52,7 +52,7 @@ public sealed class JwksConfigurationManager(HttpClient client, Uri endpoint, st
     {
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), clock);
             using var response = await client.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is > 65536) throw new JwksUnavailableException();

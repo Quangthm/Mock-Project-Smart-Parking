@@ -16,9 +16,10 @@ import type {
 } from "../../../lib/types"
 
 import { qrLogo } from "../data/paymentOptions"
-import { reservationsApi, type ReservationPreview } from "../../../lib/reservationsApi"
-import { driverReservationApi, type ReservationSelection } from "../../../lib/driverReservationApi"
+import type { ReviewedReservationSelection } from "../../../lib/reservationsApi"
+import { driverReservationApi } from "../../../lib/driverReservationApi"
 import { readReservationAttempt, ReservationCheckout } from "./ReservationCheckout"
+import "./reservation-checkout.css"
 
 import { Parking3DViewer } from "../../../components/3d/Parking3DViewer"
 import { ErrorBoundary } from "../../../components/feedback/ErrorBoundary"
@@ -136,8 +137,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
 
   const [message, setMessage] = useState("")
   const [showPolicyModal, setShowPolicyModal] = useState(false)
-  const [pricePreview, setPricePreview] = useState<ReservationPreview | null>(null)
-  const [previewError, setPreviewError] = useState("")
 
   useEffect(() => {
     if (!user || resumeBooking) return
@@ -201,31 +200,6 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const validTimeWindow = Number.isFinite(startTimestamp) && Number.isFinite(endTimestamp) &&
     startTimestamp > Date.now() && endTimestamp > startTimestamp
 
-  const amount = pricePreview?.bookedAmount
-
-  useEffect(() => {
-    let active = true
-    setPricePreview(null)
-    setPreviewError("")
-    if (!selectedSlot || !validTimeWindow) return
-    const generation = getSessionGeneration()
-    const timer = window.setTimeout(() => {
-      void reservationsApi.preview({
-        siteId: lot.id, requestedSlotId: selectedSlot.id,
-        start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-        ...(selectedVehicleId ? { vehicleId: selectedVehicleId } : {}),
-        ...(paymentMethod ? { paymentMethod: paymentMethod === "qr" ? "PAYOS" : "CASH" } : {}),
-      }).then(result => {
-        if (active && generation === getSessionGeneration()) setPricePreview(result)
-      }).catch(error => {
-        if (active && generation === getSessionGeneration()) setPreviewError(error instanceof Error ? error.message : "Price preview unavailable.")
-      })
-    }, 350)
-    return () => { active = false; window.clearTimeout(timer) }
-  }, [lot.id, selectedSlot?.id, startTime, endTime, selectedVehicleId, paymentMethod, validTimeWindow])
-
-  const priceLabel = amount == null ? previewError || "Loading price…" : `${amount.toLocaleString("vi-VN")} VND`
-
   const bookingVehicles = vehicles.filter(vehicle => vehicle.vehicleType === "CAR")
   const selectedVehicle = bookingVehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
@@ -234,8 +208,9 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   const previewSlotId = selectedSlot?.id
   const previewVehicleId = selectedVehicle?.id
   const previewKey = JSON.stringify([lot.id, previewSlotId, previewVehicleId, startTime, endTime])
+  const canPreview = step === "details" || step === "payment"
   useEffect(() => {
-    if (!previewSlotId || !previewVehicleId || !validTimeWindow || (step !== "details" && step !== "payment")) return
+    if (!previewSlotId || !previewVehicleId || !validTimeWindow || !canPreview) return
     let active = true
     const timer = window.setTimeout(() => {
       driverReservationApi.preview({
@@ -248,14 +223,14 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
       })
     }, 350)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [lot.id, previewSlotId, previewVehicleId, previewKey, validTimeWindow, step, startTime, endTime])
-  const priceText = preview?.key === previewKey ? preview.text : validTimeWindow && previewVehicleId && previewSlotId
+  }, [lot.id, previewSlotId, previewVehicleId, previewKey, validTimeWindow, canPreview, startTime, endTime])
+  const priceLabel = preview?.key === previewKey ? preview.text : validTimeWindow && previewVehicleId && previewSlotId
     ? "Checking price…" : "Available after choosing time and vehicle"
-  const reservationSelection: ReservationSelection | null =
-    selectedSlot && selectedVehicle && validTimeWindow && paymentMethod ? {
-      siteId: lot.id, requestedSlotId: selectedSlot.id, vehicleId: selectedVehicle.id,
+  const reservationSelection: ReviewedReservationSelection | null =
+    selectedSlot && selectedVehicle?.canonicalPlate && validTimeWindow && paymentMethod === "qr" ? {
+      requestedSlotId: selectedSlot.id, licensePlate: selectedVehicle.canonicalPlate,
       start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-      paymentMethod: paymentMethod === "qr" ? "PAYOS" : "CASH",
+      paymentMethod: "PAYOS",
     } : null
 
   function chooseSlot(slot: ParkingSlot) {
@@ -376,9 +351,13 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
   }
 
   function continueToPayment() {
+    if (paymentMethod === "cash") {
+      setStep("cash")
+      return
+    }
     if (!reservationSelection) return
 
-    setStep(paymentMethod === "cash" ? "cash" : "qr")
+    setStep("qr")
   }
 
   const activeFloorKey: string =
@@ -1141,7 +1120,7 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
             <button
               type="button"
               className="btn-primary"
-              disabled={!reservationSelection}
+              disabled={paymentMethod !== "cash" && !reservationSelection}
               onClick={continueToPayment}
               style={{ flex: 1, justifyContent: "center" }}
             >
@@ -1151,16 +1130,10 @@ function AccountBookingFlow({ lot, onDone, resumeBooking }: BookingFlowProps) {
         </section>
       )}
 
-      {step === "qr" && selectedSlot && selectedVehicleId && user && (
+      {step === "qr" && user && (
         <div className="booking-stage-right booking-payment-checkout">
-          <ReservationCheckout key={`${selectedSlot.id}:${selectedVehicleId}:${startTime}:${endTime}:${step}`}
-            accountScope={`${user.id}:driver`} onDone={onDone}
-            selection={{ siteId: lot.id, requestedSlotId: selectedSlot.id, vehicleId: selectedVehicleId,
-              start: new Date(startTime).toISOString(), end: new Date(endTime).toISOString(),
-              paymentMethod: "PAYOS" }} />
-          <button type="button" className="btn-outline" onClick={() => setStep("payment")}>
-            Back to payment methods
-          </button>
+          <ReservationCheckout key={storageKey} storageKey={storageKey} onDone={onDone}
+            selection={reservationSelection} onBack={() => setStep("payment")} />
         </div>
       )}
 

@@ -11,6 +11,8 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
         builder.ToTable("refund_requests");
 
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.CollectionId).HasColumnName("collection_id");
+        builder.HasIndex(x => x.CollectionId).IsUnique();
         builder.Property(x => x.Id).HasColumnName("id");
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.PaymentOrderId).HasColumnName("payment_order_id").IsRequired();
@@ -26,6 +28,11 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
         builder.HasOne(x => x.PaymentOrder)
             .WithMany()
             .HasForeignKey(x => x.PaymentOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<PaymentTransaction>()
+            .WithOne()
+            .HasForeignKey<RefundRequest>(x => x.CollectionId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.PaymentOrderId).HasDatabaseName("idx_refund_requests_order");

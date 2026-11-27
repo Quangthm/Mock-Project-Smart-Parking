@@ -18,7 +18,7 @@ A-01 example: a future reservation was confirmed at zero because a paid pass cov
 **Actors:** Owner  
 **Stories:** US-OW06
 
-Owner explicitly enables monthly and/or yearly versioned available-only plans with separate Payment financial terms; Driver reviews full-period price, bound account/vehicle/lot or zone, anchor, [S,E), ordinary day/night coverage and refund terms. No guaranteed capacity/slot, sales cap, monthly queue or automatic payment. Price is required Owner configuration; 1,200,000 VND is only a fixture.
+Owner explicitly enables monthly and/or yearly versioned available-only plans with separate Payment financial terms; Driver reviews full-period price, canonical plate and lot/zone for coverage, with the purchasing Account for management, permissions, billing and audit, anchor, [S,E), ordinary day/night coverage and refund terms. No guaranteed capacity/slot, sales cap, monthly queue or automatic payment. Price is required Owner configuration; 1,200,000 VND is only a fixture.
 
 ### FR-MON-02
 
@@ -26,7 +26,7 @@ Owner explicitly enables monthly and/or yearly versioned available-only plans wi
 **Actors:** Driver  
 **Stories:** US-D13
 
-Owner explicitly enables monthly and/or yearly versioned available-only plans with separate Payment financial terms; Driver reviews full-period price, bound account/vehicle/lot or zone, anchor, [S,E), ordinary day/night coverage and refund terms. No guaranteed capacity/slot, sales cap, monthly queue or automatic payment. Price is required Owner configuration; 1,200,000 VND is only a fixture.
+Owner explicitly enables monthly and/or yearly versioned available-only plans with separate Payment financial terms; Driver reviews full-period price, canonical plate and lot/zone for coverage, with the purchasing Account for management, permissions, billing and audit, anchor, [S,E), ordinary day/night coverage and refund terms. No guaranteed capacity/slot, sales cap, monthly queue or automatic payment. Price is required Owner configuration; 1,200,000 VND is only a fixture.
 
 ### FR-MON-03
 
@@ -34,7 +34,7 @@ Owner explicitly enables monthly and/or yearly versioned available-only plans wi
 **Actors:** Driver  
 **Stories:** US-D13
 
-Create immediate or future-start vehicle/location-bound order after validating duplicate rights and the effective `MONTHLY_MAX_PREPAID_TERMS` (default 3) or at most one yearly period in advance. A yearly period is 12 calendar months; do not reject it by counting its months against the monthly limit. Yearly order deadlines and renewal settings require their own reviewed configuration rather than an invented default. The monthly order uses the effective `MONTHLY_PAYMENT_HOLD_DURATION` (default 15 minutes) and does not hold parking capacity. For monthly, full verified payment plus Operations entitlement commit must satisfy strict A<H; yearly uses its separately accepted deadline contract.
+Create immediate or future-start canonical-plate/location-bound order after validating duplicate rights and the effective `MONTHLY_MAX_PREPAID_TERMS` (default 3) or at most one yearly period in advance. A yearly period is 12 calendar months; do not reject it by counting its months against the monthly limit. Yearly order deadlines and renewal settings require their own reviewed configuration rather than an invented default. The monthly order uses the effective `MONTHLY_PAYMENT_HOLD_DURATION` (default 15 minutes) and does not hold parking capacity. For monthly, full verified payment plus Operations entitlement commit must satisfy strict A<H; yearly uses its separately accepted deadline contract.
 
 ### FR-MON-04
 
@@ -66,7 +66,7 @@ An available-only pass reserves no capacity while outside. Each visit requires a
 **Actors:** Operator, Device Gateway  
 **Stories:** US-O07
 
-Operator validates account, vehicle, state, timestamps and resources per visit; a monthly or yearly right does not replace the single-use session ticket or permit duplicate open sessions.
+Operator validates applicable access, canonical plate, coverage state, timestamps and resources per visit; a monthly or yearly right does not replace the single-use session ticket or permit duplicate open sessions.
 
 ### FR-MON-08
 
@@ -122,7 +122,7 @@ Owner views scoped collected/refunded money; Operator sees only necessary operat
 **Actors:** Driver, Operator  
 **Stories:** US-D14, US-O07
 
-For monthly and yearly products, at E stop coverage/new entry entitlement, not physical occupancy. Apply eligible monthly/yearly coverage before calculating ordinary reservation minimum: zero-price reservation confirms without payment with normal claims/cap checks; positive price uses approved prepayment. Prevent incompatible overlapping reservations and double charges; enforce A-01 dependency guard for voluntary cancellation.
+For monthly and yearly products, at E stop coverage/new entry entitlement, not physical occupancy. Apply eligible monthly/yearly coverage before calculating ordinary reservation minimum: the future fully covered reservation uses guarded confirmation after idempotent Payment zero-amount acceptance with linked order and receipt evidence. Positive price uses approved prepayment. See [FR-RES-04](04-reservations-allocation.md#fr-res-04). Prevent incompatible overlapping reservations and double charges; enforce A-01 dependency guard for voluntary cancellation. Coverage follows the canonical plate across UserService registration transfers. The original Account retains purchase and booking permissions and audit context. Reservation checks use plate, site and interval, with eligibility initially false until entitlement logic is delivered.
 
 [Canonical M-01–M-09 rules](../../business-rules/07-monthly-passes.md).
 

@@ -7,9 +7,11 @@ using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
 using SmartParking.OperationService.Application.Common.Models.Exceptions;
 using SmartParking.OperationService.Application.DTOs;
+using SmartParking.OperationService.Application.Reservations;
 using SmartParking.OperationService.Application.Usecase.ReservationGate;
 using SmartParking.OperationService.Domain;
 using SmartParking.OperationService.Domain.Entities;
+using SmartParking.OperationService.Domain.Reservations;
 
 using OperationsUnitOfWork = SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWork;
 using OperationsUnitOfWorkTransaction = SmartParking.OperationService.Application.Common.Interfaces.Persistence.IUnitOfWorkTransaction;
@@ -36,7 +38,77 @@ public sealed class ReservationGateUseCaseTests
         var result = await services.GetRequiredService<IMediator>().Send(new CheckInWalkInCommand(data.Site, "29A-12345", null, "CAR"));
         Assert.Equal("29A12345", data.Session!.NormalizedPlate);
         Assert.Equal(data.Session.Id, result.Id);
+        Assert.Null(result.SlotId);
+        Assert.Null(data.Session.LocationScannedAt);
+        Assert.Null(data.Allocation);
         Assert.Equal(new[] { "identity", "begin", "plate-guard", "guard", "active-read", "add-session", "audit", "save", "commit" }, data.Calls);
+    }
+
+    [Fact]
+    public async Task ExplicitWalkInCheckInRecordsAndReleasesOnlyTheSessionSlot()
+    {
+        var data = new FakeRepositories();
+        using var services = CreateServices(data);
+        var mediator = services.GetRequiredService<IMediator>();
+        var slotId = Guid.NewGuid();
+
+        var result = await mediator.Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR", slotId));
+
+        Assert.Equal(slotId, result.SlotId);
+        Assert.NotNull(data.Session!.LocationScannedAt);
+        Assert.Null(data.Allocation);
+        Assert.Equal(new[] { "identity", "begin", "plate-guard", "guard", "active-read", "availability", "claim-slot",
+            "add-session", "audit", "save", "commit" }, data.Calls);
+
+        var departure = await mediator.Send(new CheckOutWalkInCommand(data.Site, result.Id, "29A12345", null));
+        Assert.NotNull(departure.ExitTime);
+        Assert.Equal(slotId, data.ReleasedSlotId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PhysicalOccupancyRejectsAConflictingReservationBeforeFacilityClaim(bool scan)
+    {
+        var data = new FakeRepositories();
+        using var services = CreateServices(data);
+        var mediator = services.GetRequiredService<IMediator>();
+        var slotId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        data.Reservation = new()
+        {
+            Id = Guid.NewGuid(), Status = "CONFIRMED", VehicleType = "CAR", TargetSlotId = slotId,
+            ExpectedStartTime = now.AddMinutes(-5), ExpectedEndTime = now.AddMinutes(5)
+        };
+
+        var error = await Assert.ThrowsAsync<ReservationGateException>(async () =>
+        {
+            if (scan)
+            {
+                var walkIn = await mediator.Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR"));
+                await mediator.Send(new ScanParkingSessionCommand(data.Site, walkIn.Id, slotId));
+            }
+            else
+            {
+                await mediator.Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR", slotId));
+            }
+        });
+        Assert.Equal("SLOT_TIME_CONFLICT", error.Code);
+        Assert.DoesNotContain("claim-slot", data.Calls);
+        Assert.Null(data.Session?.CurrentSlotId);
+        Assert.Null(data.Allocation);
+    }
+
+    [Fact]
+    public async Task UnavailableFacilitySlotLeavesExplicitCheckInUncommitted()
+    {
+        var data = new FakeRepositories { SlotUnavailable = true };
+        using var services = CreateServices(data);
+        var error = await Assert.ThrowsAsync<ReservationGateException>(() => services.GetRequiredService<IMediator>()
+            .Send(new CheckInWalkInCommand(data.Site, "29A12345", null, "CAR", Guid.NewGuid())));
+        Assert.Equal("NO_AVAILABLE_SLOT", error.Code);
+        Assert.Null(data.Session);
+        Assert.DoesNotContain("commit", data.Calls);
     }
 
     [Fact]
@@ -69,7 +141,9 @@ public sealed class ReservationGateUseCaseTests
     public async Task ReservedSlotBecomesOccupiedOnlyAtScanAndIsReleasedAtDeparture()
     {
         var data = new FakeRepositories();
-        data.Reservation = new() { Id = Guid.NewGuid(), Status = "CONFIRMED", OriginalPlate = "29A-12345", VehicleType = "CAR" };
+        data.Reservation = new() { Id = Guid.NewGuid(), Status = "CONFIRMED", OriginalPlate = "29A-12345", VehicleType = "CAR",
+            TargetSlotId = Guid.NewGuid(), ExpectedStartTime = DateTimeOffset.UtcNow.AddHours(-1),
+            ExpectedEndTime = DateTimeOffset.UtcNow.AddHours(1) };
         data.Allocation = new() { Id = Guid.NewGuid(), ReservationId = data.Reservation.Id, SlotId = Guid.NewGuid(), AllocationStatus = "RESERVED",
             AllocatedStartTime = DateTimeOffset.UtcNow.AddHours(-1), AllocatedEndTime = DateTimeOffset.UtcNow.AddHours(1) };
         using var services = CreateServices(data);
@@ -104,6 +178,8 @@ public sealed class ReservationGateUseCaseTests
         var slotId = Guid.NewGuid();
         await mediator.Send(new ScanParkingSessionCommand(data.Site, walkIn.Id, slotId));
         var session = data.Session!;
+        Assert.Equal(slotId, session.CurrentSlotId);
+        Assert.Null(data.Allocation);
         var orderId = Guid.NewGuid();
         session.AwaitCheckoutPayment(orderId);
         var occurredAt = session.LocationScannedAt!.Value.AddMinutes(10);
@@ -117,7 +193,8 @@ public sealed class ReservationGateUseCaseTests
         Assert.Equal(occurredAt, session.CheckoutPaidAt);
         Assert.Equal(occurredAt, session.ExitTime);
         Assert.Equal("COMPLETED", session.SessionStatus);
-        Assert.Equal("RELEASED", data.Allocation!.AllocationStatus);
+        Assert.Null(data.Allocation);
+        Assert.Equal(slotId, data.ReleasedSlotId);
         Assert.Equal(new[] { "queue-snapshot", "save", "commit", "release-slot" }, data.Calls.TakeLast(4));
         Assert.Equal("release-slot", data.Calls.Last());
 
@@ -156,12 +233,13 @@ public sealed class ReservationGateUseCaseTests
         services.AddSingleton<IOperationsAuditPublisher>(data);
         services.AddSingleton<IOperatorGateSlotClaims>(data);
         services.AddSingleton<IOccupancyOutboxStore>(data);
+        services.AddSingleton<IReservationAvailabilityRepository>(data);
         return services.BuildServiceProvider();
     }
 
     private sealed class FakeRepositories : IReservationRepository, IParkingSessionRepository, ISlotAllocationRepository,
         IOperationsAuditPublisher, IOperatorIdentityClient, IOperationsConcurrency, OperationsUnitOfWork, OperationsUnitOfWorkTransaction,
-        IOperatorGateSlotClaims, IOccupancyOutboxStore
+        IOperatorGateSlotClaims, IOccupancyOutboxStore, IReservationAvailabilityRepository
     {
         public Guid Site { get; } = Guid.NewGuid();
         public Guid Tenant { get; } = Guid.NewGuid();
@@ -171,6 +249,8 @@ public sealed class ReservationGateUseCaseTests
         public SlotAllocationRow? Allocation;
         public bool AlreadyInside;
         public bool FailAudit;
+        public bool SlotUnavailable;
+        public Guid? ReleasedSlotId;
         public Task<OperatorSiteScope> RequireSiteAsync(Guid site, CancellationToken ct) { Calls.Add("identity"); return Task.FromResult(new OperatorSiteScope(Guid.NewGuid(), Tenant, Site)); }
         public Task<OperatorSiteScope> AuthorizeSiteAsync(Guid site, string bearerToken, CancellationToken ct) => RequireSiteAsync(site, ct);
         public Task LockSiteAsync(Guid site, CancellationToken ct) { Calls.Add("guard"); return Task.CompletedTask; }
@@ -198,13 +278,36 @@ public sealed class ReservationGateUseCaseTests
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public Task<IOperatorGateSlotLease> ClaimAvailableAsync(Guid tenantId, Guid siteId, string vehicleType,
-            Guid? preferredSlotId, Guid? targetUnitId, bool allowReservedSlot, CancellationToken ct) =>
-            Task.FromResult<IOperatorGateSlotLease>(new SlotLease(new ClaimedParkingSlot(preferredSlotId!.Value, "A01", vehicleType)));
+            Guid? preferredSlotId, Guid? targetUnitId, bool allowReservedSlot, CancellationToken ct)
+        {
+            Calls.Add("claim-slot");
+            if (SlotUnavailable)
+                throw new ReservationGateException(409, "NO_AVAILABLE_SLOT", "No eligible parking slot is available.");
+            return Task.FromResult<IOperatorGateSlotLease>(new SlotLease(new ClaimedParkingSlot(
+                Assert.IsType<Guid>(preferredSlotId), "A01", vehicleType)));
+        }
         public Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
         {
             Calls.Add("release-slot");
+            ReleasedSlotId = slotId;
             return Task.CompletedTask;
         }
+
+        public Task<ReservationAvailabilityFacts> ReadPhysicalAsync(ParkingSessionRow session, DateTimeOffset at, CancellationToken ct)
+        {
+            Assert.True(Calls.LastIndexOf("guard") > Calls.LastIndexOf("begin"));
+            Calls.Add("availability");
+            return Task.FromResult(new ReservationAvailabilityFacts(Reservation is null ? [] : [Reservation],
+                Session is { ExitTime: null } ? [Session] : [], Allocation is null ? [] : [Allocation], 0));
+        }
+
+        public Task<ReservationAvailabilityFacts> ReadAsync(ReservationRow proposed, DateTimeOffset at, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task LockAccountAsync(Guid accountId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> HasUnclassifiedCancellationAsync(Guid accountId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ReservationCancellationEvidence>> ReadCancellationsAsync(Guid accountId, DateTimeOffset dayStart,
+            DateTimeOffset now, CancellationToken ct) => throw new NotSupportedException();
         private sealed class SlotLease(ClaimedParkingSlot slot) : IOperatorGateSlotLease
         {
             public ClaimedParkingSlot Slot => slot;

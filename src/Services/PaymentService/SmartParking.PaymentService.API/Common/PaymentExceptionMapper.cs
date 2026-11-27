@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using SmartParking.PaymentService.API.Authentication;
 using SmartParking.PaymentService.Domain.Exceptions;
 using SmartParking.PaymentService.Domain.Pricing;
 
@@ -64,9 +65,11 @@ public sealed class PaymentExceptionMapper
     public static PaymentExceptionMapper CreateDefault() =>
         new(new Dictionary<Type, Func<Exception, PaymentErrorHandlingResult>>
         {
-            [typeof(ValidationException)] = exception => new(PaymentErrorResponse.ValidationError(
-                ((ValidationException)exception).Errors.Select(error =>
-                    new PaymentErrorDetail(error.PropertyName, error.ErrorMessage, error.ErrorCode)))),
+            [typeof(ValidationException)] = exception => MapValidationException((ValidationException)exception),
+            [typeof(PaymentJwksUnavailableException)] = _ => new(PaymentErrorResponse.Error(
+                StatusCodes.Status503ServiceUnavailable,
+                "AUTHENTICATION_KEYS_UNAVAILABLE",
+                "Authentication keys are temporarily unavailable.")),
             [typeof(PaymentDomainException)] = exception => MapPaymentDomainException((PaymentDomainException)exception),
             [typeof(PricingDomainException)] = exception => MapPricingDomainException((PricingDomainException)exception),
             [typeof(DbUpdateConcurrencyException)] = _ => new(PaymentErrorResponse.Error(
@@ -78,6 +81,28 @@ public sealed class PaymentExceptionMapper
                     ? new(response)
                     : Unexpected()
         });
+
+    private static PaymentErrorHandlingResult MapValidationException(ValidationException exception)
+    {
+        var passCode = exception.Errors
+            .Select(e => e.ErrorCode)
+            .FirstOrDefault(value => value is "INVALID_FINANCIAL_TERMS" or "INVALID_CLOSURE_INTERVALS" or "INVALID_PRODUCT_TYPE");
+
+        var details = exception.Errors
+            .Select(error => new PaymentErrorDetail(error.PropertyName, error.ErrorMessage, error.ErrorCode))
+            .ToArray();
+
+        if (passCode is not null)
+        {
+            return new(PaymentErrorResponse.Error(
+                StatusCodes.Status400BadRequest,
+                passCode,
+                "Validation failed for the requested operation.",
+                details));
+        }
+
+        return new(PaymentErrorResponse.ValidationError(details));
+    }
 
     private static PaymentErrorHandlingResult MapPaymentDomainException(PaymentDomainException exception)
     {
@@ -115,34 +140,56 @@ public sealed class PaymentExceptionMapper
             PaymentDomainException.TariffNotFound or
             "TRANSACTION_NOT_FOUND" or
             "QUOTE_NOT_FOUND" or
-            "COLLECTION_NOT_FOUND" => StatusCodes.Status404NotFound,
+            "COLLECTION_NOT_FOUND" or
+            "SITE_NOT_FOUND" or
+            "FINANCIAL_TERMS_NOT_FOUND" => StatusCodes.Status404NotFound,
 
-            PaymentDomainException.Unauthorized => StatusCodes.Status401Unauthorized,
+            PaymentDomainException.Unauthorized or
+            "UNAUTHENTICATED" => StatusCodes.Status401Unauthorized,
 
             PaymentDomainException.ForbiddenInvoiceAccess or
             PaymentDomainException.OperatorSiteMismatch or
             PaymentDomainException.CrossTenantAccessDenied or
             "FORBIDDEN_ORDER_ACCESS" or
-            "FORBIDDEN_RESERVATION_DEPOSIT_CREATION" => StatusCodes.Status403Forbidden,
+            "FORBIDDEN_RESERVATION_DEPOSIT_CREATION" or
+            "FORBIDDEN" or
+            "FORBIDDEN_SITE_SCOPE" => StatusCodes.Status403Forbidden,
 
             PaymentDomainException.OrderAlreadyPaid or
             "ORDER_ALREADY_PAID_ONLINE" or
             "ORDER_INVALID_STATUS" or
             PaymentDomainException.IdempotencyPayloadMismatch or
             "IDEMPOTENCY_CONFLICT" or
+            "IDEMPOTENCY_PAYLOAD_MISMATCH" or
             "PAYMENT_RETRY_LIMIT_EXCEEDED" or
             "PAYMENT_TRANSACTION_AMBIGUOUS" or
             "UNKNOWN_TRANSACTION_EXISTS" or
             "PAYOS_CHECKOUT_LINK_UNAVAILABLE" or
             "TERMS_STALE" or
             "QUOTE_EXPIRED" or
+            "QUOTE_CONSUMED" or
+            "QUOTE_HOLD_EXPIRED" or
+            "QUOTE_BINDING_CONFLICT" or
             "QUOTE_STATUS_INVALID" or
-            "TRANSACTION_NOT_SETTLED" => StatusCodes.Status409Conflict,
+            "TRANSACTION_NOT_SETTLED" or
+            "FINANCIAL_TERMS_CHANGED" or
+            "PLAN_VERSION_CONFLICT" => StatusCodes.Status409Conflict,
 
             PaymentDomainException.UnsettledPaymentOrder or
             PaymentDomainException.OrderExpired or
             "ZERO_AMOUNT_ORDER" or
-            "INVALID_ORDER_CODE" => StatusCodes.Status422UnprocessableEntity,
+            "INVALID_ORDER_CODE" or
+            "YEARLY_POLICY_BLOCKED_Q05" or
+            "FINANCIAL_TERMS_MISSING" or
+            "CLOSURE_COMPENSATION_EXCEEDS_ORDER" or
+            "ORDER_NOT_PAID" or
+            "ORDER_SCOPE_MISMATCH" or
+            "PASS_ORDER_MISMATCH" => StatusCodes.Status422UnprocessableEntity,
+
+            "QUOTE_PRICING_UNAVAILABLE" or
+            "IDENTITY_UNAVAILABLE" or
+            "FACILITY_UNAVAILABLE" or
+            "AUTHENTICATION_KEYS_UNAVAILABLE" => StatusCodes.Status503ServiceUnavailable,
 
             PaymentDomainException.InvalidCutoffTime or
             "INVALID_WEBHOOK_SIGNATURE" or

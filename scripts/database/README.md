@@ -6,6 +6,8 @@ Use original `microservices/03b-reservation-operations-service-db.sql` and the A
 
 These CREATE declarations do not upgrade existing tables or remove deployed triggers. Do not run automatic migration/reset as a substitute for an existing-volume transition decision. [Deployment checklist](../../docs/04-testing/reports/SPARK-273-deployment-checklist.md) distinguishes offline tests, PostgreSQL/broker checks and blocked booking acceptance.
 
+The initializer now defines `reservation_quota_configs`. Normal named-slot CAR bookings require no commercial quota seed. For a populated Operations database, use the separately authorized [local adoption steps](../../docs/02-architecture/database/microservices/03-parking-operations-service-db-docs.md#local-adoption-of-the-reservation-quota-schema) before starting the matching application or running the updated demo seed.
+
 
 This directory contains **two generations** of schema scripts. Only one of them is
 current. Evaluated against the wrong one, the design docs and the running database
@@ -28,8 +30,8 @@ This image migration does not implement Partner PDF versions, terms replacement,
 | `microservices/01-user-access-service-db.sql` | user / auth / access schema |
 | `microservices/02-facility-service-db.sql` | parking lots, spatial units, slots, paths, operations, structure sync, maintenance windows, operator tables |
 | `microservices/03a-parking-structure-ops-service-db.sql` | structure-ops schema |
-| `microservices/03b-reservation-operations-service-db.sql` | reservations, `slot_allocations`, sessions, capacity pools, structure safety holds, receipts, versioned reservation policies and transactional outbox (application guards; no Operations triggers) |
-| `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy |
+| `microservices/03b-reservation-operations-service-db.sql` | reservations, `slot_allocations`, sessions, capacity pools, structure safety holds, receipts, versioned reservation policies, pass plans (`SPARK-331`) and transactional outbox (application guards; no Operations triggers) |
+| `microservices/04-payment-pricing-service-db.sql` | payment, pricing, policy, subscription financial terms and closure compensations (`SPARK-331`) |
 | `microservices/05-notification-audit-service-db.sql` | notification, audit |
 | `microservices/06-iot-recognition-service-db.sql` | IoT recognition |
 | `seeds/` | demo data plus explicitly approved reservation policy defaults; never schema |

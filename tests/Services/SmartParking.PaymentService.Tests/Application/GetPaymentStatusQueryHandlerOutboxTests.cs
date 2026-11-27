@@ -1,3 +1,4 @@
+using SmartParking.PaymentService.Application.Reservations;
 using Microsoft.Extensions.Logging.Abstractions;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
@@ -33,7 +34,9 @@ public class GetPaymentStatusQueryHandlerOutboxTests
             _eventPublisher,
             _uow,
             _gatewayPort,
-            NullLogger<GetPaymentStatusQueryHandler>.Instance
+            NullLogger<GetPaymentStatusQueryHandler>.Instance,
+            new ReviewedPayOsSettlement(_orderRepo, _txRepo, new FakeRefundRequestRepository(), _eventPublisher, _uow,
+                NullLogger<ReviewedPayOsSettlement>.Instance)
         );
     }
 
@@ -45,6 +48,8 @@ public class GetPaymentStatusQueryHandlerOutboxTests
             _orderRepo,
             _txRepo,
             _invoiceRepo,
+            new ReviewedPayOsSettlement(_orderRepo, _txRepo, new FakeRefundRequestRepository(), _eventPublisher, _uow,
+                NullLogger<ReviewedPayOsSettlement>.Instance),
             _eventPublisher,
             _uow,
             NullLogger<ProcessPayOsWebhookCommandHandler>.Instance

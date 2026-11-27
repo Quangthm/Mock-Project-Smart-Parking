@@ -216,6 +216,8 @@ public sealed class StructureHttpContractTests
 
     private sealed class NoopReservationFacts : SmartParking.OperationService.Application.Reservations.IReservationFactsPublisher
     {
+        public Task EnsureOrderAsync(SmartParking.Contracts.ReservationPayments.EnsureReservationOrderV1 command, CancellationToken ct) => Task.CompletedTask;
+        public Task RequestDispositionAsync(SmartParking.Contracts.ReservationPayments.RequestReservationDispositionV1 command, CancellationToken ct) => Task.CompletedTask;
         public Task AvailabilityChangedAsync(SmartParking.OperationService.Application.Reservations.ReservationAvailabilityChangedV1 fact, CancellationToken ct) => Task.CompletedTask;
         public Task FacilityAppliedAsync(SmartParking.OperationService.Application.Reservations.FacilityStructureAppliedV1 fact, CancellationToken ct) => Task.CompletedTask;
         public Task HoldChangedAsync(SmartParking.OperationService.Application.Reservations.ReservationHoldChangedV1 fact, CancellationToken ct) => Task.CompletedTask;

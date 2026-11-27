@@ -20,12 +20,15 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
+        var context = new ValidationContext<TRequest>(request);
         var errors = new List<FluentValidation.Results.ValidationFailure>();
         foreach (var validator in _validators)
         {
-            var context = new ValidationContext<TRequest>(request);
             var result = await validator.ValidateAsync(context, cancellationToken).ConfigureAwait(false);
-            errors.AddRange(result.Errors.Where(error => error is not null));
+            if (result?.Errors is { Count: > 0 })
+            {
+                errors.AddRange(result.Errors.Where(error => error is not null));
+            }
         }
 
         if (errors.Count != 0)

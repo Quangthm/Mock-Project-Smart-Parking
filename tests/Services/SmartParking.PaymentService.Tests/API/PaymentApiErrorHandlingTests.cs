@@ -96,19 +96,34 @@ public sealed class PaymentApiErrorHandlingTests
 
         using (var unauthenticated = await host.Client.GetAsync("/error-probe/s2s-secure"))
         {
-            await AssertErrorAsync(unauthenticated, 401, "UNAUTHORIZED");
+            await AssertOperationsChallengeAsync(unauthenticated, 401, "UNAUTHENTICATED");
             Assert.Equal("Bearer", Assert.Single(unauthenticated.Headers.WwwAuthenticate).Scheme);
         }
 
         host.Client.DefaultRequestHeaders.Authorization = new("Bearer", host.CreateOperationsToken(includePermission: false));
         using (var forbidden = await host.Client.GetAsync("/error-probe/s2s-secure"))
         {
-            await AssertErrorAsync(forbidden, 403, "FORBIDDEN");
+            await AssertOperationsChallengeAsync(forbidden, 403, "FORBIDDEN");
         }
 
         host.Client.DefaultRequestHeaders.Authorization = new("Bearer", host.CreateOperationsToken(includePermission: true));
         using var authorized = await host.Client.GetAsync("/error-probe/s2s-secure");
         Assert.Equal(HttpStatusCode.NoContent, authorized.StatusCode);
+    }
+
+    private static async Task AssertOperationsChallengeAsync(HttpResponseMessage response, int status, string code)
+    {
+        Assert.Equal(status, (int)response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+
+        var text = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(text);
+        var body = document.RootElement;
+        Assert.False(body.GetProperty("success").GetBoolean());
+        Assert.Equal(code, body.GetProperty("code").GetString());
+        Assert.True(body.TryGetProperty("message", out _));
+        Assert.True(body.TryGetProperty("traceId", out _));
     }
 
     [Fact]

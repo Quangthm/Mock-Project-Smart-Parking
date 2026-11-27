@@ -36,16 +36,16 @@ function events(extra = {}) {
     handlers,
   };
 }
-function liveFixture(failures = 0) {
+function liveFixture(failures = 0, failure = new Error('offline')) {
   const timers = new Map();
-  let timerId = 0, starts = 0, reloads = 0, onclose, expires = Date.now() + 900_000;
+  let timerId = 0, starts = 0, reloads = 0, denials = 0, onclose, expires = Date.now() + 900_000;
   const window = events(), document = events({ visibilityState: 'visible' });
   const connection = {
     state: 'Disconnected', on() {}, onclose(handler) { onclose = handler; },
     async start() {
       starts++;
       assert.equal(this.state, 'Disconnected', 'must never restart an active connection');
-      if (failures-- > 0) throw new Error('offline');
+      if (failures-- > 0) throw failure;
       this.state = 'Connected';
     },
     async stop() { this.state = 'Disconnected'; onclose?.(); },
@@ -54,18 +54,18 @@ function liveFixture(failures = 0) {
     withUrl() { return this; } configureLogging() { return this; } build() { return connection; }
   }
   const { watchOperators } = load('lib/operatorLive.ts', {
-    '@microsoft/signalr': { HubConnectionBuilder, LogLevel: { None: 6 } },
+    '@microsoft/signalr': { HubConnectionBuilder, HttpTransportType: { WebSockets: 1 }, LogLevel: { None: 6 } },
     './authApi': { authApi: { expiresAt: () => expires }, authExpiredEvent: 'expired',
       authRefreshedEvent: 'refreshed', ensureAccessToken: async () => 'token' },
   }, { window, document, Date,
     setTimeout(callback, delay) { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
   });
-  const stop = watchOperators(() => reloads++);
+  const stop = watchOperators(() => reloads++, () => denials++);
   return { window, document, connection, timers, stop,
-    get starts() { return starts; }, get reloads() { return reloads; },
+    get starts() { return starts; }, get reloads() { return reloads; }, get denials() { return denials; },
     expire() { expires = 0; window.emit('expired'); },
-    close() { connection.state = 'Disconnected'; onclose(); },
+    close(error) { connection.state = 'Disconnected'; onclose(error); },
     runTimer() { const [id, timer] = timers.entries().next().value; timers.delete(id); timer.callback(); },
   };
 }
@@ -80,10 +80,11 @@ test('focus reconnect cancels an earlier failed-start retry and never restarts C
   await settle();
   assert.equal(f.starts, 2);
   assert.equal(f.connection.state, 'Connected');
-  assert.equal(f.timers.size, 0);
+  assert.equal(f.timers.size, 1);
   staleTimer(); // Also tolerate a callback already queued before clearTimeout.
   await settle();
   assert.equal(f.starts, 2);
+  f.runTimer();
   assert.equal(f.timers.size, 0);
   assert.equal(f.reloads, 1);
   f.stop();
@@ -92,12 +93,45 @@ test('focus reconnect cancels an earlier failed-start retry and never restarts C
 test('repeated closes schedule one retry and a successful retry reloads authoritative state', async () => {
   const f = liveFixture();
   await settle();
+  assert.equal(f.reloads, 0, 'initial connection must not reload an already loaded snapshot');
   f.close(); f.close();
   assert.equal(f.timers.size, 1);
   f.runTimer();
   await settle();
   assert.equal(f.starts, 2);
-  assert.equal(f.reloads, 2);
+  f.runTimer();
+  assert.equal(f.reloads, 1);
+  assert.equal(f.timers.size, 0);
+  f.stop();
+});
+
+test('403 during negotiation or after connecting blocks retries within the session', async () => {
+  const forbidden = { statusCode: 403 };
+  for (const f of [liveFixture(1, { innerErrors: [forbidden] }), liveFixture()]) {
+    await settle();
+    if (!f.denials) f.close(forbidden);
+    f.window.emit('focus'); f.window.emit('online'); f.window.emit('refreshed');
+    await settle();
+    assert.equal(f.starts, 1);
+    assert.equal(f.denials, 1);
+    assert.equal(f.timers.size, 0);
+    f.stop();
+  }
+});
+
+test('unclassified immediate closes exhaust a bounded retry budget', async () => {
+  const f = liveFixture();
+  await settle();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    f.close();
+    f.runTimer();
+    await settle();
+    if (f.timers.size) f.runTimer();
+  }
+  f.close();
+  f.window.emit('focus');
+  await settle();
+  assert.equal(f.starts, 4);
   assert.equal(f.timers.size, 0);
   f.stop();
 });
@@ -144,7 +178,7 @@ test('late create response neither duplicates nor downgrades an Operator already
     '../../../lib/uiToast': { showUiToast() {} },
     '../../../lib/formatStatus': { formatStatus: value => value },
   }).OperatorManagement;
-  const render = () => { cursor = 0; return component({ selectedSiteId: 'all', onOperatorsChanged() {} }); };
+  const render = () => { cursor = 0; return component({ selectedSiteId: 'all', liveOperators: [operator], onOperatorsChanged() {}, onRefreshRoster() {} }); };
   const form = () => nodes(render()).find(node => node.type === 'create-form');
   render();
   for (const effect of [...effects]) effect();

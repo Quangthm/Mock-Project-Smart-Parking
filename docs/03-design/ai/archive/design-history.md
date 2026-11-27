@@ -2224,7 +2224,7 @@ Phần xem lại dùng bộ nhớ React của widget theo phiên xác thực. T�
 <a id="legacy-guide--5-đối-chiếu-bàn-giao-spark-273--10112026"></a>
 #### 5. Đối chiếu bàn giao SPARK-273 · 10/11/2026
 
-Đối chiếu source của `AI-ChatBot` tại `04c6def2` và working tree S06/S07 với ref Git cục bộ `origin/feature/SPARK-273-driver-book-parking-ahead-of-arrival` tại `5daa4cc6`. Hợp đồng và bàn giao của owner nằm trên ref SPARK-273 trong `docs/03-design/api/reservation-first-slice-api-design.md` và `docs/05-project-management/handoffs/2026-11-09-reservation-{frontend,producer}-handoff.md`. Đây là đối chiếu source. [UNVERIFIED] Triển khai runtime và kết quả từ các service thật.
+Đối chiếu source của `AI-ChatBot` tại `04c6def2` và working tree S06/S07 với ref Git cục bộ `origin/feature/SPARK-273-driver-book-parking-ahead-of-arrival` tại `5daa4cc6`. Hợp đồng và bàn giao của owner nằm trên ref SPARK-273 trong `docs/03-design/api/reservation-first-slice-api-design.md` và các snapshot bàn giao [frontend](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-frontend-handoff.md) và [Payment producer](https://github.com/Quangthm/Mock-Project-Smart-Parking/blob/6b98692b29edc421a7b282823e347fb3fa79b975/docs/05-project-management/handoffs/2026-11-09-reservation-producer-handoff.md). Đây là đối chiếu source. [UNVERIFIED] Triển khai runtime và kết quả từ các service thật.
 
 | Bước | Wire trên ref owner | Hiện trạng ở `AI-ChatBot` và việc đang chờ |
 | --- | --- | --- |

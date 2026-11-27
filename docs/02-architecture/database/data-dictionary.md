@@ -63,7 +63,7 @@ Base: `03b-reservation-operations-service-db.sql`.
 
 | Table | Key columns / rules |
 |---|---|
-| `operational_capacity_configs` | `site_id`, `spatial_unit_id`, `vehicle_type`, `total_physical_capacity`, `max_reservation_quota`, `is_active` |
+| `reservation_quota_configs` | `id`, `tenant_id`, `site_id`, `vehicle_type`, nonnegative `max_reservation_quota`, `is_active`, `created_at`, `updated_at`. Unique tenant/site/category scope. Only an active row sets a limit. |
 | `operational_policies` | Arrival tolerance, payment hold, min/max reservation duration, protection window, allocation lead time |
 | `reservations` | `tenant_id`, `site_id`, `account_id`, target unit/slot, plate, time range, `status` (incl. `UNFULFILLABLE`), `confirmed_at`, `hold_expires_at`, `version`; GiST exclusion per vehicle |
 | `parking_sessions` | `reservation_id`, `access_item_id`, `current_slot_id`, `location_scanned_at`, plate, entry/exit times, `session_status` (`ACTIVE`, `PENDING_PAYMENT`, `COMPLETED`, `OVERSTAYED`, `DISPUTED`) |

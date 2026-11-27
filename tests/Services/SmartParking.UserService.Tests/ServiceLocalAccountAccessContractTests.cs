@@ -13,7 +13,7 @@ public sealed class ServiceLocalAccountAccessContractTests
     {
         var wireName = "SmartParking.Contracts.AccountAccess." + name;
         var producer = typeof(EvaluateAccountCurrentHandler).Assembly.GetType(wireName, throwOnError: true)!;
-        var consumer = typeof(AdmitReservationHandler).Assembly.GetType(wireName, throwOnError: true)!;
+        var consumer = typeof(AdmitQuoteReservationHandler).Assembly.GetType(wireName, throwOnError: true)!;
         Assert.NotEqual(producer.Assembly, consumer.Assembly);
         Assert.Equal(producer.FullName, consumer.FullName); // MassTransit namespace/type wire identity.
         static string[] Shape(Type type) => type.GetProperties()

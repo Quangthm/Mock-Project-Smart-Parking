@@ -9,33 +9,6 @@ using SmartParking.OperationService.Domain.Entities;
 
 namespace SmartParking.OperationService.Application.Usecase.ReservationGate;
 
-public sealed class CheckInWalkInCommandHandler(IOperatorIdentityClient identity, IParkingSessionRepository sessions, IOperationsAuditPublisher audit,
-    IOperationsConcurrency guards, IUnitOfWork work, TimeProvider clock) : IRequestHandler<CheckInWalkInCommand, WalkInParkingSession>
-{
-    public async Task<WalkInParkingSession> Handle(CheckInWalkInCommand request, CancellationToken ct)
-    {
-        var scope = await identity.RequireSiteAsync(request.SiteId, ct);
-        await using var transaction = await work.BeginTransactionAsync(ct);
-        var plate = GateRules.NormalizePlate(request.PlateNumber);
-        await guards.LockVehicleAsync(plate, ct);
-        await guards.LockSiteAsync(request.SiteId, ct);
-        if (await sessions.HasActivePlateAsync(scope.TenantId, request.SiteId, plate, ct))
-            throw new ReservationGateException(409, "VEHICLE_ALREADY_INSIDE", "An active parking session already exists for this plate.");
-        var now = clock.GetUtcNow();
-        var id = Guid.NewGuid();
-        var session = new ParkingSessionRow { Id = id, TenantId = scope.TenantId, SiteId = request.SiteId,
-            OriginalPlate = request.PlateNumber.Trim(), NormalizedPlate = plate,
-            VehicleType = GateRules.NormalizeVehicleType(request.VehicleType) ?? throw new InvalidOperationException("Vehicle type was not validated."),
-            TicketReference = $"WALKIN-{id:N}", EntryTime = now, EntryImageUrl = request.ImageData,
-            SessionStatus = "ACTIVE", CreatedAt = now, Version = 1 };
-        await sessions.AddAsync(session, ct);
-        await audit.PublishAsync(GateProjection.Audit(scope, null, session.Id, "VEHICLE_CHECK_IN", now), ct);
-        await work.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
-        return GateProjection.WalkIn(session);
-    }
-}
-
 public sealed class CheckOutWalkInCommandHandler(IOperatorIdentityClient identity, IParkingSessionRepository sessions, IOperationsAuditPublisher audit,
     ISlotAllocationRepository allocations, IOperationsConcurrency guards, IUnitOfWork work, TimeProvider clock, IOperatorGateSlotClaims gateSlots)
     : IRequestHandler<CheckOutWalkInCommand, WalkInParkingSession>
@@ -157,8 +130,8 @@ internal static class GateDeparture
 
 internal static class GateProjection
 {
-    public static WalkInParkingSession WalkIn(ParkingSessionRow session) => new(session.Id, session.SiteId,
-        session.CurrentSlotId, session.CurrentSlotId?.ToString(), session.OriginalPlate ?? session.NormalizedPlate ?? "",
+    public static WalkInParkingSession WalkIn(ParkingSessionRow session, string? slotCode = null) => new(session.Id, session.SiteId,
+        session.CurrentSlotId, slotCode ?? session.CurrentSlotId?.ToString(), session.OriginalPlate ?? session.NormalizedPlate ?? "",
         session.VehicleType, session.EntryTime, session.ExitTime, session.EntryImageUrl, session.ExitImageUrl);
     public static OperationsGateAuditV1 Audit(OperatorSiteScope scope, Guid? reservationId, Guid sessionId, string action, DateTimeOffset now) =>
         new(Guid.NewGuid(), now, scope.UserId, scope.TenantId, scope.SiteId, action, reservationId, sessionId);

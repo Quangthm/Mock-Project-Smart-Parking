@@ -11,7 +11,7 @@ namespace SmartParking.OperationService.API.Controllers;
 
 [Route("api/parking-sessions")]
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
-public sealed class ParkingSessionsController(IMediator mediator) : ApiControllerBase(mediator)
+public sealed class ParkingSessionsController(IMediator mediator, IWebHostEnvironment environment) : ApiControllerBase(mediator)
 {
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] Guid siteId, CancellationToken ct)
@@ -36,8 +36,9 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
         [FromBody] WalkInGateActionRequest body,
         CancellationToken ct)
     {
+        if (body.SlotId.HasValue && !environment.IsDevelopment()) return NotFound();
         var session = await Mediator.Send(
-            new CheckInWalkInCommand(siteId, body.PlateNumber, body.ImageData, body.VehicleType), ct);
+            new CheckInWalkInCommand(siteId, body.PlateNumber, body.ImageData, body.VehicleType, body.SlotId), ct);
         return Ok(new { success = true, data = session });
     }
 
@@ -83,6 +84,3 @@ public sealed class ParkingSessionsController(IMediator mediator) : ApiControlle
         return Ok(new { success = true, data = result });
     }
 }
-
-public sealed record WalkInGateActionRequest(string PlateNumber, string? ImageData = null, string? VehicleType = null);
-public sealed record ScanParkingLocationRequest(Guid SlotId);

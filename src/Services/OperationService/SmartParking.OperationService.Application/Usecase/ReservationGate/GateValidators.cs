@@ -32,6 +32,7 @@ public sealed class CheckInWalkInValidator : AbstractValidator<CheckInWalkInComm
         RuleFor(x => x.PlateNumber).Must(GateInput.ValidPlate);
         RuleFor(x => x.VehicleType).Must(x => GateRules.NormalizeVehicleType(x) is not null);
         RuleFor(x => x.ImageData).Must(GateInput.ValidImage);
+        RuleFor(x => x.PreferredSlotId).Must(slotId => slotId is null || slotId != Guid.Empty);
     }
 }
 public sealed class CheckOutWalkInValidator : AbstractValidator<CheckOutWalkInCommand>
