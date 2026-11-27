@@ -43,6 +43,8 @@
 .payos-transfer-expiry{grid-column:1/-1;padding-top:10px;border-top:1px solid var(--border)}
 .payos-checkout-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;padding-top:2px}
 .payos-checkout-actions button{min-height:44px;border-radius:999px}
+.payos-bypass-button{display:inline-flex;align-items:center;gap:8px}
+.payos-bypass-button svg{color:var(--primary)}
 .payos-checkout-details>.payos-checkout-error{grid-column:1/-1}
 @container payos-checkout (min-width:360px){.payos-checkout-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container payos-checkout (min-width:560px){.payos-checkout-details[data-qr="true"]{grid-template-columns:minmax(0,250px) minmax(0,1fr)}}
