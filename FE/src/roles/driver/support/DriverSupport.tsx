@@ -10,7 +10,17 @@ import { ticketPresentation } from "../../../lib/ticketPresentation"
 import "../../../booking-support.css"
 
 const ticketDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" })
+const bookingDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" })
 
+const supportTopics = [
+  "General support",
+  "Booking or cancellation",
+  "Payment or refund",
+  "Check-in or check-out",
+  "Parking pass",
+  "Account or vehicle",
+  "Other",
+]
 
 export function DriverSupport() {
   const { user } = useApp()
@@ -19,7 +29,7 @@ export function DriverSupport() {
 
 
   const [sent, setSent] = useState(false)
-  const [bookingId, setBookingId] = useState("")
+  const [relatedTo, setRelatedTo] = useState("")
   const [, setDataRevision] = useState(0)
 
   useEffect(() => {
@@ -29,23 +39,27 @@ export function DriverSupport() {
   }, [])
 
   const bookings = user ? store.getBookingsByDriver(user.id) : []
+  const linkedBooking = bookings.find(booking => relatedTo === `booking:${booking.id}`)
+  const topic = supportTopics.find(label => relatedTo === `topic:${label}`)
+  const subject = form.subject.trim()
+  const message = form.message.trim()
+  const canSubmit = Boolean(user && (linkedBooking || topic) && subject && message)
   const tickets = user ? store.getTickets().filter(ticket => ticket.userId === user.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : []
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!user) return
+    if (!user || !canSubmit) return
 
-    const linkedBooking = bookings.find(booking => booking.id === bookingId)
     const ticket = store.createTicket({
       userId: user.id,
 
       userName: user.name,
 
-      subject: form.subject,
+      subject,
 
-      message: form.message,
+      message: topic ? `Topic: ${topic}\n\n${message}` : message,
       bookingId: linkedBooking?.id,
       siteId: linkedBooking?.lotId,
 
@@ -63,7 +77,7 @@ export function DriverSupport() {
 
     setSent(true)
     setForm({ subject: "", message: "" })
-    setBookingId("")
+    setRelatedTo("")
   }
 
   return <div className="driver-support-page">
@@ -73,16 +87,26 @@ export function DriverSupport() {
         <h2>New ticket</h2>
         <p>Describe what happened so the operator can investigate.</p>
         {sent && <div role="status" className="driver-support-success"><UntitledIcon name="check-circle" size={18} />Ticket submitted. You can follow its status below.</div>}
-        <label htmlFor="driver-ticket-booking">Related booking <span>(optional)</span></label>
-        <select id="driver-ticket-booking" name="bookingId" className="input" value={bookingId} onChange={event => setBookingId(event.target.value)}>
-          <option value="">General support</option>
-          {bookings.map(booking => <option key={booking.id} value={booking.id}>{booking.lotName} · {booking.licensePlate}</option>)}
+        <label htmlFor="driver-ticket-booking">Related booking or topic <span className="required-mark" aria-hidden="true">*</span></label>
+        <select id="driver-ticket-booking" name="relatedTo" className="input" value={relatedTo} onChange={event => { setSent(false); setRelatedTo(event.target.value) }} required>
+          <option value="" disabled>Select a booking or support topic</option>
+          {bookings.length > 0 && <optgroup label="Your bookings">
+            {bookings.map(booking => {
+              const start = Date.parse(booking.startTime)
+              return <option key={booking.id} value={`booking:${booking.id}`}>
+                {booking.lotName} · {booking.licensePlate}{Number.isFinite(start) ? ` · ${bookingDate.format(start)}` : ""}
+              </option>
+            })}
+          </optgroup>}
+          <optgroup label="Support topics">
+            {supportTopics.map(label => <option key={label} value={`topic:${label}`}>{label}</option>)}
+          </optgroup>
         </select>
-        <label htmlFor="driver-ticket-subject">Subject</label>
+        <label htmlFor="driver-ticket-subject">Subject <span className="required-mark" aria-hidden="true">*</span></label>
         <input id="driver-ticket-subject" name="subject" autoComplete="off" className="input" value={form.subject} onChange={event => { setSent(false); setForm(current => ({ ...current, subject: event.target.value })) }} placeholder="e.g. Incorrect charge" required />
-        <label htmlFor="driver-ticket-message">What happened?</label>
+        <label htmlFor="driver-ticket-message">What happened? <span className="required-mark" aria-hidden="true">*</span></label>
         <textarea id="driver-ticket-message" name="message" autoComplete="off" className="input" rows={5} value={form.message} onChange={event => { setSent(false); setForm(current => ({ ...current, message: event.target.value })) }} placeholder="Include the time, location, and what you need help with…" required />
-        <button type="submit" className="btn-primary">Submit ticket</button>
+        <button type="submit" className="btn-primary" disabled={!canSubmit}>Submit ticket</button>
       </form>
       <section className="driver-ticket-history" aria-labelledby="driver-ticket-history-title">
         <div className="driver-ticket-history-header"><div><h2 id="driver-ticket-history-title">Your tickets</h2><p>Operator decisions and reasons appear with each request.</p></div><span>{tickets.length}</span></div>

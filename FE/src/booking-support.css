@@ -103,7 +103,6 @@
 .driver-support-form h2 { margin: 0; color: var(--fg); font-size: 1.25rem; }
 .driver-support-form > p { margin: -6px 0 6px; color: var(--muted); font-size: .875rem; }
 .driver-support-form label, .operator-ticket-decision-form > label { color: var(--fg); font-size: .875rem; font-weight: 650; }
-.driver-support-form label span { color: var(--muted); font-weight: 400; }
 .driver-support-form .input, .operator-ticket-decision-form .input { width: 100%; min-height: 44px; border-radius: 13px; color: var(--fg); background: var(--bg); font-size: 1rem; }
 .driver-support-form textarea, .operator-ticket-decision-form textarea { resize: vertical; }
 .driver-support-form .btn-primary { justify-self: start; min-height: 44px; margin-top: 4px; }

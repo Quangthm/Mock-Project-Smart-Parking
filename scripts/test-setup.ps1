@@ -172,6 +172,7 @@ $global:setupTestAssistantSteps += 'broker'
 [IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/apply-workflow-migrations.ps1'), @'
 param($Service, $SchemaRoot, $EnvPath)
 $global:setupTestAssistantSteps += "schema-$Service"
+if ($Service -eq 'Iot' -and $global:setupTestFailIotMigration) { throw 'Fixture Iot migration failed.' }
 '@)
 [IO.File]::WriteAllText((Join-Path $assistantFixture 'scripts/setup-assistant-docker.ps1'), @'
 param($EnvPath, [switch]$ValidateOnly)
@@ -197,6 +198,18 @@ Assert-Setup (($global:setupTestAssistantSteps -join '|') -ceq ($expectedSteps -
 Assert-Setup ([IO.File]::ReadAllText((Join-Path $assistantFixture '.env')) -ceq $assistantBefore) 'Assistant setup replaced an existing .env.'
 Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -SkipDatabase } 'cannot be combined'
 Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') -WithAssistant -RecreateDb } 'cannot be combined'
+$resetMarker = Join-Path $assistantFixture 'FE/.cache/db-reset-id'
+Assert-Setup (!(Test-Path -LiteralPath $resetMarker)) 'Normal setup published a database reset.'
+$resetOptions = @{ RecreateDb = $true; SkipRestore = $true; SkipSonarQube = $true; SkipUserSecrets = $true; NonInteractive = $true }
+& (Join-Path $assistantFixture 'setup.ps1') @resetOptions
+$firstResetId = [IO.File]::ReadAllText($resetMarker)
+Assert-Setup ($firstResetId -cmatch '^[0-9a-f]{32}$') 'Database reset did not publish a valid marker.'
+$global:setupTestFailIotMigration = $true
+Expect-Failure { & (Join-Path $assistantFixture 'setup.ps1') @resetOptions } 'Fixture Iot migration failed'
+$global:setupTestFailIotMigration = $false
+Assert-Setup ([IO.File]::ReadAllText($resetMarker) -ceq $firstResetId) 'Failed database reset changed the marker.'
+& (Join-Path $assistantFixture 'setup.ps1') @resetOptions
+Assert-Setup ([IO.File]::ReadAllText($resetMarker) -cne $firstResetId) 'Repeated database reset reused the marker.'
 [IO.File]::AppendAllText((Join-Path $assistantFixture '.env'), "`nSMARTPARK_ASSISTANT_DOCKER_ENABLED=true`n")
 $global:setupTestAssistantSteps = @()
 & (Join-Path $assistantFixture 'setup.ps1') -SkipRestore -SkipSonarQube -SkipUserSecrets -NonInteractive
