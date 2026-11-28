@@ -21,10 +21,15 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
         }
 
         var context = new ValidationContext<TRequest>(request);
-        var errors = _validators.Select(v => v.Validate(context))
-                                .SelectMany(e => e.Errors)
-                                .Where(e => e != null)
-                                .ToList();
+        var errors = new List<FluentValidation.Results.ValidationFailure>();
+        foreach (var validator in _validators)
+        {
+            var result = await validator.ValidateAsync(context, cancellationToken).ConfigureAwait(false);
+            if (result?.Errors is { Count: > 0 })
+            {
+                errors.AddRange(result.Errors.Where(error => error is not null));
+            }
+        }
 
         if (errors.Count != 0)
         {

@@ -6,101 +6,6 @@ using SmartParking.PaymentService.Domain.Entities;
 
 namespace SmartParking.PaymentService.Tests.TestDoubles;
 
-public class FakePaymentOrderRepository : IPaymentOrderRepository
-{
-    public readonly List<PaymentOrder> Orders = new();
-
-    public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.Id == id));
-    }
-
-    public Task<PaymentOrder?> GetByOrderCodeAsync(string orderCode, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.OrderCode == orderCode));
-    }
-
-    public Task<PaymentOrder?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Orders.FirstOrDefault(x => x.IdempotencyKey == idempotencyKey));
-    }
-
-    public Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default)
-    {
-        Orders.Add(order);
-        return Task.CompletedTask;
-    }
-
-    public void Update(PaymentOrder order)
-    {
-        var idx = Orders.FindIndex(x => x.Id == order.Id);
-        if (idx >= 0) Orders[idx] = order;
-        else Orders.Add(order);
-    }
-}
-
-public class FakePaymentTransactionRepository : IPaymentTransactionRepository
-{
-    public readonly List<PaymentTransaction> Transactions = new();
-
-    public Task<PaymentTransaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Transactions.FirstOrDefault(x => x.Id == id));
-    }
-
-    public Task<PaymentTransaction?> GetByGatewayTransactionIdAsync(string gatewayTxId, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Transactions.FirstOrDefault(x => x.GatewayTransactionId == gatewayTxId));
-    }
-
-    public Task<PaymentTransaction?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Transactions.FirstOrDefault(x => x.IdempotencyKey == idempotencyKey));
-    }
-
-    public Task<IReadOnlyList<PaymentTransaction>> GetByOrderIdAsync(Guid orderId, CancellationToken cancellationToken = default)
-    {
-        var list = Transactions.Where(x => x.PaymentOrderId == orderId).ToList();
-        return Task.FromResult<IReadOnlyList<PaymentTransaction>>(list);
-    }
-
-    public Task AddAsync(PaymentTransaction transaction, CancellationToken cancellationToken = default)
-    {
-        Transactions.Add(transaction);
-        return Task.CompletedTask;
-    }
-
-    public void Update(PaymentTransaction transaction)
-    {
-        var idx = Transactions.FindIndex(x => x.Id == transaction.Id);
-        if (idx >= 0) Transactions[idx] = transaction;
-        else Transactions.Add(transaction);
-    }
-}
-
-public class FakeReservationQuoteRepository : IReservationQuoteRepository
-{
-    public readonly List<ReservationQuote> Quotes = new();
-
-    public Task<ReservationQuote?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Quotes.FirstOrDefault(x => x.Id == id));
-    }
-
-    public Task AddAsync(ReservationQuote quote, CancellationToken cancellationToken = default)
-    {
-        Quotes.Add(quote);
-        return Task.CompletedTask;
-    }
-
-    public void Update(ReservationQuote quote)
-    {
-        var idx = Quotes.FindIndex(x => x.Id == quote.Id);
-        if (idx >= 0) Quotes[idx] = quote;
-        else Quotes.Add(quote);
-    }
-}
-
 public class FakeRefundRequestRepository : IRefundRequestRepository
 {
     public readonly List<RefundRequest> RefundRequests = new();
@@ -153,17 +58,6 @@ public class FakeProviderWebhookRepository : IProviderWebhookRepository
     }
 }
 
-public class FakeUnitOfWork : IUnitOfWork
-{
-    public int SaveCount { get; private set; }
-
-    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-    {
-        SaveCount++;
-        return Task.FromResult(1);
-    }
-}
-
 public class FakePaymentGatewayPort : IPaymentGatewayPort
 {
     public PaymentInitiateRequest? LastInitiateRequest { get; private set; }
@@ -209,6 +103,7 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
     );
 
     public int QueryTransactionCallCount { get; private set; }
+    public Func<Task>? BeforeVerificationReturns { get; set; }
 
     /// <summary>Order creation timestamp supplied by the handler for order-bound key resolution.</summary>
     public DateTimeOffset? LastVerifiedOrderCreatedAt { get; private set; }
@@ -236,10 +131,13 @@ public class FakePaymentGatewayPort : IPaymentGatewayPort
         return Task.FromResult(CallbackResult);
     }
 
-    public Task<PaymentVerificationResult> QueryTransactionAsync(long orderCode, string? gatewayTransactionId, CancellationToken cancellationToken = default)
+    public async Task<PaymentVerificationResult> QueryTransactionAsync(long orderCode, string? gatewayTransactionId, CancellationToken cancellationToken = default,
+        string? reviewedCheckoutQr = null)
     {
         QueryTransactionCallCount++;
-        return Task.FromResult(VerificationResult);
+        if (BeforeVerificationReturns is not null)
+            await BeforeVerificationReturns();
+        return VerificationResult;
     }
 
     public Task<PaymentCancellationResult> CancelPaymentAsync(long orderCode, Guid transactionId, string? gatewayTransactionId, CancellationToken cancellationToken = default)
@@ -386,7 +284,6 @@ public class FakeEventPublisher : SmartParking.PaymentService.Application.Common
         return Task.CompletedTask;
     }
 }
-
 
 public class FakePublishEndpoint : MassTransit.IPublishEndpoint
 {

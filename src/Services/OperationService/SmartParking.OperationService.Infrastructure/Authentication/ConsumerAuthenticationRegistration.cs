@@ -13,7 +13,10 @@ public static class ConsumerAuthenticationRegistration
     private const string DependencyFailure = "SmartParking.Authentication.KeysUnavailable";
     public static bool KeysUnavailable(HttpContext context) => context.Items.ContainsKey(DependencyFailure);
 
-    public static IServiceCollection AddConsumerAuthentication(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddConsumerAuthentication(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool allowLoopbackHttp = false)
     {
         var issuer = configuration["JwtValidation:Issuer"];
         var audience = configuration["JwtValidation:Audience"];
@@ -21,7 +24,9 @@ public static class ConsumerAuthenticationRegistration
         if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience) ||
             !Uri.TryCreate(address, UriKind.Absolute, out var endpoint) || endpoint.Scheme is not ("https" or "http"))
             throw new InvalidOperationException("Configure JwtValidation issuer, audience and trusted JWKS URL.");
-        if (endpoint.Scheme != "https" && !IsInsecureTransportAllowed(configuration, endpoint))
+        if (endpoint.Scheme != "https" &&
+            !IsInsecureTransportAllowed(configuration, endpoint) &&
+            !(allowLoopbackHttp && endpoint.IsLoopback))
             throw new InvalidOperationException("JWKS requires HTTPS unless protected/local HTTP is explicitly configured.");
 
         services.TryAddSingleton(TimeProvider.System);
@@ -50,6 +55,13 @@ public static class ConsumerAuthenticationRegistration
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Path == "/hubs/reservation-progress" &&
+                            context.Request.Query.TryGetValue("access_token", out var token) && token.Count == 1)
+                            context.Token = token[0];
+                        return Task.CompletedTask;
+                    },
                     OnTokenValidated = context =>
                     {
                         if (!HasIdentity(context.Principal)) context.Fail("Required identity claims are invalid.");

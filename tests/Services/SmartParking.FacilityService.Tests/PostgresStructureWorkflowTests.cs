@@ -1,5 +1,10 @@
+using System.Threading.Channels;
+using FluentValidation;
+using MassTransit;
+using MediatR;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
-using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Application.Common.Security;
 using Npgsql;
 using System.Text.Json;
@@ -25,6 +30,119 @@ public sealed class StructurePostgresFactAttribute : FactAttribute
 
 public sealed class PostgresStructureWorkflowTests
 {
+    // Both services define local CLR types for these shared transport identities.
+    [MessageUrn("SmartParking.Contracts.ReservationAdmission:SlotCheckV1")]
+    public sealed record SlotCheck(Guid WorkflowId, Guid AttemptId, Guid AccountId, string Fingerprint,
+        Guid RequestedSlotId, DateTimeOffset Start, DateTimeOffset End);
+
+    [MessageUrn("SmartParking.Contracts.ReservationAdmission:SlotDecisionV1")]
+    public sealed record SlotDecision(SlotCheck Request, string Outcome, Guid? SiteId, Guid? TenantId);
+
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task SlotMetadataIsReadOnlyAndConfirmationSnapshotsReflectLiveFacilityFacts()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var slot = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "A01", VehicleType.CAR);
+        await using var db = new ParkingDbContext(new DbContextOptionsBuilder<ParkingDbContext>()
+            .UseNpgsql(fixture.Parking).Options);
+        var repository = new ReservationSlotReader(db);
+        var metadata = await repository.FindSlotMetadataAsync(slot, default);
+        Assert.Equal((slot, fixture.SiteId, fixture.Owner.TenantId), (metadata!.SlotId, metadata.SiteId, metadata.TenantId));
+        Assert.Null(await repository.FindSlotMetadataAsync(Guid.NewGuid(), default));
+
+    }
+
+    [StructurePostgresFact, Trait("Category", "Postgres")]
+    public async Task AdmissionReadsOnlyApplicableEffectiveMaintenanceForTheSelectedInterval()
+    {
+        await using var fixture = await DatabaseFixture.CreateAsync();
+        var slot = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "A01", VehicleType.CAR);
+        var motorcycle = await fixture.Service.AddSlotAsync(fixture.Owner, fixture.SiteId, fixture.UnitId, "A02", VehicleType.MOTORCYCLE);
+        var start = DateTimeOffset.UtcNow.AddHours(2);
+        var end = start.AddHours(1);
+        var maintenance = new PostgresMaintenanceWindowStore(fixture.Parking);
+        var window = await maintenance.CreateAsync(fixture.Owner, fixture.SiteId, start.UtcDateTime, end.UtcDateTime, "planned", default);
+
+        // Run the real consumer and validation pipeline over a disposable transport.
+        var replies = Channel.CreateUnbounded<SlotDecision>();
+        var registration = new ServiceCollection();
+        registration.AddLogging().AddApplicationServices();
+        registration.AddDbContext<ParkingDbContext>(options => options.UseNpgsql(fixture.Parking));
+        registration.AddScoped<Application.Reservations.IReservationSlotReader, ReservationSlotReader>();
+        var brokerPort = Environment.GetEnvironmentVariable("SMARTPARK_SAGA_TEST_BROKER_PORT");
+        if (brokerPort is not null)
+        {
+            var broker = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ReservationAdmission:SagaConsumersEnabled"] = "true",
+                ["ReservationAdmission:BrokerUser"] = Environment.GetEnvironmentVariable("SMARTPARK_SAGA_TEST_USER"),
+                ["ReservationAdmission:BrokerPassword"] = Environment.GetEnvironmentVariable("SMARTPARK_SAGA_TEST_PASSWORD"),
+                ["SMARTPARK_RABBITMQ_PORT"] = brokerPort,
+                ["SMARTPARK_RABBITMQ_VHOST"] = Environment.GetEnvironmentVariable("SMARTPARK_SAGA_TEST_VHOST")
+            }).Build();
+            Infrastructure.ReservationSlotMessaging.AddReservationSlotMessaging(registration, broker);
+        }
+        else
+        {
+            registration.AddMassTransit(bus =>
+            {
+                bus.AddConsumer<Infrastructure.ReservationSlotConsumer>();
+                bus.UsingInMemory((context, transport) =>
+                    transport.ReceiveEndpoint("facility-reservation-slot-v1", endpoint =>
+                        endpoint.ConfigureConsumer<Infrastructure.ReservationSlotConsumer>(context)));
+            });
+        }
+        await using var provider = registration.BuildServiceProvider();
+        var bus = provider.GetRequiredService<IBusControl>();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        await bus.StartAsync(timeout.Token);
+        try
+        {
+            var results = bus.ConnectReceiveEndpoint("operations-reservation-slot-results-v1", endpoint =>
+                endpoint.Handler<SlotDecision>(message =>
+                {
+                    Assert.Equal(message.Message.Request.WorkflowId, message.CorrelationId);
+                    return replies.Writer.WriteAsync(message.Message, message.CancellationToken).AsTask();
+                }));
+            await results.Ready.WaitAsync(timeout.Token);
+            var endpoint = await bus.GetSendEndpoint(new Uri("queue:facility-reservation-slot-v1"));
+            async Task<string> Outcome(Guid id, DateTimeOffset from, DateTimeOffset until)
+            {
+                var request = new SlotCheck(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "fixture", id, from, until);
+                await endpoint.Send(request, send => send.CorrelationId = request.WorkflowId, timeout.Token);
+                var reply = await replies.Reader.ReadAsync(timeout.Token);
+                Assert.Equal(request, reply.Request);
+                if (reply.Outcome == "ELIGIBLE")
+                    Assert.Equal(((Guid?)fixture.SiteId, (Guid?)fixture.Owner.TenantId), (reply.SiteId, reply.TenantId));
+                else
+                    Assert.Equal(((Guid?)null, (Guid?)null), (reply.SiteId, reply.TenantId));
+                return reply.Outcome;
+            }
+
+            Assert.Equal("DEPENDENCY_UNAVAILABLE", await Outcome(slot, start, end));
+            Assert.Equal("DEPENDENCY_UNAVAILABLE", await Outcome(slot, default, end));
+            Assert.Equal("DEPENDENCY_UNAVAILABLE", await Outcome(slot, end, start));
+            Assert.Equal("ELIGIBLE", await Outcome(slot, start.AddHours(-1), start));
+            Assert.Equal("INELIGIBLE", await Outcome(Guid.NewGuid(), start, end));
+            Assert.Equal("INELIGIBLE", await Outcome(motorcycle, end, end.AddHours(1)));
+            // The writer produces pending windows. Seed the legacy effective state to test the reader.
+            await fixture.ExecuteAsync(fixture.Parking,
+                $"UPDATE structure_maintenance_windows SET enforcement_state='acknowledged', enforcement_ref='{Guid.NewGuid()}', acknowledged_at=now() WHERE id='{window.Id}'");
+            Assert.Equal("INELIGIBLE", await Outcome(slot, start, end));
+            Assert.Equal("ELIGIBLE", await Outcome(slot, end, end.AddHours(1)));
+            await maintenance.CancelAsync(fixture.Owner, fixture.SiteId, window.Id, default);
+            Assert.Equal("ELIGIBLE", await Outcome(slot, start, end));
+            await fixture.ExecuteAsync(fixture.Parking, $"UPDATE parking_slots SET physical_state='OCCUPIED' WHERE id='{slot}'");
+            Assert.Equal("ELIGIBLE", await Outcome(slot, start, end));
+            await fixture.ExecuteAsync(fixture.Parking, $"UPDATE parking_slots SET reservation_state='BACKUP' WHERE id='{slot}'");
+            Assert.Equal("INELIGIBLE", await Outcome(slot, start, end));
+        }
+        finally
+        {
+            await bus.StopAsync();
+        }
+    }
+
     [Fact]
     public void ReservationEfModelMapsExistingOperationsTablesAndKeys()
     {
@@ -1022,8 +1140,7 @@ public sealed class PostgresStructureWorkflowTests
             Transport = new(ReservationService);
             var synchronization = new StructureSynchronizationHandlers(Store, Transport);
             Repository = new PostgresParkingStructureRepository(Parking);
-            UnitOfWork = new StructureEditHandlers(Repository, this, this, Transport, Store, StructureTestMediator.Create(synchronization),
-                new ReservationDependencyRepository(new ParkingDbContext(new DbContextOptionsBuilder<ParkingDbContext>().UseNpgsql(Parking).Options)));
+            UnitOfWork = new StructureEditHandlers(Repository, this, this, Transport, Store, StructureTestMediator.Create(synchronization));
             Service = new PostgresStructureTestFacade(Repository, UnitOfWork);
         }
 

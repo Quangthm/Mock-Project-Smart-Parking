@@ -2,10 +2,11 @@ namespace SmartParking.OperationService.Application.Reservations;
 
 public sealed record BookingView(Guid ReservationId, string State, Guid SiteId, Guid? RequestedSlotId,
     DateTimeOffset Start, DateTimeOffset End, DateTimeOffset? HoldExpiresAt, Guid? OrderId,
-    string OrderProvisioningState, string? OrderProvisioningCode, string ZeroPriceAcceptanceState,
     decimal? BookedAmount, decimal? DepositAmount, string? Currency, DateTimeOffset? ConfirmedAt,
     DateTimeOffset CreatedAt)
 {
+    public Guid? ZeroReceiptId { get; init; }
+    public Guid? RequestId { get; init; }
     public BookingVehicle? Vehicle { get; init; }
     public string? SiteName { get; init; }
     public string? SiteAddress { get; init; }

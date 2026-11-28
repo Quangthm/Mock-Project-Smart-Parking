@@ -1,11 +1,12 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using SmartParking.NotificationAuditService.API.Authentication;
-using SmartParking.NotificationAuditService.API.Middleware;
+using SmartParking.NotificationAuditService.API.Extensions;
 using SmartParking.NotificationAuditService.API.Services;
 using SmartParking.NotificationAuditService.Application;
 using SmartParking.NotificationAuditService.Application.Common.Interfaces.Services;
 using SmartParking.NotificationAuditService.Infrastructure;
+using SmartParking.NotificationAuditService.Infrastructure.Security;
 using SmartParking.NotificationAuditService.Persistence;
 using SmartParking.NotificationAuditService.Persistence.Context;
 using SmartParking.NotificationAuditService.Persistence.Seed;
@@ -28,14 +29,6 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
-var rawOrigins = builder.Configuration["Cors:AllowedOrigins"];
-var corsOrigins = !string.IsNullOrWhiteSpace(rawOrigins)
-    ? rawOrigins.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8443", "http://127.0.0.1:8443"];
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
-{
-    if (corsOrigins.Length > 0) policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod();
-}));
 
 // JWT authentication: validates UserService tokens against explicitly configured key
 // material (JWKS endpoint, RSA public key PEM or symmetric key). Fails closed without it.
@@ -43,7 +36,39 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
 builder.Services.AddUserServiceJwtAuthentication(builder.Configuration);
 
-builder.Services.AddAuthorization();
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(context =>
+            context.User.Claims.Any(c =>
+                (c.Type == "role" || c.Type == System.Security.Claims.ClaimTypes.Role) &&
+                string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase)));
+    });
+});
+
+var allowedCorsOrigins = (builder.Configuration["Cors:AllowedOrigins"]
+    ?? builder.Configuration["SMARTPARK_NOTIFICATION_CORS_ORIGINS"]
+    ?? "http://localhost:5173;http://127.0.0.1:5173;http://localhost:8443;http://127.0.0.1:8443")
+    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendCors", policy =>
+    {
+        if (allowedCorsOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedCorsOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
+    });
+});
+builder.Services.AddNotificationAuditApiErrorResponses();
+
 
 // Clean Architecture DI registrations
 builder.Services.AddApplicationServices();
@@ -70,14 +95,15 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseRouting();
+app.UseNotificationAuditApiErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-app.UseCors();
+app.UseCors("FrontendCors");
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using SmartParking.PaymentService.Application.Common.Interfaces;
 using SmartParking.PaymentService.Application.Common.Interfaces.Persistence;
+using SmartParking.PaymentService.Application.Reservations;
 using SmartParking.PaymentService.Domain.Entities;
 using SmartParking.PaymentService.Domain.Enums;
 using SmartParking.PaymentService.Domain.Events;
@@ -16,6 +17,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
     private readonly IPaymentOrderRepository _orderRepository;
     private readonly IPaymentTransactionRepository _transactionRepository;
     private readonly IInvoiceRepository _invoiceRepository;
+    private readonly ReviewedPayOsSettlement _reviewedSettlement;
     private readonly IEventPublisher _eventPublisher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ProcessPayOsWebhookCommandHandler> _logger;
@@ -26,6 +28,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         IPaymentOrderRepository orderRepository,
         IPaymentTransactionRepository transactionRepository,
         IInvoiceRepository invoiceRepository,
+        ReviewedPayOsSettlement reviewedSettlement,
         IEventPublisher eventPublisher,
         IUnitOfWork unitOfWork,
         ILogger<ProcessPayOsWebhookCommandHandler> logger)
@@ -35,6 +38,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         _orderRepository = orderRepository;
         _transactionRepository = transactionRepository;
         _invoiceRepository = invoiceRepository;
+        _reviewedSettlement = reviewedSettlement;
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -58,7 +62,8 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             request.RawPayload, request.Signature, order?.CreatedAt, cancellationToken);
         if (!parseResult.IsValidSignature)
         {
-            _logger.LogWarning("Webhook signature verification failed for payOS callback.");
+            _logger.LogWarning("PayOS webhook rejected. Code {ErrorCode}, trace {TraceId}",
+                "INVALID_WEBHOOK_SIGNATURE", System.Diagnostics.Activity.Current?.Id);
             return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
@@ -73,13 +78,26 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             return new ProcessPayOsWebhookResult(false, "The webhook signature is invalid.", "INVALID_WEBHOOK_SIGNATURE");
         }
 
+        _logger.LogInformation("PayOS webhook signature verified. OrderCode {OrderCode}, trace {TraceId}",
+            parseResult.OrderCode, System.Diagnostics.Activity.Current?.Id);
+        var reviewedId = await _orderRepository.FindReviewedOrderIdAsync(parseResult.OrderCode.ToString(), cancellationToken);
+        if (reviewedId is Guid orderId)
+        {
+            _logger.LogInformation("PayOS webhook selected reviewed settlement. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}",
+                parseResult.OrderCode, orderId);
+            var transfer = new ReviewedPayOsTransfer(parseResult.OrderCode, parseResult.GatewayTransactionId,
+                parseResult.BankReference, parseResult.AmountVnd, parseResult.VerifiedTransferTime, parseResult.EvidenceFailure);
+            return await _reviewedSettlement.RecordAsync(orderId, transfer, cancellationToken);
+        }
+
+        _logger.LogInformation("PayOS webhook selected legacy settlement. OrderCode {OrderCode}", parseResult.OrderCode);
         var eventId = parseResult.BankReference ?? parseResult.GatewayTransactionId ?? parseResult.OrderCode.ToString();
 
         // 3. Check duplicate webhook idempotency
         var existingWebhook = await _webhookRepository.GetByProviderAndEventIdAsync("PAYOS", eventId, cancellationToken);
         if (existingWebhook != null && existingWebhook.ProcessingState == WebhookProcessingState.PROCESSED)
         {
-            _logger.LogInformation("PayOS webhook event {EventId} was already processed. Replaying success response.", eventId);
+            _logger.LogInformation("Legacy PayOS webhook replay. OrderCode {OrderCode}", parseResult.OrderCode);
             return new ProcessPayOsWebhookResult(true, "The webhook was already processed successfully (Idempotent replay).");
         }
 
@@ -99,18 +117,19 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
         // 4. Reject callbacks for unknown orders without mutating any financial state.
         if (order == null)
         {
-            _logger.LogWarning("PaymentOrder with OrderCode {OrderCode} not found for webhook event {EventId}.", parseResult.OrderCode, eventId);
+            _logger.LogWarning("Legacy PayOS webhook rejected. OrderCode {OrderCode}, code {ErrorCode}", parseResult.OrderCode, "ORDER_NOT_FOUND");
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             return new ProcessPayOsWebhookResult(false, $"No payment order was found for order code {parseResult.OrderCode}.", "ORDER_NOT_FOUND");
         }
 
+        _logger.LogInformation("Legacy PayOS order matched. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}", order.OrderCode, order.Id);
         // 5. Validate amount
         if ((long)order.FinalAmount != parseResult.AmountVnd)
         {
-            _logger.LogError("Payment amount mismatch for OrderCode {OrderCode}: expected {Expected}, received {Received}.",
-                order.OrderCode, order.FinalAmount, parseResult.AmountVnd);
+            _logger.LogWarning("Legacy PayOS webhook rejected. OrderCode {OrderCode}, code {ErrorCode}, expected VND {ExpectedAmount}, received VND {TransferredAmount}",
+                order.OrderCode, "AMOUNT_MISMATCH", order.FinalAmount, parseResult.AmountVnd);
 
             existingWebhook.MarkFailed();
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -129,8 +148,8 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
 
             if (isAlreadySettled)
             {
-                _logger.LogInformation("GatewayTransactionId {GatewayTransactionId} for OrderCode {OrderCode} is already settled. Replaying success response without duplicate processing.",
-                    parseResult.GatewayTransactionId, order.OrderCode);
+                _logger.LogInformation("Legacy PayOS checkout already settled. OrderCode {OrderCode}, PaymentOrderId {PaymentOrderId}",
+                    order.OrderCode, order.Id);
                 existingWebhook.MarkProcessed();
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 return new ProcessPayOsWebhookResult(true, "Transaction already settled successfully (Idempotent replay).");
@@ -216,11 +235,13 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
             };
 
             await _eventPublisher.PublishAsync(outboxEvent, cancellationToken);
+            _logger.LogInformation("Legacy PaymentSucceededV1 staged. EventId {EventId}, PaymentOrderId {PaymentOrderId}, PaymentTransactionId {PaymentTransactionId}",
+                outboxEvent.EventId, order.Id, tx.Id);
 
             // Atomic DB Commit: order + transaction + invoice + outboxMessage in one transaction
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Successfully processed payOS payment webhook for OrderCode {OrderCode}, TxId {TxId}, staged PaymentSucceededV1 into outbox.", order.OrderCode, tx.Id);
+            _logger.LogInformation("Legacy PayOS transaction saved. OrderCode {OrderCode}, PaymentTransactionId {PaymentTransactionId}", order.OrderCode, tx.Id);
         }
 
         return new ProcessPayOsWebhookResult(true, "Webhook processed successfully.");

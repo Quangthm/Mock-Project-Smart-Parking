@@ -18,7 +18,7 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
         CancellationToken ct)
     {
         var (db, tx) = OwningTransaction();
-        await ReservationDependencyGuard.RequireAvailableAsync(db, tx, siteId, ct);
+        await PhysicalSiteGuard.RequireAvailableAsync(db, tx, siteId, ct);
         await using var command = new NpgsqlCommand("""
             WITH candidate AS (
                 SELECT id
@@ -82,7 +82,7 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
     public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
     {
         var (db, tx) = OwningTransaction();
-        await ReservationDependencyGuard.RequireAvailableAsync(db, tx, siteId, ct);
+        await PhysicalSiteGuard.RequireAvailableAsync(db, tx, siteId, ct);
         await using var command = new NpgsqlCommand("""
             UPDATE parking_slots
             SET physical_state = 'AVAILABLE', updated_at = now()

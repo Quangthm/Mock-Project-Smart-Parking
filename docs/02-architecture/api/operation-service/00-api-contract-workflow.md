@@ -13,7 +13,7 @@ Khi thiết kế API Contract cho Operation Service, thông tin phải được 
    - *Danh mục chính sách chuẩn:* `docs/01-requirements/business-rules/policy-catalogue.md` (v1.1).
    - *Business Rules:* `BR-POL-01`, `BR-POL-02`, `BR-POL-03`, `BR-POL-04`, `BR-CAP-04`.
 2. **Ranh giới dịch vụ & Mô hình dữ liệu (Service Boundaries & Persistence Baseline)**:
-   - Schema DDL tương ứng: `scripts/database/microservices/03b-reservation-operations-service-db.sql` (bảng `operational_policies`, `reservations`, `operational_capacity_configs`).
+   - Schema DDL tương ứng: `scripts/database/microservices/03b-reservation-operations-service-db.sql` (bảng `operational_policies`, `reservations`, `reservation_quota_configs`).
    - Ranh giới kiến trúc: `docs/02-architecture/source-code-architecture-rules.md` (Zero Cross-DB Rule, Domain POCO thuần túy).
 3. **Biểu mẫu tiêu chuẩn (Standard Template)**:
    - `docs/02-architecture/api/operation-service/00-api-contract-template.md`.

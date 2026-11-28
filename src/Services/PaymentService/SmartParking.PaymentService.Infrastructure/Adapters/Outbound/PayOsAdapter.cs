@@ -90,7 +90,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-api-key", snapshot.ApiKey ?? string.Empty);
 
             using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
-            var root = await JsonDocument.ParseAsync(
+            using var root = await JsonDocument.ParseAsync(
                 await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var code = root.RootElement.TryGetProperty("code", out var codeElement) ? codeElement.GetString() : null;
             var desc = root.RootElement.TryGetProperty("desc", out var descElement) ? descElement.GetString() : null;
@@ -127,7 +127,10 @@ public class PayOsAdapter : IPaymentGatewayPort
         catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             MarkProbe(snapshot.Version, false);
-            _logger.LogError(ex, "Error cancelling PayOS checkout for OrderCode {OrderCode}", orderCode);
+            _logger.LogError(
+                "Error cancelling PayOS checkout for OrderCode {OrderCode}: {ExceptionType}.",
+                orderCode,
+                ex.GetType().FullName);
             return new PaymentCancellationResult(
                 false, "UNKNOWN", gatewayTransactionId, "PAYOS_CANCELLATION_UNKNOWN",
                 "The PayOS cancellation request could not be completed.");
@@ -240,7 +243,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-client-id", snapshot.ClientId ?? string.Empty);
             httpRequest.Headers.Add("x-api-key", snapshot.ApiKey ?? string.Empty);
 
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 MarkProbe(snapshot.Version, false);
@@ -257,15 +260,15 @@ public class PayOsAdapter : IPaymentGatewayPort
                     AccountName: null,
                     Bin: null,
                     GatewayTransactionId: null,
-                    ErrorCode: $"PAYOS_{response.StatusCode}",
+                    ErrorCode: $"PAYOS_{(int)response.StatusCode}",
                     ErrorMessage: $"PayOS payment request failed (code {(int)response.StatusCode})."
                 );
             }
 
-            var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var root = doc.RootElement;
             var code = root.TryGetProperty("code", out var codeProp) ? codeProp.GetString() : "";
-            var desc = root.TryGetProperty("desc", out var descProp) ? descProp.GetString() : "PayOS error";
+            var desc = root.TryGetProperty("desc", out var descProp) ? descProp.GetString() : null;
 
             if (code != "00" || !root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             {
@@ -307,7 +310,10 @@ public class PayOsAdapter : IPaymentGatewayPort
             (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             MarkProbe(snapshot.Version, false);
-            _logger.LogError(ex, "Network timeout or connection failure when calling PayOS for OrderCode {OrderCode}.", request.OrderCode);
+            _logger.LogError(
+                "Network failure or timeout calling PayOS for OrderCode {OrderCode}: {ExceptionType}.",
+                request.OrderCode,
+                ex.GetType().FullName);
             return new PaymentInitiateResult(
                 IsSuccess: false,
                 CheckoutUrl: null,
@@ -318,6 +324,25 @@ public class PayOsAdapter : IPaymentGatewayPort
                 GatewayTransactionId: null,
                 ErrorCode: "GATEWAY_TIMEOUT",
                 ErrorMessage: "The PayOS payment request timed out or could not be completed."
+            );
+        }
+        catch (JsonException ex)
+        {
+            MarkProbe(snapshot.Version, false);
+            _logger.LogError(
+                "Invalid JSON response from PayOS for OrderCode {OrderCode}: {ExceptionType}.",
+                request.OrderCode,
+                ex.GetType().FullName);
+            return new PaymentInitiateResult(
+                IsSuccess: false,
+                CheckoutUrl: null,
+                QrCode: null,
+                AccountNumber: null,
+                AccountName: null,
+                Bin: null,
+                GatewayTransactionId: null,
+                ErrorCode: "PAYOS_INVALID_RESPONSE",
+                ErrorMessage: "The payment gateway returned an unexpected response."
             );
         }
     }
@@ -351,35 +376,17 @@ public class PayOsAdapter : IPaymentGatewayPort
         DateTimeOffset? orderCreatedAt = null,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         bool lookupInProgress = false;
         try
         {
             using var doc = JsonDocument.Parse(rawPayload);
             var root = doc.RootElement;
 
-            if (!root.TryGetProperty("data", out var dataEl))
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("data", out var dataEl) ||
+                dataEl.ValueKind != JsonValueKind.Object)
             {
                 return InvalidCallback(rawPayload);
-            }
-
-            var dict = new Dictionary<string, object?>();
-            foreach (var prop in dataEl.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.String)
-                {
-                    dict[prop.Name] = prop.Value.GetString();
-                }
-                else if (prop.Value.ValueKind == JsonValueKind.Number)
-                {
-                    if (prop.Value.TryGetInt64(out var lVal))
-                        dict[prop.Name] = lVal;
-                    else
-                        dict[prop.Name] = prop.Value.GetDouble();
-                }
-                else if (prop.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                {
-                    dict[prop.Name] = prop.Value.GetBoolean();
-                }
             }
 
             long orderCode = dataEl.TryGetProperty("orderCode", out var oc) ? oc.GetInt64() : 0;
@@ -396,8 +403,8 @@ public class PayOsAdapter : IPaymentGatewayPort
                 return InvalidCallback(rawPayload);
             }
 
-            var isValid = PayOsSignatureService.VerifySignature(
-                PayOsSignatureService.CreateSignatureFromDictionary(dict, trustedKey), signature);
+            var calculatedSig = PayOsSignatureService.CreatePaymentWebhookSignature(dataEl, trustedKey);
+            var isValid = calculatedSig is not null && PayOsSignatureService.VerifySignature(calculatedSig, signature);
 
             long amount = dataEl.TryGetProperty("amount", out var am) ? am.GetInt64() : 0;
             string? reference = dataEl.TryGetProperty("reference", out var refEl) ? refEl.GetString() : null;
@@ -405,6 +412,19 @@ public class PayOsAdapter : IPaymentGatewayPort
             string code = root.TryGetProperty("code", out var codeEl) ? codeEl.GetString() ?? "" : "";
 
             var status = (isValid && code == "00") ? "SUCCESS" : "FAILED";
+            DateTimeOffset? transferTime = null;
+            string? evidenceFailure = null;
+            if (isValid)
+            {
+                if (!HasLiveCredentials(GetSnapshot())) evidenceFailure = "LIVE_CREDENTIALS";
+                else if (ReadString(dataEl, "code") != "00") evidenceFailure = "SIGNED_SUCCESS_CODE";
+                else if (ReadString(dataEl, "currency") != "VND") evidenceFailure = "CURRENCY";
+                else if (DateTime.TryParseExact(ReadString(dataEl, "transactionDateTime"), "yyyy-MM-dd HH:mm:ss",
+                    System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var local) &&
+                    local.Ticks >= TimeSpan.FromHours(7).Ticks)
+                    transferTime = new DateTimeOffset(local, TimeSpan.FromHours(7)).ToUniversalTime();
+                else evidenceFailure = "TRANSFER_TIMESTAMP";
+            }
 
             return new PaymentCallbackResult(
                 IsValidSignature: isValid,
@@ -414,20 +434,28 @@ public class PayOsAdapter : IPaymentGatewayPort
                 BankReference: reference,
                 PaymentStatus: status,
                 TransactionTime: DateTimeOffset.UtcNow,
-                RawPayload: rawPayload
+                RawPayload: rawPayload,
+                VerifiedTransferTime: transferTime,
+                EvidenceFailure: evidenceFailure
             );
         }
         catch (Exception ex) when (ex is JsonException or FormatException or InvalidOperationException && !lookupInProgress)
         {
-            _logger.LogError(ex, "Failed to parse webhook JSON payload.");
+            _logger.LogError(
+                "Failed to parse webhook JSON payload: {ExceptionType}.",
+                ex.GetType().FullName);
             return InvalidCallback(rawPayload);
         }
     }
 
+    private static string? ReadString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
     public async Task<PaymentVerificationResult> QueryTransactionAsync(
         long orderCode,
         string? gatewayTransactionId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? reviewedCheckoutQr = null)
     {
         // One immutable snapshot for the whole request.
         var snapshot = GetSnapshot();
@@ -473,7 +501,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             httpRequest.Headers.Add("x-client-id", snapshot.ClientId ?? string.Empty);
             httpRequest.Headers.Add("x-api-key", snapshot.ApiKey ?? string.Empty);
 
-            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 MarkProbe(snapshot.Version, false);
@@ -490,7 +518,7 @@ public class PayOsAdapter : IPaymentGatewayPort
             }
 
             MarkProbe(snapshot.Version, true);
-            var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
             var root = doc.RootElement;
             var data = root.GetProperty("data");
 
@@ -510,13 +538,19 @@ public class PayOsAdapter : IPaymentGatewayPort
                 PaymentStatus: normalizedStatus,
                 AmountVnd: amount,
                 GatewayTransactionId: gatewayTransactionId,
-                PaidAt: normalizedStatus == "SUCCESS" ? DateTimeOffset.UtcNow : null
+                PaidAt: normalizedStatus == "SUCCESS" ? DateTimeOffset.UtcNow : null,
+                ReviewedTransfers: reviewedCheckoutQr is null ? null :
+                    ReadReviewedTransfers(root, data, orderCode, gatewayTransactionId, reviewedCheckoutQr, snapshot)
             );
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException ||
+                                      (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             MarkProbe(snapshot.Version, false);
-            _logger.LogError(ex, "Error querying PayOS for OrderCode {OrderCode}", orderCode);
+            _logger.LogError(
+                "Error querying PayOS for OrderCode {OrderCode}: {ExceptionType}.",
+                orderCode,
+                ex.GetType().FullName);
             return new PaymentVerificationResult(
                 IsFound: false,
                 PaymentStatus: "UNKNOWN",
@@ -660,6 +694,73 @@ public class PayOsAdapter : IPaymentGatewayPort
         !string.IsNullOrWhiteSpace(snapshot.ChecksumKey) &&
         !snapshot.ClientId.StartsWith("replace-with", StringComparison.OrdinalIgnoreCase) &&
         !snapshot.ClientId.StartsWith("mock", StringComparison.OrdinalIgnoreCase);
+
+    // Development status checks use the existing checkout QR as the provider's checkout-currency evidence.
+    private IReadOnlyList<ReviewedPayOsTransfer>? ReadReviewedTransfers(JsonElement root, JsonElement data,
+        long orderCode, string? paymentLinkId, string checkoutQr, PaymentConfigurationSnapshot snapshot)
+    {
+        _logger.LogInformation("PayOS status response received for reviewed OrderCode {OrderCode}", orderCode);
+        var signature = PayOsSignatureService.CreatePaymentLinkResponseSignature(data, snapshot.ChecksumKey ?? string.Empty);
+        if (ReadString(root, "code") != "00" || signature is null ||
+            !PayOsSignatureService.VerifySignature(signature, ReadString(root, "signature") ?? ""))
+            return Reject("RESPONSE_SIGNATURE");
+
+        if (!data.TryGetProperty("orderCode", out var returnedCode) || returnedCode.ValueKind != JsonValueKind.Number ||
+            !returnedCode.TryGetInt64(out var returnedOrderCode) || returnedOrderCode != orderCode ||
+            string.IsNullOrWhiteSpace(paymentLinkId) || ReadString(data, "id") != paymentLinkId)
+            return Reject("ORDER_OR_LINK_BINDING");
+
+        if (!PayOsCheckoutCurrency.IsVnd(checkoutQr) || ConflictingCurrency(data))
+            return Reject("CHECKOUT_CURRENCY");
+
+        if (!data.TryGetProperty("transactions", out var items) || items.ValueKind != JsonValueKind.Array)
+            return Reject("TRANSFER_LIST");
+
+        var transfers = new Dictionary<string, ReviewedPayOsTransfer>(StringComparer.Ordinal);
+        foreach (var item in items.EnumerateArray())
+        {
+            var reference = ReadString(item, "reference");
+            var time = ReadTransferTime(ReadString(item, "transactionDateTime"));
+            if (ConflictingCurrency(item) || time is null || string.IsNullOrWhiteSpace(reference) || reference.Length > 255 ||
+                !item.TryGetProperty("amount", out var amountField) || amountField.ValueKind != JsonValueKind.Number ||
+                !amountField.TryGetInt64(out var amount) || amount <= 0)
+                return Reject("TRANSFER_FIELDS");
+
+            var transfer = new ReviewedPayOsTransfer(orderCode, paymentLinkId, reference, amount, time);
+            if (!transfers.TryAdd(reference, transfer) && transfers[reference] != transfer)
+                return Reject("TRANSFER_REFERENCE_CONFLICT");
+        }
+
+        _logger.LogInformation("PayOS status transfer evidence accepted for reviewed OrderCode {OrderCode}, transfer count {TransferCount}",
+            orderCode, transfers.Count);
+        return transfers.Values.ToArray();
+
+        IReadOnlyList<ReviewedPayOsTransfer>? Reject(string reason)
+        {
+            _logger.LogWarning("PayOS status transfer evidence rejected for reviewed OrderCode {OrderCode}, reason {Reason}", orderCode, reason);
+            return null;
+        }
+    }
+
+    private static bool ConflictingCurrency(JsonElement data) =>
+        data.TryGetProperty("currency", out var currency) &&
+        (currency.ValueKind != JsonValueKind.String || currency.GetString() != "VND");
+
+    private static DateTimeOffset? ReadTransferTime(string? value)
+    {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var styles = System.Globalization.DateTimeStyles.None;
+        if (DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:sszzz", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz"],
+            culture, styles, out var offsetTime))
+            return offsetTime.ToUniversalTime();
+        if (DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"],
+            culture, System.Globalization.DateTimeStyles.AssumeUniversal, out var utcTime))
+            return utcTime.ToUniversalTime();
+        if (DateTime.TryParseExact(value, "yyyy-MM-dd HH:mm:ss", culture, styles, out var localTime) &&
+            localTime.Ticks >= TimeSpan.FromHours(7).Ticks)
+            return new DateTimeOffset(localTime, TimeSpan.FromHours(7)).ToUniversalTime();
+        return null;
+    }
 
     private static bool IsMockTransactionId(string? gatewayTransactionId, Guid transactionId) =>
         gatewayTransactionId?.StartsWith("MOCK-", StringComparison.Ordinal) == true ||

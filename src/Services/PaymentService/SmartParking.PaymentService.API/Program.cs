@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SmartParking.PaymentService.API;
 using SmartParking.PaymentService.API.Authentication;
+using SmartParking.PaymentService.API.Extensions;
 using SmartParking.PaymentService.API.Middleware;
 using SmartParking.PaymentService.Application;
 using SmartParking.PaymentService.Infrastructure;
@@ -13,11 +14,6 @@ using SmartParking.PaymentService.Persistence;
 using SmartParking.PaymentService.Persistence.Outbox;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Uniform error handling per coding skill §7: framework exception-handler middleware
-// driven by a DI-registered IExceptionHandler.
-builder.Services.AddExceptionHandler<PaymentExceptionHandler>();
-builder.Services.AddProblemDetails();
 
 // Add services to the container
 builder.Services.AddControllers()
@@ -37,11 +33,36 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
 
 if (builder.Environment.IsDevelopment())
 {
+    const string devOrJwtScheme = "SmartParkingDevOrJwt";
+    var hasJwks = !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:JwksUri"]);
+
     builder.Services.AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = DevAuthenticationHandler.SchemeName;
-        options.DefaultChallengeScheme = DevAuthenticationHandler.SchemeName;
-    }).AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
+        options.DefaultAuthenticateScheme = devOrJwtScheme;
+        options.DefaultChallengeScheme = devOrJwtScheme;
+    })
+    .AddPolicyScheme(devOrJwtScheme, devOrJwtScheme, options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            if (hasJwks &&
+                context.Request.Headers.TryGetValue("Authorization", out var authHeader))
+            {
+                var header = authHeader.ToString();
+                if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var token = header["Bearer ".Length..].Trim();
+                    if (token.Count(c => c == '.') == 2)
+                    {
+                        return UserJwtAuthentication.Scheme;
+                    }
+                }
+            }
+
+            return DevAuthenticationHandler.SchemeName;
+        };
+    })
+    .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
 }
 else
 {
@@ -93,6 +114,8 @@ else
 // Registered for every environment; the default scheme above is unchanged.
 builder.Services.AddUserServiceJwtAuthentication(builder.Configuration);
 builder.Services.AddOperationsServiceAuthentication(builder.Configuration);
+builder.Services.AddUserJwtAuthentication(builder.Configuration, builder.Environment);
+builder.Services.AddPaymentApiErrorResponses();
 
 // Clean Architecture & Hexagonal DI registrations
 builder.Services.AddApplicationServices();
@@ -103,7 +126,8 @@ builder.Services.AddInfrastructureServices(builder.Configuration, x => x.AddPaym
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
-app.UseExceptionHandler();
+app.UseRouting();
+app.UsePaymentApiErrorResponses();
 
 if (app.Environment.IsDevelopment())
 {

@@ -84,18 +84,19 @@ public class ProcessReservationNotificationCommandHandler
             var dispatchResult = await _dispatcher.DispatchAsync(notification, cancellationToken);
             return dispatchResult;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
-                ex,
-                "Unexpected delivery dispatcher error for notification {NotificationId}. Recording failure independently.",
-                notification.Id);
+                "Unexpected delivery dispatcher error for notification {NotificationId}: {ExceptionType}. Recording failure independently.",
+                notification.Id,
+                ex.GetType().FullName);
 
-            notification.RecordFailure(ex.Message);
+            const string sanitizedError = "Delivery provider failed to send the notification.";
+            notification.RecordFailure(sanitizedError);
             await _notificationRepository.UpdateAsync(notification, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return NotificationDeliveryResult.Failed(notification.Id, notification.Attempts, ex.Message);
+            return NotificationDeliveryResult.Failed(notification.Id, notification.Attempts, sanitizedError);
         }
     }
 }

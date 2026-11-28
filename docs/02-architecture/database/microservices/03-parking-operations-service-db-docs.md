@@ -13,7 +13,7 @@ CREATE IF NOT EXISTS is fresh-install/replay only: it cannot upgrade old tables 
 > **Database files**: [`03a-parking-structure-ops-service-db.sql`](../../../../scripts/database/microservices/03a-parking-structure-ops-service-db.sql) → `smartpark_facility`; [`03b-reservation-operations-service-db.sql`](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) → `smartpark_operations`<br>
 > **Recorded schema baseline**: v1.0 RC3 (Commit `6165024`, replacing v0.9); target alignment DB27–DB30/DB32 below is pending.
 > **Message Broker**: RabbitMQ + MassTransit  
-> **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), cấu hình hạn mức (`operational_capacity_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và sự kiện audit qua transactional outbox.
+> **Scope**: Quản lý vòng đời vận hành động: đặt chỗ (`reservations`), phiên đỗ (`parking_sessions`), gán ô đỗ (`slot_allocations`), hạn mức đặt trước tùy chọn (`reservation_quota_configs`), chính sách thời gian (`operational_policies`), hạn ngạch backup (`structure_backup_policies`), thẻ/QR (`access_items`), vé tháng (`monthly_passes`), sự cố (`operational_incidents`, `operator_incident_events`), tìm kiếm (`search_facility_projections`), và sự kiện audit qua transactional outbox.
 
 ---
 
@@ -44,7 +44,7 @@ Driver / Operator / IoT Entry → API Gateway
         ↓                                                       ↓
 smartpark_facility (03a)                              smartpark_operations (03b)
 ┌──────────────────────────────┐                     ┌──────────────────────────────┐
-│ structure_backup_policies    │                     │ operational_capacity_configs │
+│ structure_backup_policies    │                     │ reservation_quota_configs    │
 │ operator_incident_events     │                     │ operational_policies         │
 └──────────────────────────────┘                     │ reservations                 │
                                                      │ parking_sessions             │
@@ -83,24 +83,59 @@ Hai DB không có FK vật lý xuyên database; `tenant_id`, `site_id`, `slot_id
 
 ---
 
-## 2. Bảng `operational_capacity_configs` — Định mức sức chứa vận hành
+## 2. Bảng `reservation_quota_configs` — Hạn mức đặt trước tùy chọn
 
-Lưu hạn mức nhận đặt trước tối đa (`max_reservation_quota`) và tổng sức chứa vật lý thiết kế cho từng khu vực/loại xe.
+Lưu hạn mức nhận đặt trước theo tenant, bãi và loại xe. Đặt chỗ CAR theo ô cụ thể kiểm tra khả dụng vật lý riêng. Khi không có hạn mức đang hoạt động, hệ thống bỏ qua phép so sánh hạn mức. Hạn mức 0 đang hoạt động chặn đặt trước mới. Hạn mức dương được so sánh với số cam kết đặt trước chồng lấn trong khoảng hiệu lực, tính cả yêu cầu mới.
 
 | Tên Cột | Kiểu & Ràng buộc | Ý nghĩa nghiệp vụ |
 |---|---|---|
 | `id` | `UUID PK DEFAULT uuid_generate_v4()` | Định danh cấu hình |
 | `tenant_id` | `UUID NOT NULL` | Logical Reference |
 | `site_id` | `UUID NOT NULL` | Bãi xe áp dụng |
-| `spatial_unit_id` | `UUID NULL` | Khu vực áp dụng (NULL = toàn bãi) |
-| `vehicle_type` | `VARCHAR(50) NOT NULL CHECK (CAR/MOTORCYCLE/OVERSIZED)` | Loại xe |
-| `total_physical_capacity` | `INT NOT NULL CHECK (>= 0)` | Sức chứa vật lý tối đa |
-| `max_reservation_quota` | `INT NOT NULL CHECK (>= 0 AND <= total_physical_capacity)` | Hạn mức cho phép đặt trước |
+| `vehicle_type` | `VARCHAR(50) NOT NULL DEFAULT 'CAR' CHECK (CAR/MOTORCYCLE/OVERSIZED)` | Loại xe |
+| `max_reservation_quota` | `INT NOT NULL CHECK (>= 0)` | Hạn mức cho phép đặt trước |
 | `is_active` | `BOOLEAN NOT NULL DEFAULT TRUE` | Trạng thái hiệu lực |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật |
 
-Unique: `(site_id, spatial_unit_id, vehicle_type)`; index `(site_id, vehicle_type)`.
+Unique index `uq_reservation_quota_scope` covers `(tenant_id, site_id, vehicle_type)`. `site_capacity_pools` serves structure and operational safeguards independently. [Post-Checkpoint-E quota decision](../../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md#optional-commercial-quota--26-november-2026)
+
+### Local adoption of the reservation quota schema
+
+For a fresh disposable Operations database, initialize it from [03b](../../../../scripts/database/microservices/03b-reservation-operations-service-db.sql) using the normal local setup. The Compose initializer runs on an empty Operations volume. Use the policy and CAR tariff for the normal Owner-created site. No commercial quota row is needed.
+
+For an **existing** local database, obtain separate authorization for the selected `smartpark_operations` database, stop the Operations host and other quota writers, and take a restorable backup with `pg_dump --format=custom` using the configured local connection. Inspect the current relations before doing any DDL:
+
+```sql
+SELECT to_regclass('public.operational_capacity_configs') AS legacy,
+       to_regclass('public.reservation_quota_configs') AS current;
+```
+
+If only `current` exists, verify the eight columns, the nonnegative quota constraint and the unique scope index below. If neither or both exist, inspect the selected schema with the database owner before proceeding. For an aligned pre-change database with only `legacy`, run the following reviewed SQL in the selected local database with `psql -X -v ON_ERROR_STOP=1` or an equivalent transactional SQL client. It stops before DDL if descendant rows exist. Review and archive those rows separately if present, then arrange an explicitly authorized cleanup or use a fresh disposable database. Descendant rows must never be promoted into site-wide quotas.
+
+```sql
+BEGIN;
+LOCK TABLE public.operational_capacity_configs IN ACCESS EXCLUSIVE MODE;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM public.operational_capacity_configs WHERE spatial_unit_id IS NOT NULL) THEN
+        RAISE EXCEPTION 'Review and archive descendant quota records before adopting site-only quotas';
+    END IF;
+END;
+$$;
+
+ALTER TABLE public.operational_capacity_configs RENAME TO reservation_quota_configs;
+ALTER TABLE public.reservation_quota_configs
+    DROP COLUMN spatial_unit_id,
+    DROP COLUMN total_physical_capacity,
+    ADD CONSTRAINT ck_reservation_quota_nonnegative CHECK (max_reservation_quota >= 0);
+DROP INDEX IF EXISTS public.idx_op_capacity_site;
+CREATE UNIQUE INDEX uq_reservation_quota_scope
+    ON public.reservation_quota_configs(tenant_id, site_id, vehicle_type);
+COMMIT;
+```
+
+PostgreSQL drops column-dependent checks and the old spatial unique constraint when those columns are dropped. Verify the new relation, index name, columns, and site/category quota values and active flags against the backup or a pre-change export, then start the matching Operations build. Existing quota IDs, values and timestamps are preserved by the rename. Replaying the initializer neither performs this rename nor adopts existing rows. A rollback requires the matching old schema and binary. If admission has resumed, reconcile post-cutover writes with the database owner before restoring data.
 
 ---
 

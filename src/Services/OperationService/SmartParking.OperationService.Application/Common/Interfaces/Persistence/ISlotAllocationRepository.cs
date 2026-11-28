@@ -1,10 +1,9 @@
-using SmartParking.OperationService.Application.DTOs;
 using SmartParking.OperationService.Domain.Entities;
 
 namespace SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 
 public interface ISlotAllocationRepository : IRepository<SlotAllocationRow>
 {
-    Task<SlotAllocationRow?> FindReservedAsync(Guid tenantId, Guid siteId, Guid reservationId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<SlotAllocationRow>> FindActiveForSessionAsync(Guid tenantId, Guid siteId, Guid sessionId, CancellationToken ct);
+    Task<IReadOnlyList<SlotAllocationRow>> FindActiveForVisitAsync(
+        Guid tenantId, Guid siteId, Guid sessionId, Guid? reservationId, CancellationToken ct);
 }

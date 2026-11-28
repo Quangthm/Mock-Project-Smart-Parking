@@ -7,4 +7,10 @@
     <ProjectReference Include="../SmartParking.OperationService.Application/SmartParking.OperationService.Application.csproj" />
     <ProjectReference Include="../SmartParking.OperationService.Infrastructure/SmartParking.OperationService.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+  <Target Name="CopyLocalDevSettings" AfterTargets="Build" Condition="Exists('appsettings.Development.json')">
+    <Copy SourceFiles="appsettings.Development.json" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

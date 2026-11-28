@@ -47,6 +47,13 @@ msbuild.wrn
 # Ignore real/local environments because they may contain secrets.
 
 .postman/
+# Ignore Postman collection YAML files
+/postman/collections/**/*.yaml
+/postman/collections/**/*.yml
+
+# Ignore Postman environment YAML files
+/postman/environments/**/*.yaml
+/postman/environments/**/*.yml
 
 docs/postman/environments/*local*.json
 docs/postman/environments/*secret*.json

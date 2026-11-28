@@ -13,11 +13,11 @@ public sealed partial class ReservationRepository(ReservationDbContext db)
     public async Task<ReservationRow?> FindForUpdateAsync(
         Guid tenantId, Guid siteId, Guid reservationId, CancellationToken cancellationToken)
     {
-        var row = await Set.SingleOrDefaultAsync(
-            reservation => reservation.Id == reservationId &&
-                reservation.TenantId == tenantId &&
-                reservation.SiteId == siteId,
-            cancellationToken);
+        // All commitment writers take the site guard first. Lock the physical row before evaluating time.
+        var row = await Set.FromSqlInterpolated($"""
+            SELECT * FROM reservations WHERE id = {reservationId} AND tenant_id = {tenantId}
+                AND site_id = {siteId} FOR UPDATE
+            """).SingleOrDefaultAsync(cancellationToken);
         if (row is not null) await db.Entry(row).ReloadAsync(cancellationToken);
         return row;
     }

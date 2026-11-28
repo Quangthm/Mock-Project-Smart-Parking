@@ -165,14 +165,22 @@ if ($Service -eq 'User') {
 }
 
 # Task-scoped reservation admission configuration; credentials remain service-specific.
-if ($Service -in @('User', 'Reservation')) {
-    $env:ReservationAdmission__Enabled = if ($env:SMARTPARK_RESERVATION_ADMISSION_ENABLED) { $env:SMARTPARK_RESERVATION_ADMISSION_ENABLED } else { 'false' }
-    $brokerPrefix = if ($Service -eq 'User') { 'SMARTPARK_RESERVATION_USER' } else { 'SMARTPARK_RESERVATION_OPERATION' }
+if ($Service -in @('User', 'Parking', 'Reservation')) {
+    $env:ReservationAdmission__SagaConsumersEnabled = if ($env:SMARTPARK_RESERVATION_SAGA_ENABLED) { $env:SMARTPARK_RESERVATION_SAGA_ENABLED } else { 'false' }
+    if ($Service -ne 'Parking') {
+        $env:ReservationAdmission__Enabled = if ($env:SMARTPARK_RESERVATION_ADMISSION_ENABLED) { $env:SMARTPARK_RESERVATION_ADMISSION_ENABLED } else { 'false' }
+    }
+    $brokerPrefix = @{
+        User = 'SMARTPARK_RESERVATION_USER'
+        Parking = 'SMARTPARK_RESERVATION_FACILITY'
+        Reservation = 'SMARTPARK_RESERVATION_OPERATION'
+    }[$Service]
     $env:ReservationAdmission__BrokerUser = [Environment]::GetEnvironmentVariable($brokerPrefix + '_BROKER_USER')
     $env:ReservationAdmission__BrokerPassword = [Environment]::GetEnvironmentVariable($brokerPrefix + '_BROKER_PASSWORD')
     if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerUser)) { $env:ReservationAdmission__BrokerUser = ' ' }
     if ([string]::IsNullOrWhiteSpace($env:ReservationAdmission__BrokerPassword)) { $env:ReservationAdmission__BrokerPassword = ' ' }
     if ($Service -eq 'Reservation') {
+        $env:ReservationAdmission__OverallTimeoutSeconds = $env:SMARTPARK_RESERVATION_ADMISSION_TIMEOUT_SECONDS
         $env:SMARTPARK_RABBITMQ_HOST = '127.0.0.1'
         $env:JwtValidation__AllowInsecureTransport = if ($env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS) { $env:SMARTPARK_RESERVATION_ALLOW_HTTP_JWKS } else { 'false' }
         $env:Cors__AllowedOrigins = $env:SMARTPARK_OPERATION_CORS_ORIGINS
@@ -183,6 +191,9 @@ if ($Service -in @('User', 'Reservation')) {
 
 if ($Service -in @('Parking', 'Payment', 'Reservation')) {
     $env:ReservationIntegration__Enabled = if ($env:SMARTPARK_RESERVATION_FACILITY_ENABLED) { $env:SMARTPARK_RESERVATION_FACILITY_ENABLED } else { 'false' }
+    if ($Service -in @('Payment', 'Reservation')) {
+        $env:ReservationIntegration__ReviewedSettlementEnabled = if ($env:SMARTPARK_RESERVATION_REVIEWED_SETTLEMENT_ENABLED) { $env:SMARTPARK_RESERVATION_REVIEWED_SETTLEMENT_ENABLED } else { 'false' }
+    }
     if ($Service -eq 'Reservation') {
         $env:ReservationIntegration__AllowHttp = if ($env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP) { $env:SMARTPARK_RESERVATION_FACILITY_ALLOW_HTTP } else { 'false' }
         $env:ReservationIntegration__OperationsPrivateKeyPath = if ($env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH) { $env:SMARTPARK_OPERATION_FACILITY_PRIVATE_KEY_PATH } else { '' }

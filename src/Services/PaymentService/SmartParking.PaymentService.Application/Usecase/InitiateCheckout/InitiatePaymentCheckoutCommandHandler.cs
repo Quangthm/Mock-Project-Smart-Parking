@@ -61,7 +61,9 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             throw new PaymentDomainException("ORDER_ALREADY_PAID", "This payment order has already been paid.");
         }
 
-        if (order.IsExpired(now))
+        if (order.ReviewedMethod is not null && request.PaymentMethod.ToString() != order.ReviewedMethod)
+            throw new PaymentDomainException("QUOTE_BINDING_CONFLICT", "Checkout method differs from the quote.");
+        if (order.IsExpired(now) || order.ReviewedMethod != null && DateTimeOffset.UtcNow >= order.ExpiresAt)
         {
             throw new PaymentDomainException("ORDER_EXPIRED", "This payment order has expired.");
         }
@@ -71,6 +73,14 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             throw new PaymentDomainException(
                 "ZERO_AMOUNT_ORDER",
                 "This order has no amount due, so a PayOS checkout cannot be created.");
+        }
+
+        if (order.ReviewedMethod is not null)
+        {
+            if (request.PaymentMethod != PaymentMethod.PAYOS)
+                throw new PaymentDomainException("UNSUPPORTED_PAYMENT_METHOD", "This method has no supported reservation checkout.");
+            if (order.ReviewedCurrency != "VND")
+                throw new PaymentDomainException("UNSUPPORTED_PAYMENT_CURRENCY", "PayOS checkout requires VND.");
         }
 
         // 1. Idempotency replay by IdempotencyKey if provided
@@ -174,8 +184,22 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             Status = PaymentStatus.PENDING,
             CreatedAt = now
         };
-        await _transactionRepository.AddAsync(transaction, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        async Task<int> PersistAttempt()
+        {
+            await _transactionRepository.AddAsync(transaction, cancellationToken);
+            return await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        if (order.ReviewedMethod == null) await PersistAttempt();
+        else await _unitOfWork.WithLocksAsync([order.Id], async () =>
+        {
+            var attempts = await _transactionRepository.GetByOrderIdAsync(order.Id, cancellationToken);
+            if (attempts.Any(t => t.TransactionType == TransactionType.PAYMENT &&
+                t.Status is PaymentStatus.PENDING or PaymentStatus.UNKNOWN or PaymentStatus.SUCCESS))
+                throw new PaymentDomainException("IDEMPOTENCY_CONFLICT", "An existing checkout must be recovered.");
+            if (await _unitOfWork.DatabaseNowAsync(cancellationToken) >= expiresAt)
+                throw new PaymentDomainException("ORDER_EXPIRED", "This payment order has expired.");
+            return await PersistAttempt();
+        }, cancellationToken);
 
         var gatewayRequest = new PaymentInitiateRequest(
             TransactionId: transactionId,
@@ -188,6 +212,12 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
             PaymentOrderId: order.Id
         );
 
+        if (order.ReviewedMethod != null && DateTimeOffset.UtcNow >= expiresAt)
+        {
+            transaction.MarkCancelled();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            throw new PaymentDomainException("ORDER_EXPIRED", "This payment order has expired.");
+        }
         var gatewayResult = await _paymentGatewayPort.InitiatePaymentAsync(gatewayRequest, cancellationToken);
         if (gatewayResult.IsSuccess && IsMockGatewayTransactionId(gatewayResult.GatewayTransactionId, transactionId))
         {
@@ -227,8 +257,11 @@ public class InitiatePaymentCheckoutCommandHandler : IRequestHandler<InitiatePay
         transaction.AccountName = gatewayResult.AccountName;
         transaction.Bin = gatewayResult.Bin;
 
-        _transactionRepository.Update(transaction);
-        _orderRepository.Update(order);
+        if (order.ReviewedMethod == null)
+        {
+            _transactionRepository.Update(transaction);
+            _orderRepository.Update(order);
+        }
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PaymentCheckoutResponseDto(
