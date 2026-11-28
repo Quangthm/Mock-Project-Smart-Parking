@@ -13,7 +13,7 @@ import {
   validateUnitName,
   type StructureUnitType,
 } from "../../../lib/structureRules"
-import { useModelCarCapacity } from "../../../lib/3d/modelSlotCapacity"
+import { useModelCarCapacity, useModelStructure } from "../../../lib/3d/modelSlotCapacity"
 import { ReleasedIdentifierDialog } from "./ReleasedIdentifierDialog"
 import { StructureFeedback } from "./StructureFeedback"
 
@@ -33,6 +33,7 @@ export function UnitDialog({
   siteId,
   units,
   modelUrl,
+  maxFloors = null,
   model,
   onClose,
   onSaved,
@@ -40,6 +41,7 @@ export function UnitDialog({
   siteId: string
   units: Unit[]
   modelUrl: string
+  maxFloors?: number | null
   model: UnitDialogModel
   onClose: () => void
   onSaved: () => void
@@ -94,6 +96,19 @@ export function UnitDialog({
   const modelCapacity = useModelCarCapacity(modelUrl)
   const bayLimit = modelCapacity.capacity
 
+  // A parking model caps how many floor units a site may have. The modelled floor
+  // count is authoritative when available; otherwise fall back to the site's
+  // stored maxFloors. When both are unknown the limit stays open and the backend
+  // remains the final authority.
+  const modelStructure = useModelStructure(modelUrl)
+  const modelFloorCount = modelStructure.analysis?.floors.length ?? 0
+  const floorLimit = modelFloorCount > 0 ? modelFloorCount : (maxFloors ?? null)
+  const liveFloorCount = units.filter((unit) => unit.type === "FLOOR").length
+  const floorError =
+    isCreate && type === "FLOOR" && floorLimit !== null && liveFloorCount >= floorLimit
+      ? `This model supports at most ${floorLimit} floor(s).`
+      : null
+
   const capacityValue = Number(capacity)
   const capacityError = (() => {
     if (isRename) return null
@@ -111,6 +126,7 @@ export function UnitDialog({
     !busy &&
     !nameError &&
     !capacityError &&
+    !floorError &&
     !missingParent &&
     (isCreate ? name.trim().length > 0 : true)
 
@@ -283,6 +299,12 @@ export function UnitDialog({
           {missingParent && (
             <p role="alert" className="text-xs text-red-600 dark:text-red-400">
               A block must sit under a floor or zone.
+            </p>
+          )}
+
+          {floorError && (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              {floorError}
             </p>
           )}
 

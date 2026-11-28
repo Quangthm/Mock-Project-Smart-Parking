@@ -52,6 +52,14 @@ const lotStatus = load('roles/operator/parking-lot/useLotStatus.ts', {
   '../../../lib/parkingApi': { parkingApi: { operationalLayout: async () => null } },
   '../../../lib/operatorApi': { reservationApi: { listParkingSessions: async () => [] } },
   '../../../lib/authApi': { AuthApiError: class extends Error {} },
+  '../../../lib/operatorRealtimeResources': {
+    invalidateOperatorGateResources() {},
+    invalidateOperatorParkingSessions() {},
+    reconcileOperatorLayout() {},
+    subscribeOperatorLayout() { return () => {}; },
+    subscribeOperatorParkingSessions() { return () => {}; },
+  },
+  '../../../lib/operatorLayoutLive': {},
 });
 
 const VISUAL_STATES = ['available', 'occupied', 'reserved', 'backup', 'maintenance', 'unavailable', 'unknown'];

@@ -53,6 +53,44 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
                         AND site.status = 'ACTIVE' AND site.deleted_at IS NULL
                         AND tenant.status = 'ACTIVE' AND tenant.deleted_at IS NULL
                   )
+                  -- Walk-in entry is physical and immediate, so slots covered right now by an
+                  -- acknowledged closure must not be handed to a vehicle. Future reservations stay
+                  -- admissible because Operations enforces the [start, end) overlap authoritatively.
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM structure_maintenance_windows mw
+                      JOIN spatial_units slot_unit ON slot_unit.id = parking_slots.spatial_unit_id
+                      LEFT JOIN spatial_units mw_unit ON mw_unit.id = mw.unit_id AND mw_unit.deleted_at IS NULL
+                      WHERE mw.site_id = parking_slots.site_id
+                        AND mw.tenant_id = parking_slots.tenant_id
+                        AND mw.cancelled_at IS NULL
+                        AND mw.enforcement_state = 'acknowledged'
+                        AND mw.service_window @> now()
+                        AND (
+                            (mw.unit_id IS NULL AND mw.slot_id IS NULL)
+                            OR mw.slot_id = parking_slots.id
+                            OR (mw.slot_id IS NULL AND mw.unit_id IS NOT NULL AND mw_unit.id IS NOT NULL AND slot_unit.path LIKE mw_unit.path || '%')
+                        )
+                  )
+                  -- Emergency restrictions recorded by the operator block new physical entry immediately,
+                  -- independently of whether Operations reconciliation has finished.
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM structure_emergency_restrictions restriction
+                      LEFT JOIN spatial_units restricted_unit
+                          ON restricted_unit.id = restriction.unit_id AND restricted_unit.deleted_at IS NULL
+                      JOIN spatial_units entry_unit ON entry_unit.id = parking_slots.spatial_unit_id
+                      WHERE restriction.site_id = parking_slots.site_id
+                        AND restriction.tenant_id = parking_slots.tenant_id
+                        AND restriction.released_at IS NULL
+                        AND (restriction.effective_until IS NULL OR restriction.effective_until > now())
+                        AND (
+                            restriction.scope = 'SITE'
+                            OR restriction.slot_id = parking_slots.id
+                            OR (restriction.scope = 'UNIT' AND restricted_unit.id IS NOT NULL
+                                AND entry_unit.path LIKE restricted_unit.path || '%')
+                        )
+                  )
                 ORDER BY slot_code
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
@@ -79,7 +117,7 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
         return slot;
     }
 
-    public async Task ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
+    public async Task<bool> ReleaseAsync(Guid tenantId, Guid siteId, Guid slotId, CancellationToken ct)
     {
         var (db, tx) = OwningTransaction();
         await PhysicalSiteGuard.RequireAvailableAsync(db, tx, siteId, ct);
@@ -92,7 +130,7 @@ public sealed class OperatorGateSlotRepository(ParkingDbContext context) : IOper
         command.Parameters.AddWithValue(tenantId);
         command.Parameters.AddWithValue(siteId);
         command.Parameters.AddWithValue(slotId);
-        await command.ExecuteNonQueryAsync(ct);
+        return await command.ExecuteNonQueryAsync(ct) > 0;
     }
 
     private (NpgsqlConnection, NpgsqlTransaction) OwningTransaction()

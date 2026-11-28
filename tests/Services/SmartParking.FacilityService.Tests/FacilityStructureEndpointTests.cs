@@ -243,7 +243,7 @@ public sealed class FacilityStructureEndpointTests
         Assert.True(body.GetProperty("success").GetBoolean());
         var data = body.GetProperty("data");
         Assert.Equal("Repaving", data.GetProperty("reason").GetString());
-        Assert.Equal("pending", data.GetProperty("enforcementState").GetString());
+        Assert.Equal("acknowledged", data.GetProperty("enforcementState").GetString());
         Assert.Equal(SiteId, data.GetProperty("siteId").GetGuid());
         Assert.Equal($"/api/parking-lots/{SiteId}/maintenance-windows/{data.GetProperty("id").GetGuid()}",
             response.Headers.GetValues("Location").Single());
@@ -822,14 +822,15 @@ public sealed class FacilityStructureEndpointTests
                 .ToArray());
 
         public Task<MaintenanceWindow> CreateAsync(
-            OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason, CancellationToken cancellationToken)
+            OwnerScope owner, Guid siteId, DateTime start, DateTime end, string reason, CancellationToken cancellationToken,
+            Guid? unitId = null, Guid? slotId = null)
         {
             if (windows.Any(window => window.CancelledAt is null && window.Start < end && start < window.End))
                 throw new StructureException("STRUCTURE_IN_USE", "Another maintenance window already covers this period.");
 
             var window = new MaintenanceWindow(
-                Guid.NewGuid(), owner.TenantId, siteId, null, null, start, end, reason,
-                owner.UserId, DateTime.UtcNow, null, "pending", null, null);
+                Guid.NewGuid(), owner.TenantId, siteId, unitId, slotId, start, end, reason,
+                owner.UserId, DateTime.UtcNow, null, "acknowledged", null, null);
             windows.Add(window);
             return Task.FromResult(window);
         }
@@ -852,7 +853,7 @@ public sealed class FacilityStructureEndpointTests
             var updated = current with
             {
                 End = newEnd,
-                EnforcementState = "pending",
+                EnforcementState = "acknowledged",
                 EnforcementRef = null,
                 AcknowledgedAt = null
             };

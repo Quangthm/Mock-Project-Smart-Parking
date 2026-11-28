@@ -35,12 +35,13 @@ const LOT_TYPE_INFO: Record<LotType, {
   icon: string
   label: string
   hasFloors: boolean
+  maxFloors: number
 }> = {
-  outdoor: { icon: "leaf", label: "Outdoor Lot", hasFloors: false },
+  outdoor: { icon: "leaf", label: "Outdoor Lot", hasFloors: false, maxFloors: 1 },
 
-  basement: { icon: "parking", label: "Basement Parking", hasFloors: true },
+  basement: { icon: "parking", label: "Basement Parking", hasFloors: true, maxFloors: 2 },
 
-  "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true },
+  "multi-storey": { icon: "building", label: "Multi-Storey", hasFloors: true, maxFloors: 3 },
 }
 
 const DEVICE_OPTIONS = [
@@ -228,6 +229,17 @@ export function OnboardingWizard({
   const modelCapacity = useModelCarCapacity(activeModelUrl)
   const modelStructure = useModelStructure(activeModelUrl)
   const modelFloors = modelStructure.analysis?.floors ?? []
+  // The structural ceiling is the modelled floor count when present, otherwise
+  // the static template limit (outdoor 1, basement 2, multi-storey 3).
+  const maxFloors = modelFloors.length > 0 ? modelFloors.length : LOT_TYPE_INFO[lotType].maxFloors
+  const parsedFloors = Number(lotConfig.floors)
+  const floorCountError = LOT_TYPE_INFO[lotType].hasFloors
+    ? !Number.isInteger(parsedFloors) || parsedFloors < 1
+      ? "Enter a valid floor count."
+      : parsedFloors > maxFloors
+        ? `This parking type supports at most ${maxFloors} floor(s).`
+        : ""
+    : ""
 
   function handleLotTypeSelect(type: LotType) {
     setLotType(type)
@@ -313,8 +325,11 @@ export function OnboardingWizard({
         ? Number(lotConfig.floors)
         : 1
 
-      if (!Number.isInteger(floors) || floors < 1 || floors > 20) {
-        throw new Error("Enter a valid floor count between 1 and 20.")
+      if (!Number.isInteger(floors) || floors < 1 || floors > maxFloors) {
+        throw new Error(`Enter a valid floor count between 1 and ${maxFloors}.`)
+      }
+      if (lotType === "outdoor" && floors !== 1) {
+        throw new Error("Outdoor lots must have one floor.")
       }
 
       const numericPricing = {
@@ -388,6 +403,9 @@ export function OnboardingWizard({
         address,
         latitude: selectedLocation.lat,
         longitude: selectedLocation.lng,
+        lotType,
+        modelFileName: activeModelDef.fileName,
+        maxFloors,
       })
       if (!site || typeof site.id !== "string" || !site.id.trim()) {
         throw new Error("The server did not return a valid site ID. Please try again.")
@@ -861,7 +879,7 @@ export function OnboardingWizard({
                       className="input"
                       type="number"
                       min={1}
-                      max={20}
+                      max={maxFloors}
                       value={lotConfig.floors}
                       placeholder="e.g. 3"
                       onFocus={(e) => e.target.select()}
@@ -869,9 +887,22 @@ export function OnboardingWizard({
                         setLotConfig((c) => ({ ...c, floors: e.target.value }))
                       }
                     />
+                    {floorCountError && (
+                      <p
+                        role="alert"
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--badge-danger-strong)",
+                          marginTop: "0.25rem",
+                        }}
+                      >
+                        {floorCountError}
+                      </p>
+                    )}
                     {modelCapacity.capacity !== null &&
                       lotConfig.floors &&
-                      parseInt(String(lotConfig.floors)) > 0 && (
+                      parseInt(String(lotConfig.floors)) > 0 &&
+                      parseInt(String(lotConfig.floors)) <= maxFloors && (
                         <p
                           style={{
                             fontSize: "0.75rem",
@@ -901,7 +932,7 @@ export function OnboardingWizard({
                 disabled={
                   !lotConfig.name.trim() ||
                   !lotConfig.address.trim() || !ward.trim() || !validParkingCoordinates(selectedLocation) ||
-                  (LOT_TYPE_INFO[lotType].hasFloors && !lotConfig.floors)
+                  (LOT_TYPE_INFO[lotType].hasFloors && (!lotConfig.floors || Boolean(floorCountError)))
                 }
               >
                 Continue

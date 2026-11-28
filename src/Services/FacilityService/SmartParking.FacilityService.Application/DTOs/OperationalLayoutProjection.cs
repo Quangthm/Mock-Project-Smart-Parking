@@ -31,7 +31,26 @@ public sealed record OperationalLayoutProjectionDto(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     DateTimeOffset? TelemetryHeartbeatAt = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    DriverReservationDto? DriverReservation = null);
+    DriverReservationDto? DriverReservation = null,
+    // DE-13 service availability: omitted from the wire shape while the site has no
+    // live maintenance window so the v1.2.0 envelope is preserved.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    OperationalServiceAvailabilityDto? ServiceAvailability = null);
+
+public sealed record OperationalMaintenanceWindowDto(
+    Guid Id,
+    Guid? UnitId,
+    Guid? SlotId,
+    DateTimeOffset Start,
+    DateTimeOffset End,
+    string Reason,
+    string EnforcementState);
+
+public sealed record OperationalServiceAvailabilityDto(
+    string State,
+    DateTimeOffset? ClosedUntil,
+    string? Reason,
+    IReadOnlyList<OperationalMaintenanceWindowDto> ActiveWindows);
 
 public sealed record DriverReservationDto(
     Guid ReservationId,

@@ -34,6 +34,9 @@ export interface Site {
   status: string
   isActive: boolean
   totalPhysicalCapacity: number
+  lotType?: string | null
+  modelFileName?: string | null
+  maxFloors?: number | null
 }
 
 export type StructureVehicleType = "CAR" | "MOTORCYCLE" | "OVERSIZED"
@@ -258,7 +261,16 @@ async function call<T>(
 export const parkingApi = {
   list: () => call<Site[]>(""),
 
-  create: (body: { code: string; name: string; address: string; latitude?: number; longitude?: number }) =>
+  create: (body: {
+    code: string
+    name: string
+    address: string
+    latitude?: number
+    longitude?: number
+    lotType?: string | null
+    modelFileName?: string | null
+    maxFloors?: number | null
+  }) =>
     call<Site>("", "POST", body),
 
   structure: (id: string) => call<Structure>(`/${id}/structure`),

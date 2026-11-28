@@ -23,9 +23,13 @@ public sealed class ScheduleMaintenanceWindowCommandHandler(
 
         var start = ToUtc(request.Start);
         var end = ToUtc(request.End);
-        MaintenanceWindowRules.ValidateCreate(null, null, request.Reason, start, end, DateTime.UtcNow);
+        MaintenanceWindowRules.ValidateCreate(request.UnitId, request.SlotId, request.Reason, start, end,
+            DateTime.UtcNow);
 
-        return await store.CreateAsync(owner, request.SiteId, start, end, request.Reason.Trim(), ct);
+        // Local commit + atomic FacilityMaintenanceChangedV1 outbox staging in one transaction;
+        // Operations consumes the event asynchronously without blocking this write.
+        return await store.CreateAsync(owner, request.SiteId, start, end, request.Reason.Trim(), ct,
+            request.UnitId, request.SlotId);
     }
 
     private static DateTime ToUtc(DateTime value) => value.Kind switch

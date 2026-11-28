@@ -28,7 +28,6 @@ public sealed class ExtendMaintenanceWindowCommandHandler(
             ?? throw new StructureException("STRUCTURE_CONFLICT", "Maintenance window was not found in this site.");
 
         var newEnd = MaintenanceWindowRules.Extend(current.Start, current.End, start, end, DateTime.UtcNow);
-
         return await store.ExtendAsync(owner, request.SiteId, request.WindowId, newEnd, ct);
     }
 

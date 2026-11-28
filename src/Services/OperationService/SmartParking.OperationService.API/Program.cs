@@ -29,4 +29,7 @@ public static class Program
             await scheduler.Shutdown();
         }
     }
+
+    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
+        => OperationHost.Build(args, configure);
 }

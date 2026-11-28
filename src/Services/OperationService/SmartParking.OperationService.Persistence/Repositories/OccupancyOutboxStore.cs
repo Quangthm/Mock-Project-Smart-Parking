@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using SmartParking.OperationService.Application.Common.Interfaces.Persistence;
 using SmartParking.OperationService.Application.Common.Interfaces.Services;
@@ -9,10 +10,24 @@ namespace SmartParking.OperationService.Persistence.Repositories;
 
 public sealed class OccupancyOutboxStore(ReservationDbContext db) : IOccupancyOutboxStore
 {
-    public void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt) => db.OutboxEvents.Add(new OutboxEventRow {
-        EventId = Guid.NewGuid(), EventType = "SnapshotRequired", SiteId = siteId,
-        OccurredAt = occurredAt, SequenceNumber = 0, Payload = "{}"
-    });
+    public void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt) =>
+        AddSnapshotRequired(siteId, occurredAt, null);
+
+    public void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt, IReadOnlyList<string>? affectedResources)
+    {
+        var payload = affectedResources is { Count: > 0 }
+            ? JsonSerializer.Serialize(new { affectedResources })
+            : "{}";
+        db.OutboxEvents.Add(new OutboxEventRow
+        {
+            EventId = Guid.NewGuid(),
+            EventType = "SnapshotRequired",
+            SiteId = siteId,
+            OccurredAt = occurredAt,
+            SequenceNumber = 0,
+            Payload = payload
+        });
+    }
 
     // One atomic statement: select + lease in the same transaction, so the row locks are
     // released as soon as this statement finishes. Callers must not wrap network I/O in it.

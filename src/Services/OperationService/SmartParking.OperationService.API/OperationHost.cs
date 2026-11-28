@@ -28,7 +28,9 @@ public static class OperationHost
         builder.AddParkingSearch();
         builder.AddOwnReservationReadDependencies();
         var admissionEnabled = builder.Configuration.GetValue<bool>("ReservationAdmission:Enabled");
-        var consumerAuthEnabled = admissionEnabled || !string.IsNullOrWhiteSpace(builder.Configuration["JwtValidation:JwksUri"]);
+        var sharedHubEnabled = builder.Configuration.GetValue<bool>("Realtime:SharedMultiSiteHubEnabled");
+        var allowLoopbackHttp = !admissionEnabled && builder.Environment.IsEnvironment("Testing");
+        var consumerAuthEnabled = admissionEnabled || ConsumerAuthenticationRegistration.IsConfigured(builder.Configuration, allowLoopbackHttp);
         builder.Services.AddAuthorization();
         builder.Services.AddPassPlanOwnerPolicy();
         builder.Services.AddScoped<ICurrentActor, HttpCurrentActor>();
@@ -36,7 +38,7 @@ public static class OperationHost
         {
             builder.Services.AddConsumerAuthentication(
                 builder.Configuration,
-                allowLoopbackHttp: !admissionEnabled && builder.Environment.IsEnvironment("Testing"));
+                allowLoopbackHttp: allowLoopbackHttp);
             builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
                 Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, options =>
                 {
@@ -127,6 +129,18 @@ public static class OperationHost
         app.Use(async (context, next) =>
         {
             context.Response.Headers.CacheControl = "no-store";
+            if (!consumerAuthEnabled && context.Request.Path.StartsWithSegments("/ws/parking-lots"))
+            {
+                await ApiErrors.WriteAsync(context, 503, "AUTHENTICATION_KEYS_UNAVAILABLE",
+                    "Realtime authentication is not configured.", ct: context.RequestAborted);
+                return;
+            }
+            if (!sharedHubEnabled && context.Request.Path.StartsWithSegments("/ws/parking-lots/layout"))
+            {
+                await ApiErrors.WriteAsync(context, 503, "REALTIME_SHARED_HUB_DISABLED",
+                    "Shared multi-site realtime hub is not enabled.", ct: context.RequestAborted);
+                return;
+            }
             if (!admissionEnabled && (context.Request.Path.StartsWithSegments("/api/reservation-requests") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-price-previews") ||
                 context.Request.Path.StartsWithSegments("/api/reservation-quotes") ||
@@ -146,7 +160,23 @@ public static class OperationHost
         if (admissionEnabled)
             app.MapHub<ReservationProgressHub>("/hubs/reservation-progress", options =>
                 options.CloseOnAuthenticationExpiration = true);
-        app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout");
+        var singleSiteHub = app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/{siteId}/layout", options =>
+        {
+            options.CloseOnAuthenticationExpiration = true;
+        });
+        if (consumerAuthEnabled)
+        {
+            singleSiteHub.RequireAuthorization();
+        }
+        if (sharedHubEnabled)
+        {
+            var sharedHub = app.MapHub<ParkingLotLayoutHub>("/ws/parking-lots/layout", options =>
+            {
+                options.CloseOnAuthenticationExpiration = true;
+            });
+            if (consumerAuthEnabled)
+                sharedHub.RequireAuthorization();
+        }
         return app;
     }
 }

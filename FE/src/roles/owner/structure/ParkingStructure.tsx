@@ -611,7 +611,7 @@ export function ParkingStructure({ sites = [], selectedSiteId, onSiteChange }: P
 
             </div>
             <aside className="min-w-0" aria-label="Parking structure hierarchy">
-              <StructureTree siteId={siteId} units={units} slots={slots} paths={paths} modelUrl={modelUrl} onChanged={refresh} />
+              <StructureTree siteId={siteId} units={units} slots={slots} paths={paths} modelUrl={modelUrl} maxFloors={structure?.site?.maxFloors ?? sites.find((s) => s.id === siteId)?.maxFloors ?? null} onChanged={refresh} />
             </aside>
           </div>
 

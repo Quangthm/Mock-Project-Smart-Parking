@@ -20,7 +20,8 @@ public sealed class ReleasedIdentifierException(Guid resourceId, string released
 }
 
 public sealed record SiteProfile(Guid Id, Guid TenantId, string Code, string Name, string Address,
-    decimal? Latitude, decimal? Longitude, bool IsActive, int TotalPhysicalCapacity, string Status = "ACTIVE");
+    decimal? Latitude, decimal? Longitude, bool IsActive, int TotalPhysicalCapacity, string Status = "ACTIVE",
+    string? LotType = null, string? ModelFileName = null, int? MaxFloors = null);
 public sealed record SpatialUnit(Guid Id, Guid? ParentId, string Path, UnitType Type, string Name, int MaxCapacity);
 public sealed record ParkingSlot(Guid Id, Guid UnitId, string Code, VehicleType VehicleType, SlotType Type,
     OperationalStatus OperationalStatus = OperationalStatus.OPERATIONAL, bool IsPhysicallyOccupied = false,
@@ -170,6 +171,11 @@ public sealed class ParkingStructure
         Require(parent is null || (int)type > (int)parent.Type, "Parent must precede the child in FLOOR/ZONE/BLOCK order.");
         name = Text(name, 100);
         Require(!units.Any(u => u.ParentId == parentId && u.Name.Equals(name, StringComparison.OrdinalIgnoreCase)), "Duplicate sibling unit name.", "DUPLICATE_IDENTIFIER");
+        // The site's model-derived ceiling is the authoritative floor bound. Domain owns this
+        // invariant so no persistence or transport path can exceed it.
+        if (type == UnitType.FLOOR && Site.MaxFloors is { } maxFloors)
+            Require(units.Count(u => u.Type == UnitType.FLOOR) < maxFloors,
+                $"This parking model supports at most {maxFloors} floor(s).", "MAX_FLOORS_EXCEEDED");
         var id = Guid.NewGuid();
         units.Add(new(id, parentId, $"{parent?.Path ?? $"/{Site.Id}/"}{id}/", type, name, maxCapacity));
         return id;

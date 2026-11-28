@@ -9,7 +9,7 @@ namespace SmartParking.FacilityService.API.Middleware;
 public sealed class FacilityExceptionHandler(ILogger<FacilityExceptionHandler> logger) : IExceptionHandler
 {
     private sealed record Failure(int Status, string Code, string Message, object? Errors = null,
-        object? Released = null, object? Items = null);
+        object? Released = null, object? Items = null, object? Commitments = null);
 
     // Exact types first, then explicit base-type lookup. No scoped dependencies are captured.
     private static readonly IReadOnlyDictionary<Type, Func<Exception, Failure>> Mappings =
@@ -88,7 +88,7 @@ public sealed class FacilityExceptionHandler(ILogger<FacilityExceptionHandler> l
         }
         failure ??= new(500, discovery ? "INTERNAL_ERROR" : "INTERNAL_SERVER_ERROR", "An unexpected error occurred.");
         if (!await ApiErrors.WriteAsync(context, failure.Status, failure.Code, failure.Message,
-            failure.Errors ?? (discovery ? Array.Empty<object>() : null), failure.Released, failure.Items, ct)) return false;
+            failure.Errors ?? (discovery ? Array.Empty<object>() : null), failure.Released, failure.Items, failure.Commitments, ct)) return false;
         if (unexpected)
             logger.LogError("Facility request failed ({FailureType}); correlation {CorrelationId}.",
                 exception.GetType().FullName, ApiErrors.Correlation(context));

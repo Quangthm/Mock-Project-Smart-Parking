@@ -3,10 +3,13 @@ import { ParkingDateField } from "../../../components/forms/ParkingDateField"
 import { useEffect, useState, type FormEvent } from "react"
 import { Badge, type BadgeTone } from "../../../components/ui/Badge"
 import { parkingApi, type MaintenanceWindow, type Structure } from "../../../lib/parkingApi"
+import { formatSlotLabel } from "../../../lib/operationalLayout"
 import {
   defaultExtensionEnd,
+  formatMaintenanceScope,
   isoToLocalInput,
   localInputToIso,
+  nextMaintenanceBoundaryMs,
   validateMaintenanceWindow,
   validateWindowExtension,
 } from "../../../lib/structureRules"
@@ -30,39 +33,51 @@ function formatInstant(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
+type RunAction = (action: () => Promise<unknown>, success?: string | ((result: unknown) => string)) => Promise<boolean>
+
+/** The UI reflects committed Facility maintenance schedules and async Operations sync state. */
+function enforcementNotice(_result: unknown, action: "scheduled" | "extended") {
+  return `Maintenance window ${action} and published to Operations.`
+}
+
 function enforcementCopy(window: MaintenanceWindow) {
   if (window.enforcementState === "acknowledged") {
-    return { tone: "success" as BadgeTone, label: "Enforced", help: "Admission acknowledged this closure." }
+    return { tone: "success" as BadgeTone, label: "Active schedule", help: "Committed by Facility and published to Operations." }
   }
   if (window.enforcementState === "failed") {
     return {
       tone: "danger" as BadgeTone,
       label: "Enforcement failed",
-      help: "This window is not in force. Admission may still accept bookings; re-read and reconcile before claiming the lot is closed.",
+      help: "Legacy window could not be confirmed; re-read and reconcile before claiming the lot is closed.",
     }
   }
   return {
     tone: "warning" as BadgeTone,
-    label: "Enforcement pending",
-    help: "Created as pending. It is not in force until admission acknowledges it; the lot reads as MAINTENANCE_UNCERTAIN, never closed.",
+    label: "Pending sync",
+    help: "Legacy pending window. Recreate or extend to publish via the event stream.",
   }
 }
 
 function WindowRow({
   siteId,
   window,
+  units,
+  slots,
   busy,
   run,
 }: {
   siteId: string
   window: MaintenanceWindow
+  units: Structure["units"]
+  slots: Structure["slots"]
   busy: boolean
-  run: (action: () => Promise<unknown>, success?: string) => Promise<boolean>
+  run: RunAction
 }) {
   const { confirm, confirmation } = useConfirmation()
   const [end, setEnd] = useState(isoToLocalInput(defaultExtensionEnd(window.end)))
   const [error, setError] = useState("")
   const enforcement = enforcementCopy(window)
+  const scope = formatMaintenanceScope(window, units, slots, formatSlotLabel)
 
   async function extend() {
     const iso = localInputToIso(end)
@@ -74,7 +89,7 @@ function WindowRow({
     setError("")
     await run(
       () => parkingApi.extendMaintenanceWindow(siteId, window.id, iso!),
-      "Maintenance window extended. Enforcement was reset to pending.",
+      (result) => enforcementNotice(result, "extended"),
     )
   }
 
@@ -96,6 +111,9 @@ function WindowRow({
             {formatInstant(window.start)} <span className="text-[var(--muted)]">→</span> {formatInstant(window.end)}
           </p>
           <p className="mt-0.5 text-xs text-[var(--muted)]">{window.reason || "No reason recorded."}</p>
+          <p className="mt-1">
+            <Badge tone="muted">{scope}</Badge>
+          </p>
           <p className="mt-1 text-[11px] text-[var(--muted)]">{enforcement.help}</p>
         </div>
         <Badge tone={enforcement.tone}>{enforcement.label}</Badge>
@@ -123,17 +141,24 @@ function WindowRow({
 
 function WindowComposer({
   siteId,
+  units,
+  slots,
   busy,
   run,
 }: {
   siteId: string
+  units: Structure["units"]
+  slots: Structure["slots"]
   busy: boolean
-  run: (action: () => Promise<unknown>, success?: string) => Promise<boolean>
+  run: RunAction
 }) {
   const oneHour = 60 * 60 * 1000
   const [start, setStart] = useState(() => isoToLocalInput(new Date(Date.now() + oneHour).toISOString()))
   const [end, setEnd] = useState(() => isoToLocalInput(new Date(Date.now() + oneHour * 2).toISOString()))
   const [reason, setReason] = useState("")
+  const [scope, setScope] = useState<"site" | "unit" | "slot">("site")
+  const [unitId, setUnitId] = useState("")
+  const [slotId, setSlotId] = useState("")
   const [error, setError] = useState("")
 
   async function submit(event: FormEvent) {
@@ -149,6 +174,15 @@ function WindowComposer({
       setError("Provide a reason (1–2000 characters).")
       return
     }
+    const selectedSlot = scope === "slot" ? slots.find((candidate) => candidate.id === slotId) : undefined
+    if (scope === "unit" && !unitId) {
+      setError("Select the floor, zone or block this closure covers.")
+      return
+    }
+    if (scope === "slot" && !selectedSlot) {
+      setError("Select the bay this closure covers.")
+      return
+    }
     setError("")
     const ok = await run(
       () =>
@@ -156,8 +190,11 @@ function WindowComposer({
           start: startIso!,
           end: endIso!,
           reason: reason.trim(),
+          ...(scope === "unit" ? { unitId } : {}),
+          // A slot-scoped window must also name its unit (`ck_window_scope`).
+          ...(scope === "slot" ? { unitId: selectedSlot!.unitId, slotId: selectedSlot!.id } : {}),
         }),
-      "Maintenance window recorded. Enforcement starts as pending.",
+      (result) => enforcementNotice(result, "scheduled"),
     )
     if (ok) {
       setReason("")
@@ -173,6 +210,61 @@ function WindowComposer({
           onChange={value => { setStart(value); setError("") }} />
         <ParkingDateField label="End" withTime value={end} min={start} disabled={busy}
           onChange={value => { setEnd(value); setError("") }} />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className={labelClass}>
+          <span>Scope</span>
+          <select
+            className={inputClass}
+            value={scope}
+            disabled={busy}
+            onChange={(event) => {
+              setScope(event.target.value as "site" | "unit" | "slot")
+              setError("")
+            }}
+          >
+            <option value="site">Whole site</option>
+            <option value="unit">Floor / Zone / Block</option>
+            <option value="slot">Specific bay</option>
+          </select>
+        </label>
+        {scope === "unit" && (
+          <label className={labelClass}>
+            <span>Unit</span>
+            <select
+              className={inputClass}
+              value={unitId}
+              disabled={busy}
+              onChange={(event) => { setUnitId(event.target.value); setError("") }}
+            >
+              <option value="">Select a unit…</option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.id}>{`${unit.type}: ${unit.name}`}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {scope === "slot" && (
+          <label className={labelClass}>
+            <span>Bay</span>
+            <select
+              className={inputClass}
+              value={slotId}
+              disabled={busy}
+              onChange={(event) => { setSlotId(event.target.value); setError("") }}
+            >
+              <option value="">Select a bay…</option>
+              {slots.map((slot) => {
+                const parent = units.find((unit) => unit.id === slot.unitId)
+                return (
+                  <option key={slot.id} value={slot.id}>
+                    {`${formatSlotLabel(slot.code)} — ${parent?.name ?? "Unassigned"}`}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+        )}
       </div>
       <p className="text-[11px] text-[var(--muted)]">
         Half-open <strong>[start, end)</strong>: the lot stops accepting new commitments at the start and serves again at
@@ -236,6 +328,17 @@ export function ServiceAvailabilityPanel({
   }, [siteId, serviceState])
 
   const windows = serviceState?.windows ?? fallbackWindows ?? []
+  const hasPendingWindow = windows.some((window) => !window.cancelledAt && window.enforcementState === "pending")
+
+  // Exactly one single-shot timer at the next window boundary; no polling interval.
+  // The extra second lets the server clock pass the boundary before the re-read.
+  useEffect(() => {
+    const delayMs = nextMaintenanceBoundaryMs(windows)
+    if (delayMs === null) return
+    const timer = window.setTimeout(() => onChanged(), Math.min(delayMs + 1000, 2_147_483_647))
+    return () => window.clearTimeout(timer)
+  }, [windows, onChanged])
+
   const lifecycleInactive =
     structure.site.isActive === false || structure.site.status === "INACTIVE" || structure.site.status === "SUSPENDED"
 
@@ -294,14 +397,26 @@ export function ServiceAvailabilityPanel({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          className={lifecycleInactive ? "btn-primary px-3 py-1.5 text-xs" : "btn-outline px-3 py-1.5 text-xs"}
-          onClick={toggleLifecycle}
-          disabled={busy}
-        >
-          {lifecycleInactive ? "Activate lot" : "Deactivate lot now"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {hasPendingWindow && (
+            <button
+              type="button"
+              className="btn-ghost px-3 py-1.5 text-xs"
+              onClick={onChanged}
+              disabled={busy}
+            >
+              Refresh status
+            </button>
+          )}
+          <button
+            type="button"
+            className={lifecycleInactive ? "btn-primary px-3 py-1.5 text-xs" : "btn-outline px-3 py-1.5 text-xs"}
+            onClick={toggleLifecycle}
+            disabled={busy}
+          >
+            {lifecycleInactive ? "Activate lot" : "Deactivate lot now"}
+          </button>
+        </div>
       </div>
 
       <StructureFeedback error={error} notice={notice} fallback="The availability change failed." />
@@ -316,14 +431,14 @@ export function ServiceAvailabilityPanel({
           ) : (
             <ul className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)]">
               {windows.map((window) => (
-                <WindowRow key={window.id} siteId={siteId} window={window} busy={busy} run={run} />
+                <WindowRow key={window.id} siteId={siteId} window={window} units={structure.units} slots={structure.slots} busy={busy} run={run} />
               ))}
             </ul>
           )}
         </div>
         <div className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Schedule a closure</h3>
-          <WindowComposer siteId={siteId} busy={busy} run={run} />
+          <WindowComposer siteId={siteId} units={structure.units} slots={structure.slots} busy={busy} run={run} />
         </div>
       </div>
     </section>

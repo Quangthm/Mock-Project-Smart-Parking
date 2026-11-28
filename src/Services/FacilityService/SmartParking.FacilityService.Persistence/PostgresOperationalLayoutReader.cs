@@ -2,6 +2,7 @@ using System.Data;
 using System.Text.Json;
 using Npgsql;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Helpers;
 using SmartParking.FacilityService.Domain;
 
 namespace SmartParking.FacilityService.Persistence;
@@ -29,9 +30,9 @@ public sealed class PostgresOperationalLayoutReader(NpgsqlDataSource source) : I
         await using var db = await source.OpenConnectionAsync(ct);
         await using var tx = await db.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
 
-        Guid siteKey; Guid siteTenantId; string siteCode; string siteName;
+        Guid siteKey; Guid siteTenantId; string siteCode; string siteName; string siteStatus;
         await using (var cmd = Command(db, tx, """
-            SELECT s.id, s.tenant_id, s.site_code, s.name
+            SELECT s.id, s.tenant_id, s.site_code, s.name, s.status
             FROM parking_sites s
             JOIN tenants t ON t.id = s.tenant_id
             WHERE s.id = $1
@@ -49,6 +50,7 @@ public sealed class PostgresOperationalLayoutReader(NpgsqlDataSource source) : I
             siteTenantId = r.GetGuid(1);
             siteCode = r.GetString(2);
             siteName = r.GetString(3);
+            siteStatus = r.GetString(4);
         }
 
         var units = new List<UnitRow>();
@@ -101,7 +103,75 @@ public sealed class PostgresOperationalLayoutReader(NpgsqlDataSource source) : I
             motorcycleCapacityRows = r.GetInt32(1);
         }
 
+        // Live maintenance windows for this site, read in the same RepeatableRead snapshot.
+        var windows = new List<MaintenanceWindow>();
+        await using (var cmd = Command(db, tx, """
+            SELECT id, tenant_id, site_id, unit_id, slot_id, lower(service_window), upper(service_window),
+                   reason, created_by, created_at, cancelled_at, enforcement_state, enforcement_ref, acknowledged_at
+            FROM structure_maintenance_windows
+            WHERE site_id=$1 AND tenant_id=$2 AND cancelled_at IS NULL
+            ORDER BY lower(service_window)
+            """, siteId, siteTenantId))
+        await using (var r = await cmd.ExecuteReaderAsync(ct))
+            while (await r.ReadAsync(ct))
+                windows.Add(new MaintenanceWindow(
+                    r.GetGuid(0), r.GetGuid(1), r.GetGuid(2),
+                    r.IsDBNull(3) ? null : r.GetGuid(3),
+                    r.IsDBNull(4) ? null : r.GetGuid(4),
+                    AsUtc(r.GetDateTime(5)).UtcDateTime,
+                    AsUtc(r.GetDateTime(6)).UtcDateTime,
+                    r.GetString(7),
+                    r.GetGuid(8),
+                    AsUtc(r.GetDateTime(9)).UtcDateTime,
+                    r.IsDBNull(10) ? null : AsUtc(r.GetDateTime(10)).UtcDateTime,
+                    r.GetString(11),
+                    r.IsDBNull(12) ? null : r.GetGuid(12),
+                    r.IsDBNull(13) ? null : AsUtc(r.GetDateTime(13)).UtcDateTime));
+
+        // Live emergency restrictions in the same RepeatableRead snapshot. They hide capacity
+        // immediately, regardless of whether Operations reconciliation has completed.
+        var restrictions = new List<EmergencyRestriction>();
+        await using (var cmd = Command(db, tx, """
+            SELECT id, tenant_id, site_id, mode, scope, unit_id, slot_id, affected_slot_ids,
+                   reason, effective_from, effective_until, created_by, created_at, released_at, released_by
+            FROM structure_emergency_restrictions
+            WHERE site_id=$1 AND tenant_id=$2 AND released_at IS NULL
+              AND (effective_until IS NULL OR effective_until > now())
+            ORDER BY created_at
+            """, siteId, siteTenantId))
+        await using (var r = await cmd.ExecuteReaderAsync(ct))
+            while (await r.ReadAsync(ct))
+                restrictions.Add(new EmergencyRestriction(
+                    r.GetGuid(0), r.GetGuid(1), r.GetGuid(2),
+                    r.GetString(3), r.GetString(4),
+                    r.IsDBNull(5) ? null : r.GetGuid(5),
+                    r.IsDBNull(6) ? null : r.GetGuid(6),
+                    JsonSerializer.Deserialize<List<Guid>>(r.GetString(7)) ?? [],
+                    r.GetString(8),
+                    AsUtc(r.GetDateTime(9)),
+                    r.IsDBNull(10) ? null : AsUtc(r.GetDateTime(10)),
+                    r.GetGuid(11),
+                    AsUtc(r.GetDateTime(12)),
+                    r.IsDBNull(13) ? null : AsUtc(r.GetDateTime(13)),
+                    r.IsDBNull(14) ? null : r.GetGuid(14)));
+
         await tx.CommitAsync(ct);
+
+        // Zero windows keeps ServiceAvailability null so the v1.2.0 wire shape is untouched.
+        var overlay = windows.Count == 0
+            ? null
+            : new OperationalMaintenanceOverlay(
+                windows,
+                siteStatus,
+                DateTime.UtcNow,
+                unitById.ToDictionary(pair => pair.Key, pair => pair.Value.ParentId));
+
+        var restrictionOverlay = restrictions.Count == 0
+            ? null
+            : new OperationalRestrictionOverlay(
+                restrictions,
+                DateTime.UtcNow,
+                unitById.ToDictionary(pair => pair.Key, pair => pair.Value.ParentId));
 
         var floors = units
             .Where(unit => unit.Type == UnitType.FLOOR)
@@ -111,7 +181,12 @@ public sealed class PostgresOperationalLayoutReader(NpgsqlDataSource source) : I
             .ToArray();
 
         var projected = rows
-            .Select(row => new ProjectedSlot(row.UnitId, Project(row, unitById)))
+            .Select(row =>
+            {
+                var dto = Project(row, unitById);
+                var maintained = overlay?.Apply(dto, row.UnitId) ?? dto;
+                return new ProjectedSlot(row.UnitId, restrictionOverlay?.Apply(maintained, row.UnitId) ?? maintained);
+            })
             .ToArray();
 
         // Post-mask counts are computed over the full unfiltered row set. The filtered slots[]
@@ -189,7 +264,8 @@ public sealed class PostgresOperationalLayoutReader(NpgsqlDataSource source) : I
                         Math.Max(0, motorcycleMaxCapacity - motorcycleOccupied)),
                     zoneCapacities),
                 floors,
-                filtered.ToArray()),
+                filtered.ToArray(),
+                ServiceAvailability: overlay?.ServiceAvailability),
             maskedReservedCount,
             maskedZoneReservedCounts);
     }

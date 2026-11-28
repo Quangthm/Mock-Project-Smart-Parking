@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using SmartParking.Contracts.Facility;
 using SmartParking.FacilityService.Application;
+using SmartParking.FacilityService.Application.Common.Interfaces.Services;
 
 namespace SmartParking.FacilityService.Persistence;
 
@@ -10,7 +12,9 @@ namespace SmartParking.FacilityService.Persistence;
 // processed_events deduplicates by eventId, slot_sequence_watermarks rejects stale sequence
 // numbers for the same slot, and occupancy_release_ledger guarantees a session is released
 // at most once even if release events are redelivered.
-public sealed class OccupancyProjectionRepository(ParkingDbContext database) : IOccupancyProjectionRepository
+public sealed class OccupancyProjectionRepository(
+    ParkingDbContext database,
+    ILayoutInvalidationPublisher? layoutInvalidations = null) : IOccupancyProjectionRepository
 {
     public async Task<bool> ApplyAsync(OccupancyProjectionEvent projectionEvent, CancellationToken ct)
     {
@@ -34,6 +38,7 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
         }
 
         var applied = false;
+        Guid? mutatedTenantId = null;
         if (projectionEvent.SlotId is { } slot)
         {
             // The reservation snapshot includes operational slot state. Share the site fence before
@@ -43,18 +48,30 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
             if (!await IsFreshAsync(db, tx, slot, projectionEvent.SequenceNumber, ct))
                 return false;
 
-            switch (projectionEvent.EventType)
+            mutatedTenantId = projectionEvent.EventType switch
             {
-                case "SlotStateChanged":
-                    await ApplySlotStateAsync(db, tx, slot, projectionEvent.SiteId, projectionEvent.PhysicalState, ct);
-                    break;
-                case "OccupancyReleased":
-                    await ApplyReleaseAsync(db, tx, projectionEvent.EventId, slot, projectionEvent.SiteId, projectionEvent.OccurredAt, projectionEvent.SessionId, ct);
-                    break;
-            }
+                "SlotStateChanged" => await ApplySlotStateAsync(
+                    db, tx, slot, projectionEvent.SiteId, projectionEvent.PhysicalState, ct),
+                "OccupancyReleased" => await ApplyReleaseAsync(
+                    db, tx, projectionEvent.EventId, slot, projectionEvent.SiteId,
+                    projectionEvent.OccurredAt, projectionEvent.SessionId, ct),
+                _ => null
+            };
 
             await AdvanceWatermarkAsync(db, tx, slot, projectionEvent.SequenceNumber, ct);
             applied = true;
+        }
+
+        if (mutatedTenantId is { } tenantId && layoutInvalidations is not null)
+        {
+            await layoutInvalidations.StageAsync(
+                projectionEvent.EventId,
+                tenantId,
+                projectionEvent.SiteId,
+                [LayoutInvalidationResources.FullLayout, LayoutInvalidationResources.CapacitySummary],
+                ct);
+            if (database.ChangeTracker.HasChanges())
+                await database.SaveChangesAsync(ct);
         }
 
         return applied;
@@ -70,7 +87,7 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
         return last is null || Convert.ToInt64(last) < sequenceNumber;
     }
 
-    private static async Task ApplySlotStateAsync(
+    private static async Task<Guid?> ApplySlotStateAsync(
         NpgsqlConnection db, NpgsqlTransaction tx, Guid slotId, Guid siteId, string? physicalState, CancellationToken ct)
     {
         var state = string.IsNullOrWhiteSpace(physicalState) ? "OCCUPIED" : physicalState;
@@ -78,16 +95,18 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
             UPDATE parking_slots
             SET physical_state = $2, updated_at = now()
             WHERE id = $1 AND site_id = $3 AND deleted_at IS NULL
+              AND physical_state IS DISTINCT FROM $2
+            RETURNING tenant_id
             """, db, tx);
         command.Parameters.AddWithValue(slotId);
         command.Parameters.AddWithValue(state);
         command.Parameters.AddWithValue(siteId);
-        await command.ExecuteNonQueryAsync(ct);
+        return await command.ExecuteScalarAsync(ct) as Guid?;
     }
 
     // Release-once (G3): the ledger insert decides whether the slot may be freed. A replay of the
     // same session finds the ledger row already present and the UPDATE matches no rows.
-    private static async Task ApplyReleaseAsync(
+    private static async Task<Guid?> ApplyReleaseAsync(
         NpgsqlConnection db,
         NpgsqlTransaction tx,
         Guid eventId,
@@ -97,7 +116,7 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
         Guid? sessionId,
         CancellationToken ct)
     {
-        if (sessionId is not { } session) return;
+        if (sessionId is not { } session) return null;
         await using var command = new NpgsqlCommand("""
             WITH ledger AS (
                 INSERT INTO occupancy_release_ledger (event_id, session_id, slot_id, released_at, processed_at)
@@ -110,13 +129,14 @@ public sealed class OccupancyProjectionRepository(ParkingDbContext database) : I
             FROM ledger
             WHERE slot.id = $3 AND slot.site_id = $5
               AND slot.physical_state = 'OCCUPIED' AND slot.deleted_at IS NULL
+            RETURNING slot.tenant_id
             """, db, tx);
         command.Parameters.AddWithValue(eventId);
         command.Parameters.AddWithValue(session);
         command.Parameters.AddWithValue(slotId);
         command.Parameters.AddWithValue(occurredAt);
         command.Parameters.AddWithValue(siteId);
-        await command.ExecuteNonQueryAsync(ct);
+        return await command.ExecuteScalarAsync(ct) as Guid?;
     }
 
     private static async Task AdvanceWatermarkAsync(

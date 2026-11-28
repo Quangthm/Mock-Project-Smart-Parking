@@ -11,6 +11,9 @@ public interface IOccupancyOutboxStore
 {
     void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt);
 
+    void AddSnapshotRequired(Guid siteId, DateTimeOffset occurredAt, IReadOnlyList<string>? affectedResources) =>
+        AddSnapshotRequired(siteId, occurredAt);
+
     Task<IReadOnlyList<OutboxMessage>> ClaimBatchAsync(
         int batchSize,
         TimeSpan leaseDuration,

@@ -295,6 +295,7 @@ function dashboardScreen(h, api, watchOperators = () => () => {}) {
     '../parking-lots/CreateParkingLotForOwner': { OnboardingWizard: 'onboarding' },
     './OwnerOverview': { OwnerOverview: 'overview' },
     '../operators/OperatorManagement': { OperatorManagement: 'operators' },
+    '../passes/OwnerPassPlans': { OwnerPassPlans: 'passes' },
     '../policies/PolicySettings': { PolicySettings: 'policies' },
     '../parking-lots/SiteManagement': { SiteManagement: 'sites' },
     '../parking-lots/LotManagement': { LotManagement: 'lots' },

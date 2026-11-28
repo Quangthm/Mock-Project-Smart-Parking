@@ -20,8 +20,10 @@ import {
 } from "../../../lib/operationalLayout"
 import { SlotInspectionModal } from "./SlotInspectionModal"
 import type { OperatorSite } from "../../../lib/operatorApi"
+import type { LayoutConnectionState, LayoutSyncOutcome } from "../../../lib/operatorLayoutLive"
 import { SlotManagement } from "../parking-slots/SlotManagement"
 import { useLotStatus, floorKeyFor, type LotVisualFilter } from "./useLotStatus"
+import { formatMaintenanceScope } from "../../../lib/structureRules"
 
 interface LotStatusProps {
   lot: OperatorSite | null
@@ -30,6 +32,8 @@ interface LotStatusProps {
   layout?: OperationalLayoutProjection | null
   onRefreshLayout?: () => Promise<OperationalLayoutProjection | null | void>
   refreshOnResume?: boolean
+  connectionState?: LayoutConnectionState
+  syncState?: LayoutSyncOutcome | "pending"
 }
 
 const KPI_ORDER: SlotVisualState[] = [
@@ -113,6 +117,12 @@ function slotStateStyle(state: SlotVisualState): CSSProperties | undefined {
   return { borderColor: hex, backgroundColor: `${hex}1f`, color: hex }
 }
 
+const SERVICE_AVAILABILITY_LABELS: Record<string, string> = {
+  MAINTENANCE: "Closed for maintenance",
+  MAINTENANCE_UNCERTAIN: "Maintenance in progress (enforcement unconfirmed)",
+  SCHEDULED: "Maintenance scheduled",
+}
+
 export function LotStatus({
   lot,
   initialSlotCode = "",
@@ -120,19 +130,23 @@ export function LotStatus({
   layout: layoutProp,
   onRefreshLayout,
   refreshOnResume,
+  connectionState,
+  syncState,
 }: LotStatusProps) {
   const [slotOperations, setSlotOperations] = useState(initialStatusFilter === "maintenance" ? "maintenance" : "backup")
   const {
     viewMode, setViewMode, selectedFloor, setSelectedFloor, selectedZone, setSelectedZone,
     vehicleTypeFilter, setVehicleTypeFilter, statusFilter, setStatusFilter, searchQuery, setSearchQuery,
     inspectedSlot, setInspectedSlot, threeError, setThreeError, isOutdoor, availableZones,
-    site, allSlots, filteredSlots, counts, slotView, layout,
+    site, allSlots, filteredSlots, counts, slotView, layout, serviceAvailability,
     scanSlots, isScanning, lastScanAt, scanError,
     isStale, staleAgeSeconds, isRefreshing, refreshLayout,
   } = useLotStatus(lot, initialSlotCode, initialStatusFilter, {
     layout: layoutProp,
     refreshLayout: onRefreshLayout,
     refreshOnResume,
+    connectionState,
+    syncState,
   })
 
   // A live status change can move a slot out of the current filter while its
@@ -200,6 +214,23 @@ export function LotStatus({
             <UntitledIcon name="clipboard" size={13} /> Slot List
           </button>
         </div>} />
+
+      {serviceAvailability && SERVICE_AVAILABILITY_LABELS[serviceAvailability.state] && (
+        <section aria-label="Service availability" className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <ParkingStatus status="maintenance" />
+            <span className="font-semibold text-[var(--fg)]">{SERVICE_AVAILABILITY_LABELS[serviceAvailability.state]}</span>
+            {serviceAvailability.closedUntil && (
+              <span className="text-[var(--muted)]">until {new Date(serviceAvailability.closedUntil).toLocaleString()}</span>
+            )}
+            <span className="text-[var(--muted)]">
+              {serviceAvailability.activeWindows.length} active schedule{serviceAvailability.activeWindows.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {serviceAvailability.reason && <p className="mt-1 text-[var(--muted)]">{serviceAvailability.reason}</p>}
+          <p className="mt-1 text-[var(--muted)]">Read-only: the parking owner manages maintenance schedules.</p>
+        </section>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[var(--muted)]">
@@ -351,7 +382,7 @@ export function LotStatus({
             >
               <option value="all">All Zones</option>
               {availableZones.map((z) => (
-                <option key={z.id} value={z.name.slice(0, 1)}>
+                <option key={z.id} value={z.id}>
                   {z.name}
                 </option>
               ))}
@@ -566,6 +597,37 @@ export function LotStatus({
           </div>
           {slotOperations === "maintenance" && <section className="grid gap-3" aria-label="Slots under maintenance">
             <p className="text-sm text-[var(--muted)]">Review bays reported under maintenance. The parking owner manages maintenance schedules.</p>
+            {serviceAvailability && serviceAvailability.activeWindows.length > 0 && (
+              <section className="grid gap-2 rounded-xl border border-[var(--border)] p-3" aria-label="Owner maintenance schedules">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Owner maintenance schedules</h3>
+                <ul className="grid gap-2">
+                  {serviceAvailability.activeWindows.map(window => (
+                    <li key={window.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-[var(--border)] p-2 text-xs">
+                      <span className="min-w-0 break-words">
+                        <span className="font-semibold text-[var(--fg)]">{new Date(window.start).toLocaleString()}</span>
+                        <span className="text-[var(--muted)]"> → {new Date(window.end).toLocaleString()}</span>
+                        <span className="block text-[var(--muted)]">
+                          {formatMaintenanceScope(
+                            window,
+                            site.units,
+                            site.slots.map(slot => ({ id: slot.id, code: slot.number, unitId: slot.unitId })),
+                            formatSlotLabel,
+                          )}
+                        </span>
+                        <span className="block text-[var(--muted)]">{window.reason || "No reason recorded."}</span>
+                      </span>
+                      <span className={window.enforcementState === "acknowledged" ? "rounded-full border border-[var(--border)] px-2 py-0.5 font-semibold text-[var(--fg)]" : "rounded-full border border-[var(--border)] px-2 py-0.5 text-[var(--muted)]"}>
+                        {window.enforcementState === "acknowledged"
+                          ? "Enforced"
+                          : window.enforcementState === "failed"
+                            ? "Enforcement failed"
+                            : "Enforcement pending"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {maintenanceSlots.length === 0 ? <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted)]">No bays are reported under maintenance.</p> :
               <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {maintenanceSlots.map(slot => <li key={slot.id}>

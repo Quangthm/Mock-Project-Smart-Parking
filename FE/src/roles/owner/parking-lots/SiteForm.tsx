@@ -45,7 +45,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
   const {
     formId, hasSavedSetup, lotType, chooseLotType, selectedCity, district, setDistrict, ward, setWard,
     streetAddress, setStreetAddress, addressChanged, isManualCode, form, setForm, locationConfirmed, markAddressChanged, setConfirmedLocation,
-    devices, setDevices, busy, updatingStatus, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel,
+    devices, setDevices, busy, updatingStatus, error, computedCode, fullAddress, modelCapacity, modelError, customModelFileName, uploadModel, maxFloors,
     handleCityChange, handleNameChange, submit, cancel,
   } = useSiteForm(site, onSaved, onCancel)
   const [otherDistrict, setOtherDistrict] = useState(() => Boolean(district && !DISTRICTS_BY_PROVINCE[selectedCity]?.includes(district)))
@@ -274,7 +274,7 @@ export function SiteForm({ site, onSaved, onCancel }: {
                 id={`${formId}-slots`}
                 className="input"
                 type="number"
-                value={modelCapacity.capacity ?? site?.totalPhysicalCapacity ?? ""}
+                value={form.totalSlots}
                 placeholder="—"
                 readOnly
                 aria-readonly="true"
@@ -297,14 +297,17 @@ export function SiteForm({ site, onSaved, onCancel }: {
                   className="input"
                   type="number"
                   min={1}
-                  max={20}
+                  max={maxFloors}
                   value={form.floors}
                   onChange={(e) => setForm((c) => ({ ...c, floors: e.target.value }))}
                   required
                 />
-                {modelCapacity.capacity !== null && parseInt(form.floors, 10) > 0 && (
+                <p className="mt-1 text-[11px] text-[var(--muted)]">
+                  This parking type supports at most {maxFloors} level{maxFloors === 1 ? "" : "s"}.
+                </p>
+                {modelCapacity.capacity !== null && Number.isInteger(Number(form.floors)) && Number(form.floors) > 0 && Number(form.floors) <= maxFloors && (
                   <p className="mt-1 text-[11px] text-[var(--muted)]">
-                    ~ {Math.ceil(modelCapacity.capacity / parseInt(form.floors, 10))} spaces / level
+                    ~ {Math.ceil(modelCapacity.capacity / Number(form.floors))} spaces / level
                   </p>
                 )}
               </div>

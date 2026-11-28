@@ -8,9 +8,10 @@ import type { OperatorSite } from "../../../lib/operatorApi"
 interface OperatorAssignmentsProps {
   currentLot?: OperatorSite | null
   sites?: OperatorSite[]
+  onRefreshSites?: () => void
 }
 
-export function OperatorAssignments({ currentLot, sites = [] }: OperatorAssignmentsProps) {
+export function OperatorAssignments({ currentLot, sites = [], onRefreshSites }: OperatorAssignmentsProps) {
   const { user } = useApp()
   const [assignments, setAssignments] = useState<OperatorAssignment[]>([])
   const [error, setError] = useState("")
@@ -52,7 +53,10 @@ export function OperatorAssignments({ currentLot, sites = [] }: OperatorAssignme
           type="button"
           className="btn-outline text-xs py-2 px-3 self-start sm:self-auto"
           disabled={loading}
-          onClick={() => setReload((v) => v + 1)}
+          onClick={() => {
+            setReload((v) => v + 1)
+            onRefreshSites?.()
+          }}
         >
           <UntitledIcon name="activity" size={14} /> Refresh Roster
         </button>} />

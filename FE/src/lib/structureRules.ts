@@ -366,6 +366,53 @@ export function defaultExtensionEnd(endIso: string): string {
 }
 
 
+/**
+ * Milliseconds until the next maintenance boundary (a window `start` or `end`)
+ * that is still in the future. Cancelled windows and past instants are ignored,
+ * so callers can schedule exactly one single-shot timer instead of polling.
+ */
+export function nextMaintenanceBoundaryMs(
+  windows: ReadonlyArray<{ start: string; end: string; cancelledAt?: string | null }>,
+  nowMs: number = Date.now(),
+): number | null {
+  const future: number[] = []
+  for (const window of windows) {
+    if (window.cancelledAt) continue
+    for (const value of [window.start, window.end]) {
+      const parsed = Date.parse(value)
+      if (!Number.isNaN(parsed) && parsed > nowMs) future.push(parsed)
+    }
+  }
+  if (future.length === 0) return null
+  return Math.min(...future) - nowMs
+}
+
+/**
+ * Human-readable maintenance scope: `Whole site`, `<Type>: <Name>` for a unit,
+ * or `<bay label> (<unit name>)` for a single bay. Accepts an optional label
+ * formatter so this module stays free of imports from the operator/3d modules.
+ */
+export function formatMaintenanceScope(
+  window: { unitId?: string | null; slotId?: string | null },
+  units: ReadonlyArray<{ id: string; name: string; type?: string }>,
+  slots: ReadonlyArray<{ id: string; code: string; unitId?: string | null }>,
+  labelFormatter: (code: string) => string = (code) => code,
+): string {
+  if (!window.unitId && !window.slotId) return "Whole site"
+
+  if (window.slotId) {
+    const slot = slots.find((candidate) => candidate.id === window.slotId)
+    const label = labelFormatter(slot ? slot.code : window.slotId.slice(0, 8))
+    const parentId = slot?.unitId ?? window.unitId
+    const unit = parentId ? units.find((candidate) => candidate.id === parentId) : undefined
+    return unit ? `${label} (${unit.name})` : label
+  }
+
+  const unit = units.find((candidate) => candidate.id === window.unitId)
+  if (!unit) return `Unit ${window.unitId!.slice(0, 8)}`
+  return unit.type ? `${unit.type}: ${unit.name}` : unit.name
+}
+
 /** Resolves declared or fallback vehicle categories for a slot. */
 export function categoriesOfSlot(slot: { vehicleTypes?: string[]; primaryVehicleType?: string | null; vehicleType?: string }): string[] {
   return slot.vehicleTypes && slot.vehicleTypes.length > 0

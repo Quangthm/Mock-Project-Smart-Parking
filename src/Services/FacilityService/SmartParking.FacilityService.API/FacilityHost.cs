@@ -5,10 +5,12 @@ using Npgsql;
 using SmartParking.FacilityService.API.Middleware;
 using SmartParking.FacilityService.Application;
 using SmartParking.FacilityService.Application.Common.Interfaces.Persistence;
+using SmartParking.FacilityService.Application.Common.Interfaces.Services;
 using SmartParking.FacilityService.Application.DTOs;
 using SmartParking.FacilityService.Domain;
 using SmartParking.FacilityService.Persistence;
 using SmartParking.FacilityService.Infrastructure;
+using SmartParking.FacilityService.Infrastructure.Messaging;
 using SmartParking.FacilityService.Application.Reservations;
 
 namespace SmartParking.FacilityService.API;
@@ -72,10 +74,12 @@ public static class FacilityHost
         builder.Services.AddScoped<OperatorOperationsService>();
         builder.Services.AddScoped<IOperatorGateSlotRepository, OperatorGateSlotRepository>();
         builder.Services.AddScoped<IMaintenanceWindowStore, PostgresMaintenanceWindowStore>();
+        builder.Services.AddScoped<IEmergencyRestrictionStore, PostgresEmergencyRestrictionStore>();
+        builder.Services.AddHostedService<MaintenanceBoundaryTickerWorker>();
 
         // Application Layer CQRS & Pipeline Behaviors
         builder.Services.AddApplicationServices();
-        builder.Services.AddReservationSlotMessaging(builder.Configuration);
+        builder.Services.AddFacilityMessaging(builder.Configuration);
         builder.Services.AddExceptionHandler<FacilityExceptionHandler>();
         ApiErrors.Configure(builder.Services);
         builder.Services.AddReservationServiceAuthentication(builder.Configuration);

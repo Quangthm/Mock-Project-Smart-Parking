@@ -107,6 +107,8 @@ services:
       SMARTPARK_RABBITMQ_PORT: "5672"
       SMARTPARK_RABBITMQ_VHOST: ${SMARTPARK_RABBITMQ_VHOST:-smartpark}
       ConnectionStrings__Parking: "Host=facility-db;Port=5432;Database=smartpark_facility;Username=smartpark_facility;Password=${SMARTPARK_DEV_PASSWORD:?Set SMARTPARK_DEV_PASSWORD}"
+      Messaging__LayoutOutboxEnabled: ${SMARTPARK_FACILITY_LAYOUT_OUTBOX_ENABLED:-false}
+      Messaging__OutboxDeliveryEnabled: ${SMARTPARK_FACILITY_OUTBOX_DELIVERY_ENABLED:-true}
       # SPARK-244 realtime: enables OccupancyProjectionWorker (unset -> consumer stays off).
       RabbitMq__ConnectionString: "amqp://${SMARTPARK_RABBITMQ_USER:-smartpark}:${SMARTPARK_RABBITMQ_PASSWORD:?Set SMARTPARK_RABBITMQ_PASSWORD}@rabbitmq:5672/${SMARTPARK_RABBITMQ_VHOST:-smartpark}"
     ports:
@@ -143,6 +145,8 @@ services:
       ReservationAdmission__BrokerPassword: ${SMARTPARK_RESERVATION_OPERATION_BROKER_PASSWORD:-}
       Messaging__OutboxDeliveryEnabled: "${Messaging__OutboxDeliveryEnabled:-false}"
       Messaging__Enabled: ${SMARTPARK_MESSAGING_ENABLED:-true}
+      Messaging__LayoutRelayEnabled: ${SMARTPARK_OPERATION_LAYOUT_RELAY_ENABLED:-false}
+      Realtime__SharedMultiSiteHubEnabled: ${SMARTPARK_REALTIME_SHARED_HUB_ENABLED:-false}
       SMARTPARK_RABBITMQ_HOST: rabbitmq
       SMARTPARK_RABBITMQ_PORT: "5672"
       SMARTPARK_RABBITMQ_USER: ${SMARTPARK_RABBITMQ_USER:-smartpark}
