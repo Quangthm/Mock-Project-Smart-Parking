@@ -221,6 +221,8 @@ Example (synthetic): `GET /api/me/reservations?pageSize=20&from=2032-02-28T00:00
 {"success":true,"data":[{"reservationId":"11111111-1111-4111-8111-111111111111","state":"CONFIRMED","siteId":"22222222-2222-4222-8222-222222222222","requestedSlotId":null,"start":"2032-02-28T01:00:00Z","end":"2032-02-28T02:00:00Z","holdExpiresAt":null,"orderId":null,"bookedAmount":null,"depositAmount":null,"currency":null,"confirmedAt":null,"createdAt":"2032-02-27T00:00:00Z","vehicle":{"vehicleType":"CAR","displayLabel":"SYNTHETIC"}}]}
 ```
 
+**28 November target and integration gap.** FR-RES-10 requires the accepted outcome and recorded facility-failure reason through authorized reservation detail/history or supported notifications. Facility supplies the availability fact, Operations owns the reservation outcome and reason, and Payment owns financial outcomes. The current booking response shape below has no cancellation reason. See the [service-owner handoff](../../05-project-management/handoffs/2026-11-28-mvp-service-owner-handoff.md). Wire shape and integration remain open.
+
 Both list rows and `GET /api/me/reservations/{id}` (single booking object in `data`) add nullable `vehicle: {vehicleType, displayLabel}` from the owning reservation row. Missing vehicle evidence remains null; displayLabel uses stored original/normalized plate and can be null. No cross-service enrichment or invented plate. 401/403 remain JWT/role failures, foreign/missing detail remains 404, admission disabled remains 503. A dependency error never becomes an empty 200; existing error middleware determines the specific safe code.
 
 ### Assistant mapping, continuation and retry

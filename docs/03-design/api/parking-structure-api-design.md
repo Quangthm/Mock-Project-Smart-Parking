@@ -44,7 +44,7 @@ flowchart TD
     D --> O[Operationally open]
 ```
 
-Before opening, Facility checks approved/provisioned configuration, supported category/layout/capacity and service/open-state configuration; Operations validates accepted occupancy/claims, readiness for admission and safe capacity; Payment provides valid financial terms where sales require them. Current Owner/lot permissions apply. Unmet/unknown readiness blocks opening. Approval or an `isActive` value cannot stand in for all those checks (V11-DES-04).
+Before opening, Facility checks approved/provisioned configuration, supported category/layout/capacity and service/open-state configuration; Operations validates accepted occupancy/claims, readiness for admission and safe capacity; Payment provides valid financial terms where sales require them. The current Owner Account and actual ownership of the lot govern access. Unmet/unknown readiness blocks opening. Approval or an `isActive` value cannot stand in for all those checks (V11-DES-04).
 
 ## Existing structure route references
 
@@ -60,11 +60,11 @@ Retain these integration paths with canonical service ownership; they do not pro
 | `PATCH /api/parking-lots/{id}/structure` | Existing action discriminator: profile, active, renameUnit, capacity, removeUnit, removeSlot, moveSlot, configureSlot, removePath, backup, markBackup. Action-specific authorization and dependency checks. |
 | `POST /api/parking-lots/{id}/operations` | Existing `idempotencyKey`, `edit`, optional authorized `tenantId`; operation ID/status/reason/impact. Completed, pending and failed are distinct outcomes. |
 | `GET /api/parking-lots/{id}/operations/{operationId}` | Authorized operation scope; read success does not mean operation completed. |
-| `GET /api/parking-lots/{id}/operational-layout` | Operator holding explicit `SLOT_OVERRIDE` at that lot (UserService `api/operators/slot-scope?siteId=`, `SlotOperatorClient`). Returns the operational projection, not Owner layout CRUD authority. Read path owned by SPARK-228. |
+| `GET /api/parking-lots/{id}/operational-layout` | Target: assigned Operator for the requested site. Return scoped operational projection. Owner layout CRUD has separate authority. Read path owned by SPARK-228. |
 | `GET /api/parking-lots/{id}/operator-layout` | **A different route with different authority.** Assigned-lot Operator (UserService `api/operators/site-scope?siteId=`, `OperatorSiteClient`) reading the structural aggregate through `OperatorLayoutService`; it never takes an edit hold. It is not anonymous and not a Driver route. |
-| `POST /api/parking-lots/{id}/slots/{slotId}/backup` | Operator current lot `SLOT_OVERRIDE`, `reason`; eligible unoccupied/unprotected operational slot, audit and projection. Owner marking uses its explicit `BACKUP_MARK` action, not inherited authority. |
+| `POST /api/parking-lots/{id}/slots/{slotId}/backup` | Assigned Operator for operational backup marking; eligible unoccupied/unprotected slot, reason, audit and projection. An Owner uses only the separately documented Owner marking operation within an owned lot. |
 
-**Route-reconciliation note (F10).** Both Operator read routes exist in `Program.cs` today and are authorized differently: `/operational-layout` by lot-scoped `SLOT_OVERRIDE`, `/operator-layout` by assigned-lot operator scope. `3d-digital-twin-api-design.md`, `3d-digital-twin-spark-228-api-design.md` and `3d-digital-twin-spark-244-api-design.md` assert that the legacy route is `/operator-layout` at `Program.cs:142` and the canonical one is `/operational-layout` at `Program.cs:165`; the source has these line references **swapped** (`:142` is `/operational-layout`, `:165` is `/operator-layout`). That inversion is a SPARK-228/SPARK-244 documentation defect and is not corrected here. No route is added, renamed or removed by SPARK-238, and the Driver-facing discovery read remains unapproved (V11-DES-08).
+**Historical route-reconciliation note (F10).** The reviewed `Program.cs` then wired the two Operator read routes differently: `/operational-layout` by lot-scoped `SLOT_OVERRIDE`, `/operator-layout` by assigned-lot operator scope. `3d-digital-twin-api-design.md`, `3d-digital-twin-spark-228-api-design.md` and `3d-digital-twin-spark-244-api-design.md` assert that the legacy route is `/operator-layout` at `Program.cs:142` and the canonical one is `/operational-layout` at `Program.cs:165`; the source has these line references **swapped** (`:142` is `/operational-layout`, `:165` is `/operator-layout`). That inversion is a SPARK-228/SPARK-244 documentation defect and is not corrected here. No route is added, renamed or removed by SPARK-238, and the Driver-facing discovery read remains unapproved (V11-DES-08).
 
 Retain applicable profile bounds: code 1–50, name 1–255, address 1–2000; paired latitude/longitude within [-90,90]/[-180,180]. Unit names 1–100, layout capacity nonnegative with existing `0` unbounded-layout semantics; never interpret that as unlimited bookable capacity. Slot codes 1–50. Existing coordinate/features/map JSON serialization and 65,536-character bound are compatibility details, not permission to upload new 3D assets. The conflicting historic spatial enum sets (`FLOOR/ZONE/BLOCK` versus a longer hierarchy) and legacy OVERSIZED/EV enum values require Facility wire compatibility review under V11-DES-04; they do not approve extra vehicle products or EV charging. Fixed deployment models remain unchanged.
 
@@ -113,7 +113,7 @@ Tags: **CURRENT** = implemented behaviour at `e3a47fe1`; **PROPOSED** = wire cha
 | Rule | Contract |
 |---|---|
 | Authentication | Owner bearer session on every `GET/POST/PATCH/DELETE /api/parking-lots…` route. Missing/invalid → `401 UNAUTHENTICATED`. |
-| Permission | `PARKING_MANAGE` for all structure operations. `backup` requires `BACKUP_CONFIGURE`; `markBackup` requires `BACKUP_MARK`. Operator routes use `api/operators/site-scope?siteId=` instead. |
+| Role and resource scope | Owner of the relevant facility for documented configuration and Owner backup operations. Operator-only routes require an assigned Operator at the site. Preserve operation-specific safety checks. |
 | Tenant selection (**CURRENT**) | Optional `tenantId` (body or query). The value **selects** an authorized tenant and never grants one. Absent + exactly one authorized tenant → that tenant. Absent + several → `403 FORBIDDEN`. Value outside the caller's scope → `403 FORBIDDEN`. |
 | Site resolution (**CURRENT**) | The site must be live (`deleted_at IS NULL`) **and** owned by the selected tenant, otherwise `404 SITE_NOT_FOUND`. A foreign site id is indistinguishable from a missing one — no existence leak (A3). |
 | Child resolution (**CURRENT**) | Every `unitId` / `slotId` / `pathId` is resolved inside the already-loaded site. Ids from another site or tenant → `404 UNIT_NOT_FOUND` / `SLOT_NOT_FOUND` / `PATH_NOT_FOUND`. |
@@ -141,7 +141,7 @@ Tags: **CURRENT** = implemented behaviour at `e3a47fe1`; **PROPOSED** = wire cha
 | Row | Value |
 |---|---|
 | Availability | CURRENT |
-| Authentication / permission | Owner bearer; `PARKING_MANAGE` |
+| Authentication / scope | Owner bearer and owned facility |
 | Resource scope | Site of the selected tenant; `parentId` must be in the same site |
 | Request | `{ "type": "FLOOR\|ZONE\|BLOCK", "name": "string", "parentId": "uuid\|null", "capacity": 0, "tenantId": "uuid\|null" }` |
 | Response 200 | `{ "success": true, "data": "<unitId>" }` — the created or resurrected unit id |
@@ -162,7 +162,7 @@ Tags: **CURRENT** = implemented behaviour at `e3a47fe1`; **PROPOSED** = wire cha
 | Row | Value |
 |---|---|
 | Availability | CURRENT (single value) / **PROPOSED** (`vehicleTypes`) |
-| Authentication / permission | Owner bearer; `PARKING_MANAGE` |
+| Authentication / scope | Owner bearer and owned facility |
 | Resource scope | `unitId` must be a live unit of this site |
 | Headers | `Content-Type: application/json` |
 | Request | `{ "unitId": "uuid", "code": "A-01", "vehicleTypes": ["CAR","MOTORCYCLE"], "vehicleType": "CAR", "type": "STANDARD", "tenantId": "uuid\|null" }` |
@@ -235,7 +235,7 @@ Discriminated by `action`. Only the actions that SPARK-238 changes are listed; t
 | Action | Request fields used | Change |
 |---|---|---|
 | `profile` | `code`, `name`, `address`, `latitude`, `longitude` | unchanged (1–50 / 1–255 / 1–2000; paired coordinates in range) |
-| `active` | `active`, and now `windowId` | **PROPOSED** — see [Deactivation](#deactivation-and-maintenance-windows) |
+| `active` | `active`, and now `windowId` | **PROPOSED** — see [Deactivation](#deactivation-and-maintenance-windows-q3-a4-a10-a11) |
 | `renameUnit` | `resourceId`, `name` | unchanged |
 | `capacity` | `resourceId`, `capacity` | unchanged (`0` = no layout limit) |
 | `removeUnit` | `resourceId` | unchanged; `409 UNIT_NOT_EMPTY` when it has children, slots or paths |
@@ -488,7 +488,7 @@ Current status mapping is produced by the API middleware; the target column is w
 | 400 → 404 | `PATH_NOT_FOUND` | `resourceId` is not a live path of this site | Re-read the structure |
 | 400 → 409 | `UNIT_NOT_EMPTY` | `removeUnit` on a unit with children, slots or paths | Remove the children explicitly |
 | 401 | `UNAUTHENTICATED` | Missing, invalid or revoked session | Sign in again |
-| 403 | `FORBIDDEN` | Tenant outside the caller's scope; missing `BACKUP_CONFIGURE`/`BACKUP_MARK`; not the site's assigned Operator | Select an authorized tenant / request the permission |
+| 403 | `FORBIDDEN` | Caller lacks the documented fixed role or the required owned or assigned facility scope | Verify role and resource scope |
 | 404 | `SITE_NOT_FOUND` | Site missing, soft-deleted or owned by another tenant | Do not retry; re-list own lots |
 | 404 | `UNIT_NOT_FOUND` / `SLOT_NOT_FOUND` | Child id not in this site | Re-read the structure |
 | 409 | `DUPLICATE_IDENTIFIER` | Live slot code, unit name, path code or site code already exists; idempotency key reused with a different request; restoring an identifier that a live sibling now holds | Use a distinct identifier; reuse the key only with the identical body |
@@ -568,7 +568,7 @@ If **any** item fails, mutate **none**; return **per-item validation errors** wi
 | Row | Value |
 |---|---|
 | Method / URL | `POST /api/parking-lots/{id}/structure/batch` — **PROPOSED**, owner of the wire detail is SPARK-238 (replaces the old V11-DES-09 deferral) |
-| Authentication / permission | Owner bearer; `PARKING_MANAGE` |
+| Authentication / scope | Owner bearer and owned facility |
 | Resource scope | Every item must resolve inside `{id}`; one lot per request. An item outside the site is reported **per item** as `NOT_FOUND` and the whole batch is rejected with `409 STRUCTURE_CONFLICT`, nothing applied — the same outcome as the Failure row below. There is no separate `400` cross-lot path: reporting which ids exist elsewhere would leak foreign-lot existence, so scope failure and missing-resource failure are deliberately indistinguishable |
 | Headers | `Content-Type: application/json`; `Idempotency-Key` required |
 | Request | `{ "idempotencyKey": "uuid", "items": [ { "action": "active", "resourceId": "uuid", "expectedUpdatedAt": "…" }, … ] }` — 1–50 items, `action` restricted to the deactivation family (`active`, `removeUnit`, `removeSlot`, `removePath`, `markBackup`) |

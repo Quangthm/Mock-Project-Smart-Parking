@@ -20,7 +20,7 @@
 - [UC-PAY-01 — Pay, verify results and reconcile late/unknown money](uc-pay-01.md) — CONFIRMED — implementation pending / not assessed
 - [UC-PAY-02 — Inspect invoices, payment history and charge explanations](uc-pay-02.md) — CONFIRMED — implementation pending / not assessed
 - [UC-INC-01 — Record an incident or suspected violation and override safely](uc-inc-01.md) — CONFIRMED — implementation pending / not assessed
-- [UC-INC-02 — Appeal and handle a refund/escalation](uc-inc-02.md) — CONFIRMED — implementation pending / not assessed
+- [UC-INC-02 — Appeal and handle a refund/escalation](uc-inc-02.md) — CONFIRMED — implementation pending / acceptance NOT RUN
 - [UC-OPS-01 — Handle emergency release and service interruption](uc-ops-01.md) — CONFIRMED — implementation pending / not assessed
 - [UC-OPS-02 — Authorize offline and replay queued events](uc-ops-02.md) — FUTURE — outside MVP
 - [UC-RPT-01 — Monitor lot operations and Owner reports](uc-rpt-01.md) — CONFIRMED — implementation pending / not assessed
@@ -48,4 +48,4 @@
 - [UC-AUTH-05 — Recover Authenticator using backup code](uc-auth-05.md) — CONFIRMED MVP — implementation and acceptance pending
 
 
-- [UC-AUTH-06 — Request and execute Admin-assisted account recovery](uc-auth-06.md) — CONFIRMED MVP — implementation and acceptance pending
+- [UC-AUTH-06 — Request and execute Admin-assisted account recovery](uc-auth-06.md) — CONFIRMED MVP · INCOMPLETE · DEFERRED until after the final presentation · NOT RUN

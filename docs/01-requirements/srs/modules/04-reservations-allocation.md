@@ -228,6 +228,8 @@ Recover lost capacity using conforming alternatives and established priority wit
 
 Show booking identifier, QR/ticket, vehicle, requested versus allocated place, interval, lifecycle/reallocation history, reasons, accepted terms and applicable payment/arrival/offer deadlines. Payment/refund/physical visit statuses are separate; Driver sees only own authorized records. Show committed Account, vehicle, Facility and final evaluation check states, payment readiness and future subscription processing through authenticated request-scoped SignalR. One authoritative status read on initial connection, reconnect or explicit restoration is allowed; status polling is prohibited.
 
+For a facility failure, maintenance or closure, expose the accepted reservation status and Operations-recorded reason through existing authorized reservation details/history or supported notifications. Facility owns its availability facts and Payment owns financial outcomes. The Driver can read the reason without an appeal or support ticket. Existing recovery and compensation rights apply.
+
 ### FR-RES-11
 
 **Status:** CONFIRMED — implementation pending / not assessed  

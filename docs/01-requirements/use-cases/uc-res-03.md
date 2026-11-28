@@ -21,7 +21,7 @@ See the [operation matrix](../srs/authorization-operation-classification.md) and
 
 ## Main flow
 
-1. Show own history and independent money/visit state.
+1. Show own reservation history and details, including the Operations-recorded outcome and reason for facility failure, maintenance or closure. A supported notification can project the same accepted facts. Keep money and visit outcomes separate. The Driver can inspect the reason without opening a ticket or appeal.
 2. After Allowed, accept eligible Driver cancellation once, release unused claims and calculate refund from eligible collected money. An earned facility-failure right survives recovery and is exercisable until accepted PARKING or unused closure; gate arrival alone does not end it. Earning eligibility creates no payout; no collected value means no payout.
 3. Exclude facility-failure exercise/cancellation and unpaid expiry; count accepted voluntary cancellation once under global restriction policy; still allow existing cancellations while restricted.
 4. Expire unpaid holds at H; pre-T compatible reacquisition remains possible. At/after T no unconfirmed booking may confirm. Late verified collection reconciles/refunds without entitlement. Confirmed but unfulfilled at T cancels for facility failure, with one applicable refund intent/notification.

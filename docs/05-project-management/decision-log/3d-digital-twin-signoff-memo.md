@@ -1,3 +1,5 @@
+> Historical Sprint 2/3 sign-off. The [28 November amendment](2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes configurable action-flag prerequisites in the approved target.
+
 # SPARK-228 — 3D Digital Twin Contract Sign-Off Memo
 
 **Date:** 2026-10-26

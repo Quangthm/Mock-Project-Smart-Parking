@@ -34,3 +34,5 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 ## Reservation amendment trace
 
 The [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) preserves existing IDs and associations. [Reservation scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md#admission-realtime-and-commercial-acceptance) trace FR-RES-01/02/03/04/05/06/10/12 and FR-POL-06 to review, identity, overlap, admission, progress, payment/covered readiness and protected confirmation. Implementation and execution evidence are pending.
+
+FR-RES-10 and UC-RES-03 trace to AC-139 for owner-scoped facility-failure reason visibility. See the [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#d-facility-failure-visibility).

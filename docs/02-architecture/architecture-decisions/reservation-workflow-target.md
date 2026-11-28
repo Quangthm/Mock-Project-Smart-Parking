@@ -120,3 +120,7 @@ States below describe the implemented contract. Zero-deposit accepted evidence c
 | Reservation | Paid hold expires, invalidation or cancellation prevents confirmation | Release/expire as applicable. The pre-T compatible reacquisition exception is for verified paid collections. Expired paid review/hold requires fresh review and a new request; zero-deposit confirmation creates no unpaid hold to expire. Late evidence reconciles without reviving a terminal claim. |
 
 Allocation, expiry, cancellation, arrival, actual parking, departure, final settlement, refunds and disputes use their existing owners and policies. Customer access stays Account-scoped. Gate association uses canonical plate and trusted evidence. Plate knowledge alone confers no reservation access.
+
+## Facility-failure reason visibility
+
+The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#d-facility-failure-visibility) requires existing authorized reservation detail/history or a supported notification to show the Operations-recorded outcome and reason. Eligibility, recovery and compensation continue under the approved reservation decisions. The read-projection gap is recorded in the implementation handoff.

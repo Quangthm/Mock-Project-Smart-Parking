@@ -28,6 +28,7 @@ See the [operation matrix](../srs/authorization-operation-classification.md) and
 5. For unexpected loss or continuing unrelated occupation, queue affected arrivals and feasible resources; preserve occupied/unaffected claims and use Operator for genuine ties.
 6. Use compatible backup during the allocation window; reevaluate on relevant changes and durable periodic work. At F, record full applicable refund eligibility when an unused confirmed booking remains unfulfilled. A first confirmation/loss after F tries immediate recovery, then earns the right if unfulfilled. Recovery preserves it.
 7. At T, cancel still-unfulfilled confirmed bookings for facility failure, including unusable ALLOCATED rows; preserve usable bookings and PARKING. Replay historical F/T before later recovery after downtime. No T−5 milestone.
+   The Driver can inspect the accepted cancellation and recorded reason through [UC-RES-03](uc-res-03.md) or a supported notification. Facility supplies availability facts and Operations owns the reservation outcome and reason.
 8. Driver offer/switch API and offer expiry are deferred. Future switching must replace under the same interval/vehicle/site/version guards, preserving the valid original on failure; system recovery does not spend the Driver allowance.
 
 ### Clarifying examples

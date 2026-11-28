@@ -169,7 +169,7 @@ Track implementation commit/build and QA evidence against the [decision matrix](
 
 ## Future exclusions explicitly preserved
 
-- Additional provider-hosted card channels remain FUTURE. TOTP enrollment/challenge/backup recovery and Admin-assisted account recovery are promoted to current MVP by SEC-01/SEC-02; implementation and tests remain pending.
+- Additional provider-hosted card channels remain FUTURE. SEC-01/SEC-02 approved self-service MFA and Admin-assisted recovery with separate delivery. See the November delivery status below for UC-AUTH-06.
 - Real sensors/cameras/barriers/readers and MQTT adapters; full offline cached authorization and durable offline replay.
 - Product simulator UI (isolated QA fixtures remain current).
 - Guaranteed monthly capacity/slot plans, sales caps/queues/slot activation, transfers/suspension/automatic extensions or renewal charging.
@@ -183,6 +183,13 @@ Track implementation commit/build and QA evidence against the [decision matrix](
 ## Original review registers — retained for exact lineage
 
 The following source rows include historical alternatives and recommendations. Use the current disposition above and latest confirmed contracts; an old OPEN does not demand a new PM decision and a recommendation is not implemented evidence.
+
+### 28 November MVP implementation and delivery
+
+- **UC-AUTH-06:** CONFIRMED MVP — INCOMPLETE · presentation DEFERRED until after the final presentation · acceptance NOT RUN. Self-service authentication, MFA and backup-code recovery retain separate scope under SEC-01/02.
+- **Financial appeals and fine-aware checkout:** Approved requirements and architecture, implementation and acceptance pending. The [service-owner handoff](../handoffs/2026-11-28-mvp-service-owner-handoff.md) records Operations fine identity and durable cutoff, Payment attribution, appeal and checkout integration, and readiness gaps. My Parking Session and new ownership predicates remain deferred.
+- **Facility-failure visibility:** The same handoff tracks the reservation read projection and frontend gap separately from MVP-GAP-05 lifecycle writers.
+- **Admin and fixed-role adoption:** The handoff tracks legacy permission implementation and the scoped Admin action, audit and SignalR verification gaps.
 
 ## 6. Every tester deferred item
 

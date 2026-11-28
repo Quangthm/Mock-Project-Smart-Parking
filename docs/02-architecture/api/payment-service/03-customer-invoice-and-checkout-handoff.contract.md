@@ -73,6 +73,12 @@ Hợp đồng này giải quyết 3 bài toán kiến trúc cốt tử:
 
 ---
 
+### Issued fines and checkout preparation — 28 November approved target
+
+Operations owns the independently referenceable issued fine, links it to the session and authoritative violation decision, and orders the accepted appeal decision against a durable freeze of the attempt's parking obligation and fine amounts before the preparation request. Payment owns the prepared order, invoice, verified settlement, eligible refunds and reconciliation.
+
+Preserve the prepared amount after the cutoff. A verified collection may lead to an authorized refund request under BR-REF-01. Definitive unpaid termination applies the approved correction on the next valid preparation. Pending/unknown settlement retains the adjustment without speculative refund or conflicting order creation. Monthly/yearly parking fee coverage leaves issued fines in force. The existing payload below describes a scalar penalty and reason. Fine-level attribution and transport remain future design work. See [C01–C10](../../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout).
+
 ## 2. Đặc tả Bàn giao Checkout: Parking Operations $\rightarrow$ Payment Service (S2S Handoff)
 
 ### 2.1 API S2S Chuẩn bị Đơn Thanh toán (Prepare Parking Fee Order)

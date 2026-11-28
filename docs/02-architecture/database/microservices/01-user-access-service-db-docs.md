@@ -82,7 +82,7 @@ Lưu trữ **thông tin định danh vật lý của một con người** trong 
 | **FR-AUTH-01** | C | Đăng ký và xác minh OTP theo §3.1.1; giá trị xác thực bảo mật bị ràng buộc cứng |
 | **FR-AUTH-02** | C | Xác thực theo §3.1.4, bao gồm logout, session/renewal termination, từ chối yêu cầu với account bị khóa |
 | **FR-AUTH-03** | C | Driver chỉ được sửa `full_name`, `avatar_url` qua profile-edit thông thường; thay `email`/`phone` phải dùng re-verification flow riêng; role/status không customer-editable |
-| **FR-AUTH-06** | C | Với mỗi protected operation: kiểm tra current role/permission, resource scope, **và** current account access state — token hợp lệ không đủ nếu account bị lock |
+| **FR-AUTH-06** | C | Với mỗi protected operation: kiểm tra fixed role, account eligibility, tenant/site/resource scope và freshness theo operation matrix |
 | **FR-AUTH-05** | C | Admin duyệt Owner registration sau khi có đủ company name, email, phone |
 | **BR-AUTH-01–03** | — | Scoped roles; confirmed profile-edit/contact/password boundaries |
 | **§3.1.1** | — | OTP valid 5 phút; sau 3 lần nhập sai → khóa 15 phút |
@@ -189,8 +189,8 @@ Tách bạch **định danh con người** (`users`) khỏi **ngữ cảnh vận
 | `user_id` | `UUID NOT NULL` | FK vật lý đến `users.id`; liên kết account với con người sở hữu nó | Gán bằng `users.id` của user đang đăng nhập/được tạo tài khoản | FR-AUTH-02 |
 | `role_code` | `VARCHAR(50) NOT NULL` | Một vai trò duy nhất của Account; FK đến `roles.code` với `ON DELETE RESTRICT`; không unique | Gán trực tiếp khi tạo account trong registration/provisioning/bootstrap | FR-AUTH-04; FR-AUTH-05; FR-AUTH-06 |
 | `tenant_id` | `UUID NULL` | **FK nội bộ** trỏ đến `tenants.id` trong UserDb (`ON DELETE SET NULL`). `NULL` với Driver account (không thuộc tenant nào). Khác `NULL` với Owner/Operator account | Gán khi duyệt Owner application hoặc khi Owner tạo Operator account; đảm bảo tính toàn vẹn tổ chức | §2.3.1; FR-AUTH-04 |
-| `site_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `parking_sites.id` trong Parking Service DB. Dùng để giới hạn scope của Operator vào một site cụ thể. `NULL` với Owner account (scope toàn tenant) | Được gán khi Owner assign Operator vào site cụ thể | §2.3.1 (OPERATOR_MANAGE scope) |
-| `permissions` | `TEXT[] NULL` | Danh sách quyền hạn bổ sung hoặc bị ghi đè của tài khoản | Cập nhật bởi Admin/Owner khi gán quyền | FR-AUTH-06 |
+| `site_id` | `UUID NULL` | **Cross-service Logical ID** trỏ đến `parking_sites.id` trong Parking Service DB. Dùng để giới hạn scope của Operator vào một site cụ thể. `NULL` với Owner account (scope toàn tenant) | Được gán khi Owner assign Operator vào site cụ thể | FR-AUTH-04, assignment to an owned facility |
+| `permissions` | `TEXT[] NULL` | Cột ghi nhận schema hiện tại, không thuộc target MVP | Legacy runtime evidence | FR-AUTH-06 |
 | `status` | `VARCHAR(50) NOT NULL DEFAULT 'ACTIVE'` | Trạng thái vòng đời của account trong ngữ cảnh này. Hoạt động độc lập với `users.status` — một user ACTIVE có thể có account LOCKED tại một tenant cụ thể. FR-AUTH-06 yêu cầu kiểm tra **cả hai** | Mặc định `ACTIVE`; Owner/Admin có thể thay đổi | FR-AUTH-02; FR-AUTH-06 |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm tạo account | Tự sinh bởi database | — |
 | `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cập nhật lần cuối | Application cập nhật tại mỗi UPDATE | — |
@@ -237,7 +237,7 @@ The recorded role table and aliases remain schema facts. D05 excludes MVP role m
 | Mã yêu cầu | Loại | Nội dung liên quan |
 |---|---|---|
 | **FR-AUTH-03** | C | Chỉ role phù hợp mới được phép thực hiện profile-edit |
-| **FR-AUTH-06** | C | Mỗi protected operation kiểm tra `accounts.role_code`, current access state, permission và resource scope tương ứng |
+| **FR-AUTH-06** | C | Mỗi protected operation kiểm tra fixed role qua `accounts.role_code`, eligibility và resource scope theo freshness của operation |
 | **§2.3** | — | Định nghĩa 4 actor: Driver, Operator, Owner, Admin. Runtime dùng 7 role code: 4 mã actor gốc + 3 alias (`BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN`) |
 | **§2.3.1** | — | Permission matrix xác định capability của từng role |
 
@@ -259,9 +259,9 @@ Quan hệ là **Account N : 1 Role**: mỗi Account bắt buộc có đúng mộ
 
 Registration, provisioning và bootstrap ghi `role_code` cùng Account. SQL seed giữ nguyên 7 Role code; Driver dùng `DRIVER`, Owner provisioning dùng `BUSINESS_OWNER`, Operator provisioning dùng `SITE_OPERATOR`, Admin bootstrap dùng `ADMIN`. Các Account/tenant/site/grant liên quan tiếp tục giữ quan hệ hiện có.
 
-Luồng protected request dùng `ICurrentActor` → `ICurrentAccessService` → `CurrentAccessContext`. Persistence trả về trạng thái User, đúng Account gắn với session, Role hiện tại và session; Application quyết định tính hợp lệ, role/token consistency, action permission và resource scope. Mutation được bảo vệ giữ thứ tự khóa **User → Account → Role → Session**; khóa Account bảo vệ `role_code`, không cần khóa một bản ghi gán role riêng. Xem [SPARK-248 implementation review](../../../04-testing/reports/SPARK-248/own-profile-review.md).
+**Current UserService implementation evidence.** Protected local requests use `ICurrentActor` → `ICurrentAccessService` → `CurrentAccessContext`. Persistence returns User, session-bound Account, current Role and session. Some Application paths still read action flags. See [SPARK-248 implementation review](../../../04-testing/reports/SPARK-248/own-profile-review.md).
 
-`accounts.permissions` và `operator_grants.permissions` vẫn là các permission array hiện có. Role không thay thế kiểm tra quyền hành động hoặc tenant/site/lot scope. Một Account khác cùng User chỉ được tham gia scope theo quy tắc membership cùng User/cùng Role rõ ràng và quyền/grant riêng; không được cứu một session-bound Account không còn hợp lệ hoặc cho mượn Role khác. Admin không tự động có quyền vận hành hay tài chính. Own-profile dùng current access cho tất cả role được hỗ trợ; role/status/permissions không được tự sửa qua profile.
+**Approved target (28 November).** Each Account has one fixed role. Preserve User, Account and session eligibility, actual site assignment, tenant scope and resource checks under the applicable freshness rules. A second Account cannot authorize an invalid session-bound Account. `accounts.permissions` and `operator_grants.permissions` remain documented schema evidence. See the [decision amendment](../../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope).
 
 ---
 
@@ -470,7 +470,7 @@ Partner Registration retains the Owner role and persists a pending User/Account/
 |---|---|---|
 | **FR-AUTH-05** | C | Admin duyệt Owner registration sau khi xác nhận đủ company name, email, phone; role changes remain audited |
 | **§3.1.1** | — | Owner registration yêu cầu company name, email, phone; phải qua Admin approval trước khi active |
-| **§2.3.1** | — | `ACCOUNT_ADMIN`: Admin approves Owner registration |
+| **§2.3.1** | — | The eligible Admin Account reviews Owner applications within its fixed platform responsibilities. |
 | **US-A01** | US | "Là Admin, tôi muốn phê duyệt hoặc từ chối đơn đăng ký chủ bãi xe" |
 
 ### 9B.3 Bảng thuộc tính chi tiết
@@ -520,16 +520,16 @@ V11-02/D09 target: only initial pending uploaded documents may be Admin-replaced
 
 ### 10.1 Mục đích nghiệp vụ
 
-Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Operator account tại một site cụ thể. Không phải mọi Operator đều có tất cả quyền — Owner chỉ cấp những quyền cần thiết cho từng nhân viên (least-privilege). Đây là extension của RBAC chuẩn: role `OPERATOR` xác định ngữ cảnh, `operator_grants.permissions` xác định capability cụ thể.
+This section records the existing `operator_grants` schema and historical permission-array behavior. The approved target keeps actual Operator-to-site assignments and authorizes the documented responsibilities of the fixed Operator role at assigned sites.
 
 ### 10.2 Traceability Mapping
 
 | Mã yêu cầu | Loại | Nội dung liên quan |
 |---|---|---|
-| **FR-AUTH-04** | R | Operator provisioning và permission management: Owner gán permissions cho Operator theo §3.7.5 |
-| **FR-AUTH-06** | C | Protected operations (CASH_COLLECT, EMERGENCY_GATE_RELEASE, APPEAL_REVIEW, v.v.) kiểm tra `operator_grants.permissions` |
-| **§2.3.1** | — | Permission matrix: DEVICE_MANAGE, DEVICE_STATUS_VIEW, CASH_COLLECT, APPEAL_REVIEW, SLOT_OVERRIDE, VIOLATION_REVIEW, EMERGENCY_GATE_RELEASE đều là "Explicit lot grant" |
-| **BR-AUTH-01** | — | Scoped roles — delegated, lot-scoped permissions |
+| **FR-AUTH-04** | R | Owner provisions Operators and assigns eligible owned facilities. |
+| **FR-AUTH-06** | C | Check the fixed Operator role, relevant site assignment and domain eligibility. |
+| **§2.3.1** | — | The active role matrix defines documented operations. The codes in the constraints below describe legacy storage. |
+| **BR-AUTH-01** | — | Fixed roles with actual lot assignment |
 | **US-OW03** | US | "Là Owner, tôi muốn quản lý nhân viên vận hành và phân quyền cho họ" |
 
 ### 10.3 Bảng thuộc tính chi tiết
@@ -539,7 +539,7 @@ Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Oper
 | `account_id` | `UUID PK` | FK đến account Operator được cấp quyền. Dùng làm Primary Key vì mỗi account chỉ có một bộ `operator_grants` (1-1 relationship) | Gán bằng `accounts.id` của Operator account | FR-AUTH-04; §2.3.1 |
 | `created_by` | `UUID NOT NULL` | FK đến `users.id` của Owner đã tạo grant | Gán bằng `users.id` của Owner đang thực hiện cấp quyền | FR-AUTH-04; §2.3.1 (audit) |
 | `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP` | Thời điểm cấp quyền; phục vụ audit trail | Tự sinh bởi database | §2.3.1; §4.3 |
-| `permissions` | `TEXT[] NOT NULL` | Mảng các quyền vận hành được cấp cho Operator tại site | Owner chọn từ danh sách quyền hợp lệ khi tạo/cập nhật grant | FR-AUTH-04; FR-AUTH-06; §2.3.1 |
+| `permissions` | `TEXT[] NOT NULL` | Mảng các quyền vận hành được cấp cho Operator tại site | Legacy runtime behavior | FR-AUTH-04; FR-AUTH-06; §2.3.1 |
 
 **Danh sách quyền và ý nghĩa:**
 
@@ -561,7 +561,7 @@ Lưu trữ **bộ quyền vận hành chi tiết** được cấp cho một Oper
 | `FK_operator_grants_creator` | `REFERENCES users(id) ON DELETE RESTRICT` | Không cho xóa user nếu vẫn còn grant do user đó tạo |
 | `chk_operator_permissions_count` | `CHECK (cardinality(permissions) BETWEEN 1 AND 7)` | Phải cấp ít nhất 1 quyền, tối đa 7 quyền (bằng tổng số quyền hợp lệ) |
 | `chk_operator_permissions_no_null` | `CHECK (array_position(permissions, NULL) IS NULL)` | Không cho phép giá trị NULL trong mảng permissions |
-| `chk_operator_permissions_valid` | `CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW','SLOT_OVERRIDE','EMERGENCY_GATE_RELEASE','VIOLATION_REVIEW']::TEXT[])` | Chấp nhận 7 quyền hợp lệ theo ma trận phân quyền §2.3.1 |
+| `chk_operator_permissions_valid` | `CHECK (permissions <@ ARRAY['DEVICE_MANAGE','DEVICE_STATUS_VIEW','CASH_COLLECT','APPEAL_REVIEW','SLOT_OVERRIDE','EMERGENCY_GATE_RELEASE','VIOLATION_REVIEW']::TEXT[])` | Allowed values in the existing legacy array constraint |
 | `idx_operator_grants_creator` | `created_by` | Tra cứu tất cả grants do một Owner cụ thể tạo ra |
 
 ---

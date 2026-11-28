@@ -18,8 +18,8 @@ Original IDs retained; SEC-01/02 adds5 FRs,4 rules,3 UCs and3 cross-role stories
 | FR-AUTH-07 | CONFIRMED MVP — implementation and acceptance pending | 01-identity-access | BR-AUTH-04, BR-AUTH-07 | US-SEC01 | UC-AUTH-04 |
 | FR-AUTH-08 | CONFIRMED MVP — implementation and acceptance pending | 01-identity-access | BR-AUTH-04, BR-AUTH-07 | US-SEC01 | UC-AUTH-01, UC-AUTH-04 |
 | FR-AUTH-09 | CONFIRMED MVP — implementation and acceptance pending | 01-identity-access | BR-AUTH-05, BR-AUTH-07 | US-SEC02 | UC-AUTH-05 |
-| FR-AUTH-10 | CONFIRMED MVP — implementation and acceptance pending | 01-identity-access | BR-AUTH-06, BR-AUTH-07 | US-SEC02, US-SEC03 | UC-AUTH-06 |
-| FR-AUTH-11 | CONFIRMED MVP — implementation and acceptance pending | 01-identity-access | BR-AUTH-06, BR-AUTH-07 | US-SEC03 | UC-AUTH-02, UC-AUTH-06 |
+| FR-AUTH-10 | CONFIRMED MVP — INCOMPLETE · presentation DEFERRED until after the final presentation · acceptance NOT RUN | 01-identity-access | BR-AUTH-06, BR-AUTH-07 | US-SEC02, US-SEC03 | UC-AUTH-06 |
+| FR-AUTH-11 | CONFIRMED MVP — INCOMPLETE · presentation DEFERRED until after the final presentation · acceptance NOT RUN | 01-identity-access | BR-AUTH-06, BR-AUTH-07 | US-SEC03 | UC-AUTH-02, UC-AUTH-06 |
 
 
 ## v1.1 decision and acceptance links

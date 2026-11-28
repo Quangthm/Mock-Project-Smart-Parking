@@ -18,7 +18,7 @@ Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/
 |---|---|
 | `users` | `id`, `phone`, `email`, `password_hash`, `full_name`, `company_name`, `access_version`, `status` (`ACTIVE`, `INACTIVE`, `LOCKED`, `PENDING_APPROVAL`, `PENDING_VERIFICATION`, `REJECTED`), `failed_login_attempts`, `locked_until`; no generic `onboarding_complete` |
 | `tenants` | Organization root; `code`, `name`, `contact_email`, `contact_phone`, `tax_code`, `status` (`ACTIVE`, `INACTIVE`, `SUSPENDED`) |
-| `accounts` | Contextual account; `user_id`, required `role_code VARCHAR(50)` FK to `roles.code` with `ON DELETE RESTRICT`, nullable `tenant_id`/`site_id`, `permissions`, `status`; one user may have multiple accounts, each with exactly one role. Nonunique `idx_accounts_role_code` allows many accounts to share a role |
+| `accounts` | Contextual account; `user_id`, required `role_code VARCHAR(50)` FK to `roles.code` with `ON DELETE RESTRICT`, nullable `tenant_id`/`site_id`, legacy `permissions`, `status`; one user may have multiple accounts, each with exactly one role. Nonunique `idx_accounts_role_code` allows many accounts to share a role |
 | `roles` | `code VARCHAR(50)` PK; **7 seeded codes:** `DRIVER`, `OWNER`, `OPERATOR`, `ADMIN`, `BUSINESS_OWNER`, `SITE_OPERATOR`, `PLATFORM_ADMIN` |
 | `vehicles` | `account_id`, `original_plate`, `normalized_plate`, `vehicle_type`; active-plate uniqueness via `uq_active_vehicle_plate` |
 | `user_refresh_tokens` | Refresh-token lifecycle; unique `token_hash` and `access_token_id`, `last_refreshed_at`, nullable legacy `account_id` and composite FK `(account_id,user_id) → accounts(id,user_id)` with restrictive deletion; trigger freezes both binding identifiers. New sessions always bind an Account; legacy NULL bindings require new login |
@@ -26,7 +26,7 @@ Base: [`01-user-access-service-db.sql`](../../../scripts/database/microservices/
 | `driver_registrations` | OTP hash, channel, expiry, failed attempts |
 | `system_terms_and_conditions` | Versioned legal terms |
 | `owner_applications` | Owner onboarding; `status` (`pending`, `approved`, `rejected`), review fields, `tenant_id` |
-| `operator_grants` | 1-1 with operator account; permission array checked by `CHECK` constraints |
+| `operator_grants` | Recorded schema relation with the Operator Account and legacy array constraints. The target retains real site assignment |
 | `auth_challenges` | Short-lived authentication challenges |
 | `workflow_deliveries` | Durable workflow/event delivery records |
 | `mfa_credentials`, `mfa_recovery_codes` | TOTP/MFA credentials, pending protected secret and hashed one-time recovery codes |
@@ -35,7 +35,7 @@ Versioned `OperatorAccessChanged` integration events are captured through the sc
 
 Runtime role mapping: `PLATFORM_ADMIN`/`ADMIN` → admin; `BUSINESS_OWNER`/`OWNER` → owner; `SITE_OPERATOR`/`OPERATOR` → operator; `DRIVER` → driver.
 
-The authenticated session's exact Account remains authoritative. Current access rechecks User, Account, Role and session state; action permissions and resource membership are separate checks. `accounts.permissions` and `operator_grants.permissions` retain their existing ownership and semantics. Role codes do not grant implicit Admin access to Owner/Operator resources. Account creation/bootstrap supplies `role_code` directly; the Admin seed receives `ADMIN`. Account creation time remains `accounts.created_at`, with no separate role-assignment timestamp.
+The exact authenticated Account is authoritative. Fixed role responsibilities, eligibility and session rules, tenant isolation and resource scope govern target authorization. `accounts.permissions` and `operator_grants.permissions` document existing storage. The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes their use as target authorization. Registration and bootstrap supply `role_code`; the Admin seed receives `ADMIN`. Account creation time remains `accounts.created_at`.
 
 ## 3. Facility & Parking DB (`smartpark_facility`)
 

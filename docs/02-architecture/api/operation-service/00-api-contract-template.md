@@ -33,7 +33,7 @@
 
 ### 1.3 Xác thực & Phân quyền (Authentication & Authorization) `[Required]`
 - **Cơ chế xác thực:** `Bearer JWT`
-- **Quyền hạn bắt buộc:** `LOT_POLICY_MANAGE` (đối với Owner cấu hình) hoặc quyền tương ứng.
+- **Vai trò và phạm vi bắt buộc:** Document the applicable fixed role, actual resource scope and declared freshness, or the service authentication contract for internal calls.
 - **Phạm vi tài nguyên (Resource Scope):** Kiểm tra chặt chẽ `owned-lot scope` (ngăn chặn truy cập chéo bãi `Cross-lot access`).
 
 ### 1.4 Chính sách Idempotency (Idempotency Policy) `[Conditional]`

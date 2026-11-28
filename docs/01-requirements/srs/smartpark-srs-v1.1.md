@@ -27,7 +27,9 @@ Authority: explicit approved amendments and the synchronized active baseline gov
 | Owner | Configure owned lots, permitted policies/tariffs/plans, create and assign Operators, review business reports and escalations. | Owned organization/lots; approved configuration bounds. |
 | Admin | Combined Partner/first-lot and additional-lot review, platform account/security/audit functions, reviewed binding disputes and account recovery. | Explicit platform functions; no blanket operational override. |
 
-Owner-created Operators remain pending until email activation, verified contact and mandatory consented VNeID simulation; password setup is optional, with scoped assignment and no Admin approval per hire. Simulation is also mandatory for Driver/Owner registration, clearly labelled and not government verification. Per the [21 October V11-06 clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md), the fake API returns a GUID substitute tied to the user and persisted in the User & Access database; it is not a government identity number or an authentication token. The sole seeded Admin is exempt, with no Admin registration route or role management. Removing a grant changes authoritative access immediately; resource enforcement follows the approved per-operation freshness model while retaining history. Recovery does not approve an Owner, unblock an account or grant a role.
+Owner-created Operators remain pending until email activation, verified contact and mandatory consented VNeID simulation; password setup is optional, with scoped assignment and no Admin approval per hire. Simulation is also mandatory for Driver/Owner registration, clearly labelled and not government verification. Per the [21 October V11-06 clarification](../../05-project-management/decision-log/2026-10-21-vneid-simulation-guid.md), the fake API returns a GUID substitute tied to the user and persisted in the User & Access database; it is not a government identity number or an authentication token. The sole seeded Admin is exempt, with no Admin registration route or role management. Removing a site assignment changes authoritative access immediately; resource enforcement follows the approved per-operation freshness model while retaining history. Recovery does not approve an Owner, unblock an account or grant a role.
+
+Each Account has one fixed role. The authenticated Account, User and Account eligibility, session rules, role responsibilities, actual ownership or site assignment, tenant isolation and service-owned business-state validation govern access. See the [28 November MVP amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md).
 
 Details: [complete action-by-role matrix](permissions.md) · [identity and access requirements](modules/01-identity-access.md).
 
@@ -101,7 +103,7 @@ A useful payment example: a 100,000 VND reservation with 30,000 VND collected ow
 
 Normal completed login returns necessary tokens; profile/onboarding data is retrieved separately, such as /me. Preserve required MFA challenges and safe meaningful pending/rejected/provisioning failure reasons after sufficient credential validation. Driver verification never auto-logs in. Access remains 15 minutes, refresh absolute 7 days/inactivity24 hours, OTP expiry5 minutes/three failures/15-minute lock.
 
-Protect the single seeded Admin from administrative disable/lock/delete/role or authority changes, including self/last-Admin loss; ordinary own profile/security and authentication lockouts remain. Maintainer recovery is the sole-Admin route. Explicit re-enable with reason removes only administrative disable, never approval/contact/role/grant/security/booking restrictions or revoked sessions.
+Protect the single seeded Admin from administrative disable/lock/delete/role or authority changes, including self/last-Admin loss; ordinary own profile/security and authentication lockouts remain. Maintainer recovery is the sole-Admin route. A current Admin Account and session can lock, unlock, disable or re-enable a User and disable or re-enable a selected Account. Require an administrative reason, exact target scope and a valid state transition. User lock/disable affects all applicable Accounts. Account disable affects only the selected Account. Commit the restriction, applicable session revocation and durable audit evidence together. Notify affected connections after commit. Unlock and re-enable remove only the selected restriction. Independent restrictions, contact verification, Owner approval, provisioning and MFA gates remain in force. Revoked sessions stay revoked, removed site assignments stay removed and business records are preserved.
 
 Vehicle removal is soft only with active-dependency guards and retained associations; it does not approve transfer. Cleanup follows retention/holds.
 
@@ -159,3 +161,9 @@ Follow [the complete deferred/implementation register](../../05-project-manageme
 
 
 Design/implementation owners and exit criteria: [V11-DES-01–12](../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.
+
+## 28 November financial appeals and delivery status
+
+Financial appeals cover recorded paid parking charges, fines paid at completed checkout, and officially issued active-session fines, including unpaid fines. Pending appeals preserve normal checkout. The [appeal and checkout rules](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout) govern operational correction and Payment-owned refunds. Facility failure reason visibility uses existing reservation views or supported notifications. Other / General support is separate.
+
+UC-AUTH-06 assisted recovery remains CONFIRMED MVP, INCOMPLETE, DEFERRED until after the final presentation, and NOT RUN.

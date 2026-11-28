@@ -74,9 +74,17 @@ Domain owners provide scoped reports: revenue day/week/month/quarter, lot and re
 Push/in-app direction: reservation confirmation, payment reminders, opted-in availability alerts and promotional offers. SMS direction: OTP, invoice/payment notice, configured overdue reminders and reservation QR references. Email direction: invoice/VAT-invoice subject, monthly usage reports, policy changes, password reset, slot reallocation and registration/approval/Owner-created Operator notices. These source categories remain in scope; they do not introduce a promotions/loyalty engine, arbitrary reminder schedule, raw private QR broadcast, tax-rate assumption or proof of live delivery. In the approved local profile use authorized in-app bell, email capture and SMS fixtures; evaluate live provider delivery separately.
 
 
+## Facility-failure and support projections
+
+A supported reservation cancellation notification may show the accepted Operations outcome and recorded reason to the affected Driver. Reservation details/history use the same authoritative outcome. Other / General support remains asynchronous, allows cases without a financial reference and confers no refund authorization. Existing facility failure explanations are available through the authorized reservation projection without appeal or support submission.
+
+## Admin access audit
+
+Notification & Audit projects durable User & Access evidence of the reasoned action, target scope, actor and outcome. Projection and delivery occur independently of the committed restriction and affected-session revocation.
+
 ## Account recovery notifications and support type
 
-ACCOUNT_RECOVERY is current MVP, handled by Admin through General Support. Pre-login intake is restricted and generic; evidence/case access is scoped. Audit recovery submission/review/authorization and successful/failed credential changes separately. Notify existing verified channels of TOTP enrollment/disable/replacement, backup-code regeneration and Admin reset/password mutation, without including secrets or usable reset tokens in audit/event payloads. Notification failure is visible and retried; it never silently undoes a completed security change or supplies account access. Handler cannot mark a pending credential mutation as successful recovery.
+ACCOUNT_RECOVERY is confirmed MVP and handled by Admin through General Support. UC-AUTH-06 is incomplete, deferred until after the final presentation, and acceptance is NOT RUN. Pre-login intake is restricted and generic; evidence/case access is scoped. Audit recovery submission/review/authorization and successful/failed credential changes separately. Notify existing verified channels of TOTP enrollment/disable/replacement, backup-code regeneration and Admin reset/password mutation, without including secrets or usable reset tokens in audit/event payloads. Notification failure is visible and retried; it never silently undoes a completed security change or supplies account access. Handler cannot mark a pending credential mutation as successful recovery.
 
 
 Design/implementation owners and exit criteria: [V11-DES-07](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.

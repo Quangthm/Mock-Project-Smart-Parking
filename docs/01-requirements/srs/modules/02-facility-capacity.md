@@ -79,7 +79,7 @@ Spatial deactivation never silently cascades to descendants. Explicitly select/h
 **Actors:** Operator  
 **Stories:** US-O03, US-O05
 
-Manage, link, enable and disable lot devices within the Operator's assigned parking-lot scope. Owner grants the Operator access through account provisioning.
+Manage, link, enable and disable lot devices within the Operator's assigned parking-lot scope. Owner assigns the Operator to eligible owned facilities through provisioning or assignment.
 
 ### FR-LOT-06
 
@@ -150,3 +150,7 @@ A resource with no reservation/protection record is not reserved; a dedicated NO
 
 
 Design/implementation owners and exit criteria: [V11-DES-04 and 09](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.
+
+## Driver visibility of affected reservations
+
+Facility owns maintenance, closure and availability facts. Operations owns the accepted reservation outcome and recorded reason based on applicable facts and policy. The authorized reservation or supported notification projection exposes that outcome to the Driver. Existing maintenance, safety, emergency, compensation and payment responsibilities apply. See [UC-RES-03](../../use-cases/uc-res-03.md).

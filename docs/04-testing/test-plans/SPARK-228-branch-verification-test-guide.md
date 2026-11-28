@@ -1,3 +1,5 @@
+> Historical branch verification guidance. The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes legacy configurable action-flag expectations for the approved MVP target. See [AC-140](../requirements-traceability/acceptance-scenarios.md#28-november-mvp-alignment).
+
 # SPARK-228 Branch Verification — Test Guide for PM Approval to Merge into `develop`
 
 **Branch:** `feat/SPARK-228-3D_Model_BE`  

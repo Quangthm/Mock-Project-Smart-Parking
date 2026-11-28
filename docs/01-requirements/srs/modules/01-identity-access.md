@@ -6,16 +6,16 @@
 
 - Access token: **15 minutes**. Refresh session: **7-day absolute lifetime**, with **24-hour refresh inactivity limit**. Rotation must not silently extend the absolute session maximum. Enforcement contracts must define current authorization and expiry boundaries.
 - **Driver, Operator, Owner and Admin may use passwordless OTP through email and phone.** The staff-password-only recommendation was not selected. Existing password login and registration/contact/reset verification remain.
-- The login feature does not create an account, approve an Owner, grant roles, bypass account/permission state, or merge two accounts because contact input matches loosely. Verified contact binding and challenge purposes must remain explicit.
+- The login feature does not create an account, approve an Owner, grant roles, bypass User or Account eligibility, or merge two accounts because contact input matches loosely. Verified contact binding and challenge purposes must remain explicit.
 - **Either verified bound channel independently is approved for every role.** Do not require both OTPs for one login. Missing/unverified channels cannot be used; neither channel implicitly creates or merges an account.
-- SEC-01 supersedes the TOTP deferral: optional TOTP enrollment, login challenge, backup-code recovery and Admin-assisted recovery are current MVP for every role. Turnstile remains separate from authentication and authorization.
+- SEC-01 supersedes the TOTP deferral: optional TOTP enrollment, login challenge and backup-code recovery are confirmed MVP. Admin-assisted recovery remains a separate confirmed MVP requirement with presentation delivery deferred. Turnstile remains separate from authentication and authorization.
 - Local acceptance uses email capture and phone/SMS fixtures under §16.6. Both login paths must be tested end-to-end in that declared mode for every role. This proves application flow, not real email/SMS delivery; a real SMS provider is a separate integration decision/test.
 
-Owner creates a pending Operator within the owned organization and sends an email activation link. The Operator verifies contact and completes mandatory, consented simulated VNeID during activation. The fake API returns a GUID substitute bound to that Operator user and persisted in the User & Access database under FR-AUTH-01; it grants no authentication or authorization. Password setup is optional, preserving OTP login eligibility. No immediate operational activation, Admin approval per hire, self-promotion or cross-owner grant. Owner assigns/revokes eligible owned-lot access. Revocation changes authoritative account/grant state while preserving history. Subsequent actions, private replays and subscriptions enforce their declared freshness and local resource policy: TOKEN accepts its remaining stale-claim window; REQUEST obtains Account-current authorization; UserService security checks remain locally authoritative.
+Owner creates a pending Operator within the owned organization and sends an email activation link. The Operator verifies contact and completes mandatory, consented simulated VNeID during activation. The fake API returns a GUID substitute bound to that Operator user and persisted in the User & Access database under FR-AUTH-01; it grants no authentication or authorization. Password setup is optional, preserving OTP login eligibility. No immediate operational activation, Admin approval per hire, self-promotion or cross-owner grant. Owner assigns/revokes eligible owned-lot access. Revocation changes authoritative site assignment state while preserving history. Subsequent actions, private replays and subscriptions enforce their declared freshness and local resource policy: TOKEN accepts its remaining stale-claim window; REQUEST obtains Account-current authorization; UserService security checks remain locally authoritative.
 
 Reject conflicting active normalized-plate binding without disclosing the other account. Admin reviews verified contact, relevant registration/transfer evidence and scoped Operator findings; notify existing holder. Never transfer for nonresponse alone; unresolved cases stay pending/escalated. User & Access performs the guarded change and preserves historical associations.
 
-Profile fields: own name/display name/avatar; email/phone use re-verification, password uses dedicated change flow; role/status/permissions never customer-editable. Multiple plated vehicles require raw+normalized plate, category and vehicle image. Contact/security lock, account access state and booking-only restriction are distinct facts; OTP success does not approve Owner status or create grants.
+Profile fields: own name/display name/avatar; email/phone use re-verification, password uses dedicated change flow; role, access status and site assignments remain server-owned. Multiple plated vehicles require raw+normalized plate, category and vehicle image. Contact/security lock, account access state and booking-only restriction are distinct facts; OTP success does not approve Owner status or create grants.
 
 ## Functional requirements
 
@@ -47,7 +47,7 @@ Normal completed login returns necessary tokens; retrieve authorized account/pro
 **Actors:** Driver  
 **Stories:** US-D08
 
-Allow Driver to view/update permitted own-profile fields: name/display name and avatar through normal profile editing; email and phone only through dedicated re-verification flows; password through the separate change-password flow. Deny cross-account access, and never allow customer editing of role, account status or permissions.
+Allow Driver to view/update permitted own-profile fields: name/display name and avatar through normal profile editing; email and phone only through dedicated re-verification flows; password through the separate change-password flow. Deny cross-account access, and never allow customer editing of role, account status or assignments.
 
 ### FR-AUTH-04
 
@@ -55,7 +55,7 @@ Allow Driver to view/update permitted own-profile fields: name/display name and 
 **Actors:** Owner, Operator (account activation)  
 **Stories:** US-OW03
 
-Owner creates a pending Operator within the owned organization and sends an email activation link. The Operator verifies contact and completes mandatory, consented simulated VNeID during activation. The fake API returns a GUID substitute bound to that Operator user and persisted in the User & Access database under FR-AUTH-01; it grants no authentication or authorization. Password setup is optional, preserving OTP login eligibility. No immediate operational activation, Admin approval per hire, self-promotion or cross-owner grant. Owner assigns/revokes eligible owned-lot access. Revocation changes authoritative account/grant state while preserving history. Subsequent actions, private replays and subscriptions enforce their declared freshness and local resource policy: TOKEN accepts its remaining stale-claim window; REQUEST obtains Account-current authorization; UserService security checks remain locally authoritative.
+Owner creates a pending Operator within the owned organization and sends an email activation link. The Operator verifies contact and completes mandatory, consented simulated VNeID during activation. The fake API returns a GUID substitute bound to that Operator user and persisted in the User & Access database under FR-AUTH-01; it grants no authentication or authorization. Password setup is optional, preserving OTP login eligibility. No immediate operational activation, Admin approval per hire, self-promotion or cross-owner grant. Owner assigns/revokes eligible owned-lot access. Revocation changes authoritative site assignment state while preserving history. Subsequent actions, private replays and subscriptions enforce their declared freshness and local resource policy: TOKEN accepts its remaining stale-claim window; REQUEST obtains Account-current authorization; UserService security checks remain locally authoritative.
 
 ### FR-AUTH-05
 
@@ -71,7 +71,7 @@ Rejection records a reason and sends a safe email explanation and appropriate pr
 
 MVP has exactly one protected seeded Admin, exempt from VNeID simulation, and no Admin registration route or role-management feature. Reject administrative disable, lock, delete, self-escalation and role/authority changes targeting it; this also protects the last eligible Admin atomically. Own ordinary profile/security changes remain allowed, authentication lockouts still apply, and recovery uses the controlled maintainer procedure. Fixed role assignment in approved registration/activation is not role management.
 
-An authorized Admin may explicitly re-enable another administratively disabled account with a mandatory reason. Remove only that disable restriction: do not verify contacts, approve a pending/rejected Owner, restore removed roles/grants, clear independent authentication/security/booking restrictions or revive revoked sessions.
+A current Admin Account and session can lock, unlock, disable or re-enable a User and disable or re-enable a selected Account. Require an administrative reason, exact target scope and a valid state transition. User lock/disable affects all applicable Accounts. Account disable affects only the selected Account. Commit the restriction, applicable session revocation and durable audit evidence together. Notify affected connections after commit. Unlock and re-enable remove only the selected restriction. Independent restrictions, contact verification, Owner approval, provisioning and MFA gates remain in force. Revoked sessions stay revoked, removed site assignments stay removed and business records are preserved. See the [28 November amendment](../../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#b-admin-access-restrictions).
 
 ### FR-AUTH-06
 
@@ -79,7 +79,7 @@ An authorized Admin may explicitly re-enable another administratively disabled a
 **Actors:** Driver, Operator, Owner, Admin  
 **Stories:** US-A01
 
-For every protected operation, enforce the declared authentication/freshness policy, role/permission and owning-service resource scope. The approved 2026-11-04 classification uses TOKEN by default and asynchronous Account-current REQUEST for six named families. TOKEN accepts token-time claims until the 15-minute JWT expires; REQUEST requires accepted current authority before gated finalization, with only explicitly approved reversible speculation beforehand. UserService security/refresh operations retain authoritative local checks. This supersedes the former blanket immediate-revocation guarantee; it does not remove local resource/domain checks. See the [operation matrix](../authorization-operation-classification.md).
+For every protected operation, enforce the declared authentication/freshness policy, fixed role responsibilities and owning-service resource scope. The approved 2026-11-04 classification uses TOKEN by default and asynchronous Account-current REQUEST for six named families. TOKEN accepts token-time claims until the 15-minute JWT expires; REQUEST requires accepted current authority before gated finalization, with only explicitly approved reversible speculation beforehand. UserService security/refresh operations retain authoritative local checks. This supersedes the former blanket immediate-revocation guarantee; it does not remove local resource/domain checks. See the [operation matrix](../authorization-operation-classification.md).
 
 ### FR-VEH-01
 
@@ -143,7 +143,7 @@ Every role may optionally enroll TOTP. Require recent primary authentication; pe
 **Actors:** Driver, Operator, Owner, Admin  
 **Stories:** US-SEC01
 
-Retain password or either verified email/phone OTP as the primary login route. If TOTP is enabled, primary success grants only a purpose-bound, short-lived challenge context; no normal access/refresh token, protected API access or SignalR subscription until TOTP succeeds. If replacement is required, no ordinary login is permitted until replacement completes. Current account/grant checks still apply. No remember-device bypass is introduced.
+Retain password or either verified email/phone OTP as the primary login route. If TOTP is enabled, primary success grants only a purpose-bound, short-lived challenge context; no normal access/refresh token, protected API access or SignalR subscription until TOTP succeeds. If replacement is required, no ordinary login is permitted until replacement completes. Current User, Account and applicable scope checks still apply. No remember-device bypass is introduced.
 
 
 ### FR-AUTH-09 — Backup-code recovery and replacement
@@ -157,7 +157,8 @@ Issue random single-use backup recovery codes after verified enrollment; display
 
 ### FR-AUTH-10 — Account recovery tickets and Admin-assisted resets
 
-**Status:** CONFIRMED MVP — implementation and acceptance pending  
+**Status:** CONFIRMED MVP · implementation INCOMPLETE · presentation DEFERRED until after the final presentation · acceptance NOT RUN
+
 **Actors:** Requester of any role, Admin  
 **Stories:** US-SEC02, US-SEC03
 
@@ -166,11 +167,12 @@ Add ACCOUNT_RECOVERY tickets, submitted through a limited pre-login form or auth
 
 ### FR-AUTH-11 — Scoped Admin recovery execution
 
-**Status:** CONFIRMED MVP — implementation and acceptance pending  
+**Status:** CONFIRMED MVP · implementation INCOMPLETE · presentation DEFERRED until after the final presentation · acceptance NOT RUN
+
 **Actors:** Admin, affected account holder  
 **Stories:** US-SEC03
 
-Admin authorizes a single-use password and/or TOTP recovery flow linked to a reviewed ticket, with current permission, recent full authentication, target, reason and evidence references. User chooses the new password; Admin never sees or sets a known password. Password reset alone leaves TOTP enabled. TOTP reset invalidates old secret/backup codes, revokes sessions and enters REPLACEMENT_REQUIRED; only verified replacement enrollment restores ordinary login. Password mutation also revokes sessions. The sole seeded Admin cannot approve their own recovery; use the separately controlled deployment-maintainer runbook, never a public bypass or second-Admin registration. Recovery does not clear suspension, Owner-approval status or grant roles.
+Admin authorizes a single-use password and/or TOTP recovery flow linked to a reviewed ticket, with current Admin Account and session, recent full authentication, target, reason and evidence references. User chooses the new password; Admin never sees or sets a known password. Password reset alone leaves TOTP enabled. TOTP reset invalidates old secret/backup codes, revokes sessions and enters REPLACEMENT_REQUIRED; only verified replacement enrollment restores ordinary login. Password mutation also revokes sessions. The sole seeded Admin cannot approve their own recovery; use the separately controlled deployment-maintainer runbook, never a public bypass or second-Admin registration. Recovery does not clear suspension, Owner-approval status or grant roles.
 
 
 ## Recovery authority

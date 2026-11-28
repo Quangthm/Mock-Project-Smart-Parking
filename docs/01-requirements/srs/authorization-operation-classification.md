@@ -3,12 +3,14 @@
 **Status:** APPROVED INITIAL CLASSIFICATION (project-lead direction); not a permanent implementation freeze  
 **Date:** 2026-11-04  
 **Source:** Refines `SmartPark_Authorization_Operation_Classification_Matrix_Draft.md` using the project lead's approved operation selections.  
-**Scope:** Authorization freshness for authenticated **end-user business API operations**. This is **not** a substitute for role/permission matrices, resource ownership checks, domain invariants, machine/provider authentication, or UserService's authoritative security rules.  
+**Scope:** Authorization freshness for authenticated end-user business API operations. Apply fixed-role responsibilities, resource ownership, domain eligibility, machine/provider trust and UserService security rules independently.
 **Documentation status:** Canonical initial classification baseline, integrated on 2026-11-04. Architecture semantics are owned by the [authorization ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md). Runtime adoption and acceptance remain separate work.
 
 **Provenance:** User-supplied `SmartPark_Authorization_Operation_Classification_Matrix_Initial_Baseline_2026-11-04.md`. This table classifies invocation types; it does not grant permissions, approve hypothetical endpoints, introduce MVP role management, or replace the [action-by-role permission matrix](permissions.md).
 
 ---
+
+The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) defines fixed-role responsibilities and excludes role management and configurable action permissions. The existing freshness classifications continue to apply.
 
 ## 1. Approved policy
 
@@ -31,7 +33,7 @@ For these six families, use **asynchronous Account-current `REQUEST` with option
 
 - **Public APIs**: `PUBLIC`; no end-user JWT requirement.
 - **Internal services, gate devices, IoT, payment callbacks, message consumers**: `SERVICE` / provider-device-specific authentication; do **not** fabricate an end-user actor or user JWT.
-- **UserService's own authentication, sessions, and security/role/permission writes**: UserService performs **its own authoritative local checks**, inside its own application/domain/persistence workflow. **Do not introduce a Saga or remote current-access call merely to implement an intra-UserService authorization check.** `TOKEN` in the table describes an authenticated request's ingress classification and does not waive these local authoritative checks.
+- **UserService's own authentication, sessions, and security and access-restriction writes**: UserService performs **its own authoritative local checks**, inside its own application/domain/persistence workflow. **Do not introduce a Saga or remote current-access call merely to implement an intra-UserService authorization check.** `TOKEN` in the table describes an authenticated request's ingress classification and does not waive these local authoritative checks.
 - **Chatbot-initiated action**: inherits the security and freshness of the underlying business action; it cannot downgrade `REQUEST` to `TOKEN`.
 
 **Not every financial, physical, or administrative operation automatically requires `REQUEST`.** These are the six initial choices. Later use-case reviews may strengthen or change a classification, with an explicit documented reason.
@@ -86,9 +88,8 @@ The **Freshness / origin** column represents the **approved initial direction** 
 | Payment | Read own payment history (user-facing) | Yes | `TOKEN` | No | Payment | Ownership/scope locally enforced if such API exists. |
 | Facility | Read restricted facility/site configuration | Yes | `TOKEN` | No | Facility | Stale role exposure up to token expiry accepted initially; local scope still enforced. |
 | Facility | Modify facility/site configuration | Yes | `TOKEN` | No by default | Facility | Owner/operator scope + domain/safety validation; potential future stronger freshness acknowledged. |
-| Admin | List/search users | Yes | `TOKEN` + **UserService local checks** | No | User & Access | Sensitive read; UserService may check current permissions locally. |
-| Admin | Lock/disable User or Account | Yes | `TOKEN` + **UserService local authority** | No Saga for local security write | User & Access | Authoritative current admin/target checks must not be weakened. Revocation/SignalR notifications after local commit. |
-| Admin | Change role/permissions/scopes | Yes | `TOKEN` + **UserService local authority** | No Saga for local security write | User & Access | Current admin authorization and atomic policy updates owned by UserService. |
+| Admin | List/search users | Yes | `TOKEN` + **UserService local checks** | No | User & Access | Sensitive read; UserService validates current Admin authority and applicable scope locally. |
+| Admin | Lock, unlock, disable or re-enable User. Disable or re-enable Account. | Yes | `TOKEN` + **UserService local authority** | No Saga for local security write | User & Access | Check current Admin, exact target, reason and transition. Commit any applicable session revocation and durable audit with the restriction. Send scoped SignalR after commit. |
 | Audit | Read security/audit records | Yes | `TOKEN` | No by default | Notification & Audit / User & Access | Local scope and least-privilege mandatory; review if 15-min stale role becomes unacceptable. |
 | Notification | Read own notifications | Yes | `TOKEN` | No | Notification & Audit | Local Account ownership. |
 | Assistant | FAQ/informational chatbot query | Yes if personalized | `TOKEN` | Not solely for authorization | Assistant / IoT as owned | Public FAQ may be `PUBLIC` when no actor required. |
@@ -152,7 +153,7 @@ For **SERVICE/payment/device** flows, document service/provider authentication, 
 | Parallel speculative effects | An access-denied request can consume temporary capacity, trigger compensation, or race with a late effect outcome. | Use-case-approved reversible holds, limits, durable branch state, correlation, compensation and reconciliation. |
 | Exact-session behavior | Account-current Saga outcome does not prove exact initiating session is still active. | Workflow requiring session continuity or stronger `WORKFLOW` freshness. |
 | No AccessVersion | Access-change event ordering and local projections lack a monotonic security revision. | Distributed authorization cache/projection or security event reordering problem. |
-| Resource/scope correctness | JWT role freshness and local resource-scope truth are different concerns; JWT may not hold complete current scope. | Fine-grained permissions/scopes, tenant isolation test gaps. |
+| Resource/scope correctness | JWT role freshness and local resource-scope truth are different concerns; JWT may not hold complete current scope. | Resource ownership, site assignment and tenant isolation test gaps. |
 | Default `TOKEN` for some high-impact operations | Admin/facility/payment operations not in six REQUEST families may require stronger gates later. | Security threat model, incident, acceptance review, business/regulatory requirements. |
 | Plan registration | New enrollment uses `REQUEST`; renewals, upgrades, cancellations not yet individually reviewed. | Plan lifecycle/use-case design. |
 

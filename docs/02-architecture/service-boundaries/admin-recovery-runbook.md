@@ -10,4 +10,4 @@ SEC-02 and v1.1 D02–04 require this controlled route for the sole seeded MVP A
 
 Before offering this route, the delivery team must identify the responsible maintainer, controlled execution mechanism and access/audit procedure and exercise it. No credential, named maintainer or fabricated implementation command is supplied here. Recovery remains pending if the controlled procedure is unavailable.
 
-Administrative re-enable of other accounts (D01) is a separate authorized, reasoned action that removes only administrative disablement. It cannot serve as Admin recovery, reverse Partner rejection, approve/provision an account, restore grants, revive sessions or clear independent security/booking restrictions.
+[Scoped User and Account administrative access actions](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#b-admin-access-restrictions) are separate from credential recovery. Unlock or re-enable removes only the selected restriction. Partner review, provisioning, independently required security checks, assignments and revoked sessions retain their existing state.

@@ -30,3 +30,5 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 ## Reservation amendment trace
 
 The [18 November amendment](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) preserves existing IDs and associations. [Reservation scenarios](../../04-testing/requirements-traceability/reservation-first-slice-scenarios.md#admission-realtime-and-commercial-acceptance) trace FR-PAY-03/04/05 and FR-RES-04 to the immutable quote, verified paid collection, future zero-amount order/receipt and unknown-effect recovery. Implementation and execution evidence are pending.
+
+FR-PAY-06 and BR-REF-01 trace to AC-129 and AC-133–137 for paid-charge and paid-fine appeals, eligible collected-balance constraints, separate adjustment outcomes and settlement reconciliation. See the [28 November decision coverage](v1.1-decision-coverage.md#28-november-2026-mvp-amendment).

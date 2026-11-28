@@ -428,7 +428,7 @@ The Saga must:
 6. Preserve authoritative historical, physical, and financial facts.
 7. Escalate ambiguous outcomes to reconciliation/manual review.
 
-The owning business service remains responsible for resource ownership, facility/lot scope, applicable domain permissions, business invariants, and local concurrency correctness.
+The owning business service remains responsible for resource ownership, facility/lot scope, fixed-role responsibilities and applicable domain eligibility, business invariants, and local concurrency correctness.
 
 UserService is not a universal resource-authorization engine.
 
@@ -548,7 +548,7 @@ Do not convert simple request → local DB → response operations into Sagas wi
 
 **Not automatically retryable:**
 
-- invalid authentication, account-current DENIED, permission/resource-scope denial;
+- invalid authentication, account-current DENIED, role/resource-scope denial;
 - deterministic validation/business-rule rejection;
 - unsupported transition, malformed payload;
 - a permanent 4xx or deterministic conflict;
@@ -1033,6 +1033,8 @@ On applicable `AccessRevoked`:
 7. display a safe reason message.
 
 Do **not** call normal `/logout` after a server-forced revocation when the server session is already invalid.
+
+Under the [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#b-admin-access-restrictions), the security transaction commits the selected restriction, applicable session revocation and durable audit evidence. Send scoped `AccessRevoked` afterward. Notification & Audit projects durable evidence independently. Browser acknowledgement and audit projection success are unnecessary for the committed restriction. Fixed roles and actual resource scope govern authorization under the existing TOKEN and REQUEST rules.
 
 ## 16.4 SignalR failure fallback
 

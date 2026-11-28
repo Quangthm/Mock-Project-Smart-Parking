@@ -3,6 +3,7 @@
 Record significant project decisions, their status, source, and affected documents.
 Approved decisions must be integrated into canonical requirements, rather than left only in this log.
 
+- [28 November MVP decision amendment](2026-11-28-mvp-decisions-amendment.md) — fixed-role authorization, Admin access management, active-fine appeals, checkout ordering, facility-failure visibility and deferred assisted account recovery.
 - [5 November reservation first slice](2026-11-05-reservation-first-slice.md): D1–D4c, CAR/Specific Slot, cross-lot vehicle exclusivity, earned facility-failure rights, recovery through start and strict pre-start confirmation. Supersedes the optional Account cap and October 27 T−5 milestones; implementation/acceptance pending.
 - [9 November reservation confirmation and arrival amendments](2026-11-09-reservation-confirmation-and-arrival.md): approved PostgreSQL-recorded cutoff, plate identity, one-time binding, live form amount, walk-in/early-arrival rules and full booked minimum; wrong-parking policy and next-phase boundary.
 

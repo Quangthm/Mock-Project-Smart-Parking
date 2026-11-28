@@ -26,6 +26,8 @@ See the [operation matrix](../srs/authorization-operation-classification.md) and
 3. Collect remaining charge or recognize covered balance; automatic surplus refund proceeds separately.
 4. On commercial settlement authorize ordinary gate opening; record actual departure separately and release occupancy once.
 
+Pending appeal leaves the issued fine payable and checkout available under existing settlement and departure rules. Operations durably freezes parking and fine amounts before Payment preparation. Apply the approved appeal/cutoff ordering in [UC-INC-02](uc-inc-02.md). Parking fee coverage preserves issued fine obligations.
+
 ## Alternatives and failures
 
 Mismatch stops automated checkout without theft/fine inference. Unpaid recovery requires audit and reconciled money, retains same session/no new grace. Paid session cannot reopen; system mispricing corrects at original cutoff. Lost ticket adds no unapproved fee.

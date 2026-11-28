@@ -62,7 +62,9 @@ Assigned Operator reviews evidence: SUSPECTED → IN_REVIEW → CONFIRMED or DIS
 
 **Status:** CONFIRMED — implementation pending / not assessed
 
-Appeal workflow is appeal → evidence → Operator approval → refund. ACCEPTED is a decision state and does not mean REFUNDED. An Owner may complete refund handling when an Operator escalates the appeal.
+Financial appeals require an authoritative existing reference and are limited to previously recorded paid parking charges, fines paid in completed checkout, and officially issued fines linked to ongoing sessions, including unpaid fines. General current unpaid parking fees, active sessions without an existing disputed fine, hypothetical or unconfirmed violations or fines, and facility-failure explanation requests are excluded. Existing Driver ownership and staff scope apply.
+
+The scoped Operator reviews the appeal and the Owner handles escalation. Pending appeals leave issued fines payable and normal checkout, payment and departure available. Operations commits the fine-aware checkout cutoff before requesting Payment preparation. Before the cutoff, acceptance may correct or waive the unpaid fine. After it, preserve prepared amounts and record the accepted decision and outstanding adjustment. Verified payment permits an eligible refund request. Definitive unpaid termination applies the correction to the next valid preparation. Pending or unknown settlement retains the outstanding adjustment. Retain the original violation, fine, payment, invoice and appeal decision history and apply [C01–C10](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout) once per authorized effect. ACCEPTED and REFUNDED remain separate.
 
 **Trace:** FR-INC-05/07; UC-INC-02
 

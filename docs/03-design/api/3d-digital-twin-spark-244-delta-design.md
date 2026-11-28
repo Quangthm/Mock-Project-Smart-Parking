@@ -154,7 +154,7 @@
 - **Connection authorization:** SignalR hub `/ws/parking-lots/{siteId}/layout` requires JWT Bearer. On connect:
   - Validate JWT (401 `UNAUTHENTICATED` if invalid/expired — never degrade to anonymous).
   - Resolve `AssignedLots` claim from token (list of site UUIDs the operator is assigned to).
-  - If `siteId ∉ AssignedLots` AND role lacks `SLOT_OVERRIDE` → reject connection with `403 OPERATOR_LOT_UNASSIGNED` (hub `OnConnectedAsync` throws `HubException` → client receives error, no events).
+  - Reject an operational subscription from an Operator without the required assignment for `siteId`. Apply fixed-role eligibility and tenant scope through the owning service.
 - **Group scoping:** server adds connection to group `site:{siteId}:operators`. Events are published only to that group. An operator connected to site A never receives events for site B.
 - **REST parity:** `GET /operational-layout` for operator without assignment returns `403 OPERATOR_LOT_UNASSIGNED` (TC-244-01). Same rule, same code.
 - **Token refresh:** on reconnect, client re-sends JWT; server re-evaluates scope. Scope changes (admin reassigns lots) take effect on next connect/reconnect; no mid-connection scope push required.
@@ -304,3 +304,7 @@ All 6 gaps closed at design level. Open items that are **not** gaps but follow-u
 | AC-8 (stale/reconnect) | — (228) | TC-244-06 |
 | AC-9 (duplicate/replay no duplicate effect) | G5 | TC-244-08 |
 | AC-10 (no client mutation authority) | — | add during delta (gap noted in 244 doc §12) |
+
+## Authorization amendment — 28 November
+
+Use the [fixed-role and resource-scope matrix](../../01-requirements/srs/permissions.md) for the target. Runtime flag checks described in earlier sections are legacy source evidence. Operational telemetry and actions retain site assignment, tenant isolation and owning-service guards.

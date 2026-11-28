@@ -1,3 +1,5 @@
+> Historical branch verification guidance. The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes legacy configurable action-flag expectations for the approved MVP target. See [AC-140](../requirements-traceability/acceptance-scenarios.md#28-november-mvp-alignment).
+
 # SPARK-238 Facility Structure — Manual Test Guide
 
 Manual end-to-end verification for the SPARK-238 Owner-facing structure configuration surface. This run-book is the human companion to the Postman artifacts in this folder. It covers every FacilityService route the task enumerates: lots, units, slots, paths, the `PATCH /structure` action family, reads, maintenance windows, the same-lot batch, operations, and the negative/auth boundaries.

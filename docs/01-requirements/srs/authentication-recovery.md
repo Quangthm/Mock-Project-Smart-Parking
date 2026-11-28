@@ -1,6 +1,6 @@
 # Authentication and account recovery — v1.1
 
-**v1.1 documentation review candidate based on approved decisions, 20 October 2026.** SEC-01/SEC-02 remain confirmed; implementation and tests pending.
+**v1.1 documentation review candidate.** SEC-01/SEC-02 remain confirmed. UC-AUTH-06 assisted recovery is INCOMPLETE, DEFERRED until after the final presentation, and NOT RUN. Self-service authentication, MFA and backup-code recovery retain their separate scope.
 
 ## Account establishment and normal-session gates
 
@@ -8,7 +8,7 @@ Partner Registration retains Owner and immediately persists a pending identity. 
 
 Driver verification does not automatically log in. Normal completed login returns necessary tokens; retrieve authorized account/profile/onboarding information separately (for example through /me), without unconditional profile/onboarding payloads. A required MFA challenge remains a restricted intermediate response, not normal login. Safe standardized actionable failures retain reasons for pending review, rejection and pending/failed initial provisioning after sufficient credential validation; do not reveal raw exceptions, secrets or an account-enumeration oracle. Response envelope, delivery and credential-validation threshold remain API/security design work.
 
-Re-enable is an explicit authorized Admin action with reason that removes only administrative disablement; it cannot reverse initial rejection, approve a pending Owner, verify contacts, restore removed grants, clear independent restrictions or revive sessions. The rejected initial Partner email cannot register again. Sole-Admin administrative lock/disable/delete/role changes are prohibited; ordinary own profile/security and authentication lockouts remain, with maintainer recovery.
+A current Admin Account and session can lock, unlock, disable or re-enable a User and disable or re-enable a selected Account. Require an administrative reason, exact target scope and a valid state transition. User lock/disable affects all applicable Accounts. Account disable affects only the selected Account. Commit the restriction, applicable session revocation and durable audit evidence together. Notify affected connections after commit. Unlock and re-enable remove only the selected restriction. Independent restrictions, contact verification, Owner approval, provisioning and MFA gates remain in force. Revoked sessions stay revoked, removed site assignments stay removed and business records are preserved. Sole seeded Admin protection and controlled maintainer recovery remain in force. Initial Partner rejection and its same-email registration restriction remain intact.
 
 ## Authentication and factor lifecycle
 
@@ -38,7 +38,7 @@ Ticket follows OPEN → IN_PROGRESS → optional WAITING_FOR_CUSTOMER → RESOLV
 
 ## Admin actions
 
-Require explicit account-recovery permission, current Admin access, recent full authentication (including their TOTP if enabled), reviewed case and target security version. Owner/Operator cannot reset another account through their ordinary role. Separate PASSWORD/TOTP/BOTH authorization; record actor, target, reason, evidence references, purpose, time and outcome. Admin cannot see/set the user's new password or read factor secrets/backup codes.
+Require the current fixed-role Admin Account and valid session, recent full authentication (including their TOTP if enabled), reviewed case and target security version. Owner/Operator cannot reset another account through their ordinary role. Separate PASSWORD/TOTP/BOTH authorization; record actor, target, reason, evidence references, purpose, time and outcome. Admin cannot see/set the user's new password or read factor secrets/backup codes.
 
 Password: authorize single-use limited flow; holder proves and redeems it, chooses password and satisfies password policy. On mutation revoke sessions/stale reset/login challenges; existing TOTP remains required. Merely sending a grant is not a completed reset.
 
@@ -63,7 +63,7 @@ Authoritative expiry rejects at equality. Persist bounded-purpose challenges, op
 
 ## Access revocation and client behavior — approved 2026-11-04
 
-Commit backend security state before sending best-effort SignalR revocation notifications; browser acknowledgement is never required. Backend targeting covers all User connections for User lock/disable, Account connections for Account disable, and the affected session connections for session revocation. The conceptual `/hubs/access` / `AccessRevoked` contract and reason/scope payload are described in the [ADR](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#16-signalr-access-revocation-contract--global-baseline); wire casing and exact routes remain design work.
+Commit backend security state, applicable session revocation and durable audit together. Send best-effort [`/hubs/access` / `AccessRevoked`](../../02-architecture/architecture-decisions/authorization-freshness-and-current-access.md#16-signalr-access-revocation-contract--global-baseline) after commit. Target all of the User's connections for User lock/disable, only the selected Account's connections for Account disable, and the affected session for exact-session revocation. Notification & Audit projects the durable evidence independently. Browser acknowledgement and successful audit projection are unnecessary for committed access restrictions. Exact remaining wire details remain design work.
 
 On applicable forced revocation the frontend clears access/refresh credentials, authenticated state and sensitive caches, stops authenticated connections/reconnect, redirects to Sign In and displays a safe reason. Do not call normal logout after the server has already revoked the session. Missing notification does not enforce revocation: refresh still checks current authority; later REQUEST checks reject ineligible accounts; TOKEN can remain usable until expiry. Single-instance connection tracking is not a scale-out solution.
 

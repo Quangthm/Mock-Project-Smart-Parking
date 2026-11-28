@@ -59,3 +59,7 @@ Retained all FR/BR/M/UC/story IDs. Expanded the existing Partner/Owner journey u
 Added a separate 24-row v1.1 decision CSV/Markdown pair with exact canonical sections, API/architecture contracts, AC-073–112 and V11-DES owner/action references. Existing unexecuted AC-008 and AC-060 now reflect Operator simulation/optional password and sole-Admin maintainer recovery. Earlier execution evidence/results are unchanged. No runtime test or implementation completion is claimed.
 
 The 21 October V11-06 GUID clarification adds AC-113 for the fake API GUID persisted against the user and updates the same V11-06 decision row, without introducing a new FR/BR/UC/story ID.
+
+## 28 November 2026 MVP alignment
+
+Preserved existing requirement, rule, use-case and story identifiers. Added decision coverage in both formats and AC-129–143 as NOT RUN. FR-AUTH-10/11 now record assisted recovery's confirmed MVP status and presentation deferral. See the [decision amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md).

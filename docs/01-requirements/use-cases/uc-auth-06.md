@@ -1,6 +1,6 @@
 # UC-AUTH-06 — Request and execute Admin-assisted account recovery
 
-**Status:** CONFIRMED MVP — implementation and acceptance pending
+**Requirement:** CONFIRMED MVP. **Implementation:** INCOMPLETE. **Presentation delivery:** DEFERRED until after the final presentation. **Acceptance:** NOT RUN.
 
 [Use-case index](README.md) · [Canonical security contract](../srs/authentication-recovery.md)
 

@@ -1,3 +1,5 @@
+> Historical branch verification guidance. The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes legacy configurable action-flag expectations for the approved MVP target. See [AC-140](../requirements-traceability/acceptance-scenarios.md#28-november-mvp-alignment).
+
 # SPARK-244 — Branch Verification & Manual Test Guide
 
 Branch: `feat/SPARK-244-realtime-monitoring` @ `2e94684e` (đã merge 30 commit của SPARK-238 + develop/SPARK-248).

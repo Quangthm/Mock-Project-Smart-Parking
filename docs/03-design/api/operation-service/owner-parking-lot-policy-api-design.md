@@ -16,7 +16,7 @@ Tài liệu này đặc tả chi tiết giao diện lập trình ứng dụng (A
 | Traceability | Reference |
 | --- | --- |
 | Applicable FR / BR / UC / US | `FR-POL-01`, `FR-POL-03`, `FR-POL-04`, `FR-POL-05`, `FR-POL-07`, `FR-POL-08`; `BR-POL-01..04`; `UC-POL-01`; `US-OW02` |
-| Permission / service ownership | `LOT_POLICY_MANAGE` · `OperationService` (Non-financial policies) / `PaymentService` (Tariff terms) |
+| Role / service ownership | Fixed Owner role on owned lots · `OperationService` (Non-financial policies) / `PaymentService` (Tariff terms) |
 | Approved decisions | V11-09 (Service ownership across setup form), V11-10 (Monthly/Yearly product flags), RA-06 (Numeric policy bounds) |
 
 > [!IMPORTANT]
@@ -38,7 +38,7 @@ Tài liệu này đặc tả chi tiết giao diện lập trình ứng dụng (A
 | Method / URL | `GET /api/v1/lots/{siteId}/policies/catalogue` |
 | Availability | Proposed for SPARK-230 |
 | Authentication | Bearer JWT (RFC 6750) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` (Chủ sở hữu hợp pháp của bãi xe `siteId`) |
 | Content type | Response: `application/json` |
 | Headers | `Authorization: Bearer <token>` |
@@ -158,7 +158,7 @@ Thao tác đọc idempotent hoàn toàn. Safe retry khi gặp lỗi mạng.
 | Method / URL | `GET /api/v1/lots/{siteId}/policies/draft` |
 | Availability | Proposed for SPARK-230 |
 | Authentication | Bearer JWT (RFC 6750) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | Response: `application/json` |
 | Headers | `Authorization: Bearer <token>` |
@@ -235,7 +235,7 @@ Thao tác đọc idempotent hoàn toàn.
 | Method / URL | `PUT /api/v1/lots/{siteId}/policies/draft` |
 | Availability | Proposed for SPARK-230 |
 | Authentication | Bearer JWT (RFC 6750) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | Request & Response: `application/json` |
 | Headers | `Authorization: Bearer <token>`, `Content-Type: application/json`, `Idempotency-Key: <UUID>` (Optional) |
@@ -318,7 +318,7 @@ Thao tác `PUT` ghi đè toàn bộ bản nháp, có tính chất Idempotent t�
 | Method / URL | `POST /api/v1/lots/{siteId}/policies/publish` |
 | Availability | Proposed for SPARK-230 |
 | Authentication | Bearer JWT (RFC 6750) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | Request & Response: `application/json` |
 | Headers | `Authorization: Bearer <token>`, `Content-Type: application/json`, `Idempotency-Key: <UUID>` (Bắt buộc) |
@@ -392,7 +392,7 @@ HTTP 200 OK.
 | Method / URL | `GET /api/v1/lots/{siteId}/policies/revisions` |
 | Availability | Proposed for SPARK-230 |
 | Authentication | Bearer JWT (RFC 6750) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | Response: `application/json` |
 | Headers | `Authorization: Bearer <token>` |
@@ -470,7 +470,7 @@ Thao tác đọc danh sách có phân trang ổn định, sắp xếp giảm d�
 | Method / URL | `GET /api/v1/lots/{siteId}/policies/revisions/{version}` |
 | Availability | Proposed for SPARK-230 |
 | Authentication | Bearer JWT (RFC 6750) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | Response: `application/json` |
 | Headers | `Authorization: Bearer <token>` |

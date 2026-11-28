@@ -26,3 +26,5 @@ Source associations preserved/normalized; see trace-edit-log for added reverse/m
 | FR-OPS-04 | FUTURE — outside MVP | 05-sessions-operations | BR-FAIL-01 | US-O06 | UC-OPS-02 |
 | FR-OPS-05 | FUTURE — outside MVP | 05-sessions-operations | BR-FAIL-02 | US-O06 | UC-OPS-02 |
 | FR-OPS-06 | CONFIRMED — implementation pending / not assessed | 05-sessions-operations | BR-EMERG-03, BR-FAIL-03 | US-O05 | UC-OPS-01 |
+
+FR-INC-05/07 and UC-INC-02 trace to the [28 November appeal decision coverage](v1.1-decision-coverage.md#28-november-2026-mvp-amendment) for eligible issued active fines, checkout ordering and independent financial outcomes.

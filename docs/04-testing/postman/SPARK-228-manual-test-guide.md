@@ -1,3 +1,5 @@
+> Historical branch verification guidance. The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes legacy configurable action-flag expectations for the approved MVP target. See [AC-140](../requirements-traceability/acceptance-scenarios.md#28-november-mvp-alignment).
+
 # SPARK-228 Operational Layout — Manual Test Guide
 
 Manual end-to-end verification for the Phase 1 operational-layout read path. This is the runtime evidence for **B1** and supports **A1–A8**; exhaustive state/enum coverage still lives in the xUnit suites.

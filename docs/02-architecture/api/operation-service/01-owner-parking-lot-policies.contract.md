@@ -43,7 +43,7 @@ Cung cấp bộ API chuẩn hóa cho phép Chủ bãi xe (Owner) cấu hình cá
 
 ### 1.3 Xác thực & Phân quyền (Authentication & Authorization)
 - **Cơ chế xác thực:** `Bearer JWT` (chuẩn RFC 6750).
-- **Quyền hạn bắt buộc (Required Permission):** `LOT_POLICY_MANAGE`.
+- **Vai trò và phạm vi (Role and scope):** Fixed Owner role, eligible Account and ownership of the requested parking lot. Apply the declared freshness and local policy guards.
 - **Phạm vi tài nguyên (Resource Scope):** Bắt buộc kiểm tra `owned-lot scope`. Người dùng đăng nhập với vai trò `OWNER` chỉ được phép đọc và ghi cấu hình cho các bãi xe (`siteId`) mà mình sở hữu hợp pháp. Mọi nỗ lực truy cập bãi xe của Owner khác sẽ bị từ chối ngay với HTTP `403 Forbidden` (`CROSS_LOT_ACCESS_DENIED`).
 
 ### 1.4 Chính sách Idempotency (Idempotency Policy)
@@ -67,7 +67,7 @@ Cung cấp bộ API chuẩn hóa cho phép Chủ bãi xe (Owner) cấu hình cá
 | `FR-POL-08` | SRS v1.1 §3.2.4 | Hỗ trợ draft, scheduled activation và revision history | `GET /draft`, `PUT /draft`, `POST /publish` |
 | `UC-POL-01` | Use Case Index | Use Case cấu hình chính sách bãi và biểu phí | Toàn bộ 6 endpoints trong hợp đồng này |
 | `US-OW02` | User Story | Owner muốn cấu hình chính sách bãi xe trong phạm vi cho phép | Mục tiêu nghiệp vụ của hợp đồng |
-| `FR-AUTH-06`| SRS v1.1 §3.1 | Phân quyền truy cập và bảo vệ phạm vi tài nguyên sở hữu | RBAC `LOT_POLICY_MANAGE` + `owned-lot scope` |
+| `FR-AUTH-06`| SRS v1.1 §3.1 | Phân quyền truy cập và bảo vệ phạm vi tài nguyên sở hữu | Fixed Owner role and `owned-lot scope` |
 
 ### 1.6 Bảng ghi nhận Trạng thái Mở / Hoãn lại (Open & Deferred Items)
 
@@ -133,12 +133,12 @@ stateDiagram-v2
 
 | HTTP Method | Route URL | Tên Thao tác | Mô tả tóm tắt | Quyền bắt buộc |
 | :---: | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/lots/{siteId}/policies/catalogue` | Read Effective Catalogue | Lấy danh mục chính sách, giá trị mặc định, bounds và giá trị đang có hiệu lực | `LOT_POLICY_MANAGE` |
-| `GET` | `/api/v1/lots/{siteId}/policies/draft` | Read Draft Policy | Đọc nội dung bản nháp chính sách chưa công bố | `LOT_POLICY_MANAGE` |
-| `PUT` | `/api/v1/lots/{siteId}/policies/draft` | Upsert Draft Policy | Cập nhật các giá trị override trong bản nháp | `LOT_POLICY_MANAGE` |
-| `POST` | `/api/v1/lots/{siteId}/policies/publish` | Publish Policy Revision | Xuất bản bản nháp thành chính sách chính thức (ngay hoặc hẹn giờ) | `LOT_POLICY_MANAGE` |
-| `GET` | `/api/v1/lots/{siteId}/policies/revisions` | List Policy Revisions | Xem danh sách lịch sử các phiên bản chính sách đã ban hành | `LOT_POLICY_MANAGE` |
-| `GET` | `/api/v1/lots/{siteId}/policies/revisions/{version}` | Read Revision Snapshot | Xem chi tiết snapshot một phiên bản chính sách trong lịch sử | `LOT_POLICY_MANAGE` |
+| `GET` | `/api/v1/lots/{siteId}/policies/catalogue` | Read Effective Catalogue | Lấy danh mục chính sách, giá trị mặc định, bounds và giá trị đang có hiệu lực | Fixed Owner role and owned lot |
+| `GET` | `/api/v1/lots/{siteId}/policies/draft` | Read Draft Policy | Đọc nội dung bản nháp chính sách chưa công bố | Fixed Owner role and owned lot |
+| `PUT` | `/api/v1/lots/{siteId}/policies/draft` | Upsert Draft Policy | Cập nhật các giá trị override trong bản nháp | Fixed Owner role and owned lot |
+| `POST` | `/api/v1/lots/{siteId}/policies/publish` | Publish Policy Revision | Xuất bản bản nháp thành chính sách chính thức (ngay hoặc hẹn giờ) | Fixed Owner role and owned lot |
+| `GET` | `/api/v1/lots/{siteId}/policies/revisions` | List Policy Revisions | Xem danh sách lịch sử các phiên bản chính sách đã ban hành | Fixed Owner role and owned lot |
+| `GET` | `/api/v1/lots/{siteId}/policies/revisions/{version}` | Read Revision Snapshot | Xem chi tiết snapshot một phiên bản chính sách trong lịch sử | Fixed Owner role and owned lot |
 
 ---
 
@@ -409,7 +409,7 @@ stateDiagram-v2
 | `400` | `POLICY_OUT_OF_BOUNDS` | Giá trị cấu hình vượt quá giới hạn Admin quy định (ví dụ: `paymentHoldDurationMinutes = 45 > 30`) | `{"success": false, "code": "POLICY_OUT_OF_BOUNDS", "message": "paymentHoldDurationMinutes must be between 5 and 30 minutes."}` | Điều chỉnh lại giá trị nằm trong khoảng `adminBounds` |
 | `400` | `INVALID_TIME_DURATION` | `minReservationDuration` lớn hơn `maxReservationDuration` | `{"success": false, "code": "INVALID_TIME_DURATION", "message": "Min duration cannot exceed max duration."}` | Kiểm tra logic thời lượng |
 | `401` | `UNAUTHORIZED` | Thiếu token hoặc token JWT hết hạn | `{"success": false, "code": "UNAUTHORIZED", "message": "Authentication required."}` | Đăng nhập lại để lấy token mới |
-| `403` | `FORBIDDEN` | Người dùng thiếu quyền `LOT_POLICY_MANAGE` | `{"success": false, "code": "FORBIDDEN", "message": "Permission LOT_POLICY_MANAGE is required."}` | Liên hệ quản trị viên cấp quyền |
+| `403` | `FORBIDDEN` | Caller lacks eligible Owner authority | Existing safe error envelope | Verify the Owner Account and lot scope |
 | `403` | `CROSS_LOT_ACCESS_DENIED` | Owner cố tình truy cập vào bãi xe mà mình không sở hữu | `{"success": false, "code": "CROSS_LOT_ACCESS_DENIED", "message": "You do not own this parking lot."}` | Chỉ thao tác trên các bãi xe thuộc sở hữu của mình |
 | `404` | `SITE_NOT_FOUND` | `siteId` không tồn tại trong hệ thống | `{"success": false, "code": "SITE_NOT_FOUND", "message": "Parking lot not found."}` | Kiểm tra lại định danh `siteId` |
 | `404` | `REVISION_NOT_FOUND` | Số phiên bản `version` không tồn tại | `{"success": false, "code": "REVISION_NOT_FOUND", "message": "Policy revision not found."}` | Tra cứu danh sách revision trước |

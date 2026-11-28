@@ -16,7 +16,7 @@ Tài liệu này đặc tả **API Contract & Database Schema** cho cụm tính 
 | Traceability | Reference |
 | --- | --- |
 | Applicable FR / BR / UC / US | `FR-MON-01..06`, `FR-MON-12..13`; `M-01..M-07`, `M-09`; `UC-MON-01`, `UC-MON-02`, `UC-MON-05`; `US-OW06`, `US-D13` |
-| Permission / service ownership | `OperationService` (`LOT_POLICY_MANAGE` / plan lifecycle) · `PaymentService` (financial terms, orders, refunds) · `UserService` (`REQUEST` authorization in `332`) |
+| Permission / service ownership | `OperationService` (owned-lot Owner scope / plan lifecycle) · `PaymentService` (financial terms, orders, refunds) · `UserService` (`REQUEST` authorization in `332`) |
 | Approved decisions & S2S standard | `V11-10`; [authorization-operation-classification.md](../../01-requirements/srs/authorization-operation-classification.md); [SmartPark-Coding-Skill-v1.0.md](../../07-skills/SmartPark-Coding-Skill-v1.0.md) (§4 Service-to-service authentication); [reservation-facility-dependency-api-design.md](reservation-facility-dependency-api-design.md); `V11-DES-05` / `Q05` |
 
 > [!IMPORTANT]
@@ -90,7 +90,7 @@ sequenceDiagram
 | Availability | Proposed (`SPARK-331` / `SPARK-341`) |
 | Authentication | Bearer JWT |
 | Freshness / invocation origin | `TOKEN` (chấp nhận token freshness + kiểm tra quyền Owner theo `siteId`) |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` (Owner sở hữu `siteId`) |
 | Content type | Response: `application/json` |
 | Headers | `Authorization: Bearer <token>` |
@@ -178,7 +178,7 @@ No body. Path parameter `siteId` (UUID v4).
 | Availability | Proposed (`SPARK-331` / `SPARK-341`) |
 | Authentication | Bearer JWT |
 | Freshness / invocation origin | `TOKEN` |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | `application/json` |
 | Headers | `Authorization: Bearer <token>` |
@@ -242,7 +242,7 @@ Path: `productType` ∈ `{"MONTHLY", "YEARLY"}` (case-insensitive normalized to 
 | Availability | Proposed (`SPARK-331` / `SPARK-341`) |
 | Authentication | Bearer JWT |
 | Freshness / invocation origin | `TOKEN` |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | `application/json` |
 | Headers | `Authorization: Bearer <token>`, `Idempotency-Key: <string>` (Optional/Recommended, tối đa 128 ký tự; nếu replay trả header `Idempotency-Replayed: true` giống `LotPoliciesController`) |
@@ -292,7 +292,7 @@ Path: `productType` ∈ `{"MONTHLY", "YEARLY"}` (case-insensitive normalized to 
 | Availability | Proposed (`SPARK-331` / `SPARK-341`) |
 | Authentication | Bearer JWT |
 | Freshness / invocation origin | `TOKEN` |
-| Permission / account state | Role `OWNER`, Permission `LOT_POLICY_MANAGE`, tài khoản `ACTIVE` |
+| Role / account state | Fixed Owner role, eligible Account and applicable `owned-lot scope` |
 | Resource scope | `owned-lot scope` |
 | Content type | `application/json` |
 | Headers | `Authorization: Bearer <token>` |

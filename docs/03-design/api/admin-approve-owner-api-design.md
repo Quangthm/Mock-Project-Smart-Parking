@@ -9,7 +9,7 @@ Canonical behavior: [identity SRS](../../01-requirements/srs/modules/01-identity
 
 ## Actor and endpoint contract
 
-All review/read/replace operations require current Admin access and `ACCOUNT_ADMIN`; actor identity comes from validated authentication, never request fields. MVP has one protected seeded Admin. Review of a Partner application does not alter that safeguard.
+All review/read/replace operations require the current fixed-role Admin Account and valid session; actor identity comes from validated authentication, never request fields. MVP has one protected seeded Admin. Review of a Partner application does not alter that safeguard.
 
 | Operation | Method/path | Contract |
 |---|---|---|

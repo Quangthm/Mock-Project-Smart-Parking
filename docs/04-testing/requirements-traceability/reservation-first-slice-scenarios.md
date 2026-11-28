@@ -39,3 +39,7 @@ Read-only projections distinguish pending receipt, booking lifecycle, payment/re
 | Paid payOS | Pay against the real order issued with exact H and immutable quote binding. Browser redirect/QR/client success cannot confirm. An agreed versioned collection event with distinct financial identity and immutable quote binding permits one guarded transition. Wrong order/amount/currency, duplicate and late money follow rejection/dedup/reconciliation. | FR-RES-04, FR-PAY-03/04; BR-PAY-03/04 |
 
 See the [decision](../../05-project-management/decision-log/2026-11-18-SPARK-273-reservation-contract-amendment.md) and [deployment verification](../reports/SPARK-273-deployment-checklist.md). Subscription cases require the approved future implementation or an owner-controlled test fixture. Execution is deferred.
+
+## Facility-failure reason visibility
+
+[AC-139](acceptance-scenarios.md#28-november-mvp-alignment) verifies that a Driver can see the committed status and authoritative recorded reason for their own reservation through authorized history/detail or supported notification. The implementation gap is tracked separately from production cancellation writers. Execution is **NOT RUN**.

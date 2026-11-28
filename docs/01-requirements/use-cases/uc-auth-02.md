@@ -11,7 +11,7 @@ Review Partner Registration and administer permitted account access.
 
 ## Preconditions
 
-Admin has current platform account-review permission.
+Use the current authenticated Admin Account and session and verify locally authoritative eligibility.
 
 ## Main flow
 
@@ -20,7 +20,7 @@ Admin has current platform account-review permission.
 3. Approve or reject against the reviewed application/document version. Final record is immutable; record rejection reason. No corrections/re-acceptance workflow or third outcome.
 4. Persist approval independently from first-lot provisioning. Track pending/failed/unknown provisioning and safely retry with stable identities; successful initial provisioning is required before normal Owner login. Operational opening still requires readiness.
 5. Email the decision; after replacement approval send “Your application was approved with some modifications”. Delivery retry preserves committed results and never repeats provisioning. Rejection is safely explained; the same initial email cannot register again.
-6. For other administratively disabled accounts, explicitly re-enable with reason, removing only that restriction. Never approve/reverify/regrant/revive sessions or clear independent restrictions through re-enable.
+6. A current Admin Account and session can lock, unlock, disable or re-enable a User and disable or re-enable a selected Account. Require an administrative reason, exact target scope and a valid state transition. User lock/disable affects all applicable Accounts. Account disable affects only the selected Account. Commit the restriction, applicable session revocation and durable audit evidence together. Notify affected connections after commit. Unlock and re-enable remove only the selected restriction. Independent restrictions, contact verification, Owner approval, provisioning and MFA gates remain in force. Revoked sessions stay revoked, removed site assignments stay removed and business records are preserved.
 7. Protect the sole seeded Admin from administrative disable/lock/delete/role/authority change, including self and last-Admin loss. Own ordinary profile/security is allowed, authentication lockouts apply, and recovery uses the maintainer procedure. No role management or Admin registration in MVP.
 
 ## Alternatives and failures

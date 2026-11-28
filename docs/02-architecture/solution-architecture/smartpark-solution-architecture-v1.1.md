@@ -17,7 +17,7 @@ This current overview supersedes the *overview direction* of the retained v0.9 a
 |---|---|
 | Correct competing reservations and occupancy | Operations evaluates accepted occupancy and claims within one authoritative boundary. |
 | Reliable money without duplicate effects | Payment owns attempts, verification, ledger/refund state and reconciliation; money and capacity fulfillment remain separate. |
-| Scoped access for four roles | User & Access owns identity/current grants; each service enforces its own resource authorization. |
+| Scoped access for four roles | User & Access owns identity, fixed role and current eligibility; each service enforces its own resource authorization. |
 | Recoverable cross-service work | Local transactions plus durable outbox/inbox and one workflow coordinator; no shared database transaction assumption. |
 | Feasible student-project delivery | Docker local profile, one instance per required service; clear fixtures and measured local targets. |
 | Replaceable providers | SDK/HTTP integrations stay behind Infrastructure adapters; domain records retain stable references. |
@@ -43,7 +43,7 @@ The diagram shows the synchronous entry path, persistence ownership, durable eve
 
 | Service | Owns | Key boundary |
 |---|---|---|
-| User & Access | Accounts, credentials, sessions, roles/current grants, organization membership, Partner applications/review/document versions, Operator scopes, profiles and registered-vehicle binding history. | Facility validates referenced site existence; resource services enforce their declared freshness and local resource scope. |
+| User & Access | Accounts, credentials, sessions, fixed roles/current eligibility, organization membership, Partner applications/review/document versions, Operator scopes, profiles and registered-vehicle binding history. | Facility validates referenced site existence; resource services enforce their declared freshness and local resource scope. |
 | Facility & Visualization | Sites/floors/zones/slots, paths, categories, configured capacity, layout, maintenance/closure configuration and fixed 3D asset references. | Defines resources; does not own accepted occupancy or reservation availability. |
 | Parking Operations | Reservations, claims, allocations, accepted occupancy/uncertainty, admission, visits, checkout/departure, tickets/QR/cards, incidents/appeals, monthly/yearly Driver rights/plan definitions and Search. | Owns compatible fulfillment and business availability. |
 | Payment & Pricing | Tariffs, financial snapshots, orders/attempts, online adapters/cash records, verification/reconciliation, refunds, invoices and monthly/yearly paid financial periods. | Payment success is not proof that Operations committed a right. |
@@ -124,7 +124,7 @@ MapTiler discovery uses backend facts from Operations/Facility/Payment, a consen
 
 ## 9. Security, media and live projections
 
-User & Access owns passwords, primary OTP, optional TOTP, backup codes, sessions and current grants. Enabled TOTP gates normal login after primary proof. Each consuming service enforces local resource authority and its declared freshness policy, including private cached results and SignalR subscriptions. Gateway checks alone are insufficient. Turnstile is an abuse-control component, not authentication or authorization.
+User & Access owns passwords, primary OTP, optional TOTP, backup codes, sessions and current eligibility. Enabled TOTP gates normal login after primary proof. Each consuming service enforces local resource authority and its declared freshness policy, including private cached results and SignalR subscriptions. Gateway checks alone are insufficient. Turnstile is an abuse-control component, not authentication or authorization.
 
 ACCOUNT_RECOVERY is a reviewed, restricted workflow. Admin authorizes a user-chosen password reset; a TOTP reset requires replacement enrollment rather than silently restoring unrestricted access. MVP has one protected seeded Admin, no Admin registration and no role-management feature. Application-level lock/disable/delete/role changes targeting that account are prohibited; ordinary own profile/security actions and authentication lockouts remain. Admin recovery follows the controlled maintainer runbook. Neither workflow grants business privileges.
 
@@ -179,3 +179,7 @@ Development reset is a future implementation task only after documentation updat
 | Deferred scope and release actions | [Register](../../05-project-management/decision-log/deferred-and-implementation-register.md) and [PM actions](../../05-project-management/decision-log/pm-release-actions.md) |
 
 When behavior changes, update its owning requirement/rule, affected contract, traceability, decision and acceptance records together; refresh these summaries if the overarching direction changes. Never promote an older proposal, SQL default, demo value or implementation shortcut into policy by copying it into this overview.
+
+## November MVP alignment
+
+The [decision amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md) defines fixed-role authorization, scoped Admin restriction and revocation, Operations' fine-aware checkout cutoff before Payment preparation, and distinct appeal/financial outcomes. Facility contributes service-availability facts and Operations owns the recorded reason exposed by the authorized reservation projection. Payment owns verified financial outcomes. UC-AUTH-06 remains confirmed MVP and is incomplete and deferred past the presentation. See the linked handoff for current implementation gaps.

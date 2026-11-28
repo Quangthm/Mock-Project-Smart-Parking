@@ -12,7 +12,7 @@
 | General Support | OPEN → IN_PROGRESS → WAITING_FOR_CUSTOMER → RESOLVED → CLOSED | Minimal state set; exact skips/reopen guards are design work, not mandatory wait in every case. |
 | Refund | REQUESTED / APPROVED / PROCESSING / COMPLETED / REJECTED | Separate Payment lifecycle and reconciliation; retain applicable existing baseline. |
 
-Evidence availability, assignment and escalation are attributes rather than a state for every combination. Confirmed permitted consequences: dismiss unsupported finding; record wrong-slot incident and request assistance; correct incorrect charges; apply only already-published eligible obligations; accepted appeal corrects/reverses decision and initiates authorized adjustment; repeat concerns escalate for review. No automatic fines, bans, towing, forced relocation or government reporting inferred from a confirmed finding. Cancellation booking restrictions in §14.1 are separately approved, not a general violation ban.
+Evidence availability, assignment and escalation are attributes rather than a state for every combination. Confirmed permitted consequences: dismiss unsupported finding; record wrong-slot incident and request assistance; correct incorrect charges; apply only already-published eligible obligations; an accepted appeal may authorize an operational correction or a separate eligible refund request; repeat concerns escalate for review. No automatic fines, bans, towing, forced relocation or government reporting inferred from a confirmed finding. Cancellation booking restrictions in §14.1 are separately approved, not a general violation ban.
 
 | Actor | Confirmed report/data scope |
 |---|---|
@@ -24,7 +24,7 @@ Evidence availability, assignment and escalation are attributes rather than a st
 
 Exports, downloads and SignalR obey the same resource scopes. Each service remains authoritative for its reports; cross-domain screens compose authorized contracts.
 
-Accepted verified checkout freezes billable cutoff; commercial settlement completes when charge is covered. Physical departure remains separately recorded and is the only occupancy release. Audited unpaid recovery may resume the same session without fresh grace only after resolving UNKNOWN money. Never reopen a paid stay for continued parking: require actual exit/re-entry. System mispricing uses difference-only correction at original cutoff, retaining transaction/invoice history.
+Accepted verified checkout freezes the billable cutoff. The approved financial preparation boundary also durably freezes the applicable parking obligation and fine amounts in Operations before requesting Payment preparation. Commercial settlement completes when the charge is covered. Physical departure remains separately recorded and is the only occupancy release. Audited unpaid recovery may resume the same session without fresh grace only after resolving UNKNOWN money. Never reopen a paid stay for continued parking: require actual exit/re-entry. System mispricing uses difference-only correction at original cutoff, retaining transaction/invoice history.
 
 Operations owns session tickets/QR and reusable card assignment, release, loss, disabling and session history. IoT owns readers; Facility owns paths/entrances. Do not treat a reusable card as a reusable completed single-use visit ticket. Account-free walk-in remains supported. Actual entry/departure are explicit Operations events, not inferred from gate-open or LPR.
 
@@ -140,7 +140,13 @@ Assigned Operator reviews evidence: SUSPECTED → IN_REVIEW → CONFIRMED or DIS
 **Actors:** Driver, Operator, Owner  
 **Stories:** US-D07, US-OW07
 
-Accept appeal through the flow appeal → evidence → Operator approval → refund. Owner may handle refund when the Operator escalates the case. ACCEPTED and REFUNDED remain separate outcomes.
+Financial appeals require an authoritative existing reference and are limited to previously recorded paid parking charges, fines paid in completed checkout, and officially issued fines linked to ongoing sessions, including unpaid fines. General current unpaid parking fees, active sessions without an existing disputed fine, hypothetical or unconfirmed violations or fines, and facility-failure explanation requests are excluded. Existing Driver ownership and staff scope apply.
+
+An officially issued fine has a durable identity linked to the parking session and authoritative violation decision, owned by Operations. A suspected violation or unreviewed recognition result confers no enforceable obligation. Pending appeal leaves the fine payable and normal checkout, payment and departure available.
+
+Operations durably freezes the attempt's parking obligation and fine amounts before sending Payment preparation. Order or QR receipt has no bearing on the cutoff. Order the accepted decision against that boundary. An earlier acceptance may correct or waive the unpaid fine for subsequent preparation. A later acceptance preserves the prepared amounts and records an outstanding adjustment. Payment-verified collection supports an eligible refund request. Definitive unpaid termination applies the correction at the next valid preparation. Pending or unknown settlement retains the outstanding adjustment for reconciliation.
+
+Keep the assigned Operator review and Owner escalation, original history, and independent decision and adjustment outcomes. See [C01–C10](../../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout).
 
 ### FR-INC-06
 
@@ -156,7 +162,7 @@ Permit audited manual slot override only for an authorized actor acting under an
 **Actors:** Driver, Operator  
 **Stories:** US-D07
 
-Display Driver own appeal/refund state as a customer-safe projection. Redact third-party details and internal staff notes; evidence access follows current resource scope and approved upload/retention/hold rules.
+Display the Driver's own appeal decision and independent operational adjustment or verified financial outcome as customer-safe projections. Redact third-party details and internal staff notes. Evidence access follows current resource scope and approved upload, retention and hold rules. Other / General support is tracked separately and carries no automatic refund authority.
 
 ### FR-OPS-01
 

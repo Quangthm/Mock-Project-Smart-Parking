@@ -26,7 +26,7 @@ Pending/failed delivery must preserve committed account/application/review/provi
 
 Notification & Audit Service là **hạ tầng truyền thông bất đồng bộ và kiểm toán an ninh** của toàn bộ hệ thống SmartPark theo chuẩn kiến trúc v1.0 RC3. Service này giải quyết 3 trách nhiệm cốt lõi:
 1. **Chuyển phát thông báo bền vững (Durable Notification Engine):** Nhận sự kiện từ RabbitMQ (`PaymentVerified`, `ReservationCreated`, `AccountLocked`), thực hiện chống gửi trùng (Deduplication qua `idempotency_key`), và lưu vết lịch sử chuyển phát đa kênh (IN_APP, EMAIL, SMS, PUSH).
-2. **Module Hỗ trợ chung (General Support Module):** Tiếp nhận khiếu nại cước phí, phản ánh sự cố bãi, và đặc biệt là ca tiếp nhận khôi phục tài khoản người dùng (`ACCOUNT_RECOVERY`). Lưu ý: Support module chỉ tiếp nhận và lưu lịch sử xét duyệt ca hỗ trợ, **không** có quyền ghi đè bảng mật khẩu bên UserDb.
+2. **General Support:** Owns Other / General asynchronous cases with optional financial context and the distinct ACCOUNT_RECOVERY intake/routing history. Operations owns the financial appeal decision and Payment owns verified financial execution. Project authorized outcomes and durable Admin audit independently. Driver reservation visibility uses authoritative Operations reasons. The schema below records existing design/storage.
 3. **Hồ chiếu kiểm toán tập trung (Central Audit Projections):** Nhận projection log kiểm toán từ toàn bộ 5 service khác bắn qua RabbitMQ để phục vụ tra cứu bảo mật tập trung cho System Administrator.
 
 ```text

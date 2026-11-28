@@ -90,6 +90,8 @@ Distinguish failed, pending and unknown outcomes. If payment succeeds after the 
 
 Scoped Operator handles ordinary appeals/mispricing; Owner handles escalation and monthly/yearly cancellation; Payment executes payouts. Reserve refundable collected balance atomically, including pending/UNKNOWN refunds. Approval is not completion; actual payout proof is required. Automatically initiate excess-deposit refund through original route where supported, or audited cash return for original cash. Covered commercial checkout may complete while surplus payout remains pending. No cancellation penalty on surplus.
 
+An accepted appeal for a paid charge or fine may authorize a refund request. Payment validates the remaining refundable collected money, including deposits, credits, adjustments, previous refunds and reserved balances. The existing original-route, rounding, caps, cash and reconciliation rules apply. An authorized correction or waiver of an unpaid fine requires no refund for uncollected money. Monthly and yearly parking fee coverage leaves issued fines in force. See [C01–C10](../../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout).
+
 ### FR-PAY-07
 
 **Status:** CONFIRMED — implementation pending / not assessed  

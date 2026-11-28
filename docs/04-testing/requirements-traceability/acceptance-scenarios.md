@@ -223,3 +223,25 @@ These scenarios supplement the existing acceptance identifiers. Execution result
 | UI/network/account switch and live storage | Both forms reload authoritative pending status; pending/motorcycle entries stay out of Specific Slot selection; no cross-Account photo or claim leak; uncertain saves are not confirmed |
 | Existing reservation/gate/payment state | A competing claim does not mutate the incumbent's accepted workflow |
 | AC-098 removal and UC-VEH-02 adjudication | Enforce dependency/history safeguards and explicitly authorized review/transfer; acceptance is separate from private claim intake |
+
+## 28 November MVP alignment
+
+See the [approved amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md) and [traceability](../../01-requirements/requirements-traceability/v1.1-decision-coverage.md#28-november-2026-mvp-amendment). These are planned acceptance scenarios.
+
+| Case | References | Scenario and expected outcome | Execution |
+|---|---|---|---|
+| AC-129 | FR-INC-05/07, FR-PAY-06, C09 | Submit a previously paid parking charge and a fine paid at completed checkout. Each references authoritative owned facts. Acceptance can authorize an eligible refund, with the decision and Payment outcome displayed separately. | NOT RUN |
+| AC-130 | FR-INC-05, BR-VIOL-04, C08 | Submit an issued unpaid active fine linked to the session and authoritative violation decision. Reject general unpaid parking fees, an active session without a fine, hypothetical/unconfirmed findings and a request for a facility-failure explanation. Reject another Driver's target and out-of-scope staff actions. | NOT RUN |
+| AC-131 | UC-INC-02, UC-GATE-02, C01/C02 | Leave an issued fine appeal pending. Fine stays payable and normal checkout, settlement and departure can proceed under the existing rules. | NOT RUN |
+| AC-132 | UC-INC-02, C03/C05 | Commit acceptance before the durable preparation cutoff. Subsequent preparation uses the authorized corrected obligation. No refund for uncollected money. Verify the cutoff precedes the Payment request without depending on an order ID or QR. | NOT RUN |
+| AC-133 | UC-INC-02, C03/C04/C06 | Race acceptance with preparation in flight and an already-created unpaid order. If the cutoff came first, preserve frozen amounts and record the accepted decision and outstanding adjustment. The appeal causes no order mutation or replacement. | NOT RUN |
+| AC-134 | FR-PAY-06, C06/C07 | Exercise pending and unknown settlement, timeout, expired QR, lost reply and missing local reference. Keep outstanding adjustment and use Payment reconciliation. Verify no speculative refund or conflicting order. | NOT RUN |
+| AC-135 | FR-PAY-06, C06/C07 | Compare verified paid and definitively terminated unpaid outcomes, including late or unexpected collection. Paid permits an authorized eligible refund. Definitive unpaid applies correction to the next valid preparation. Late and unexpected collections follow Payment reconciliation. | NOT RUN |
+| AC-136 | BR-REF-01, C09 | Replay and duplicate delivery with multiple fines, partial adjustment, deposits/credits and reserved/prior refunds. Preserve history and enforce attribution, original outcome reuse and refundable collected-balance constraints. | NOT RUN |
+| AC-137 | FR-PAY-02, C10 | Monthly and yearly parking coverage with and without an issued fine. Fee coverage preserves the fine obligation. Existing covered checkout without a fine retains its established behavior. | NOT RUN |
+| AC-138 | FR-INC-07, UC-INC-02 | Submit Other / General support without a financial reference. Scoped async case proceeds independently and carries no automatic refund authority. | NOT RUN |
+| AC-139 | FR-RES-10, UC-RES-02/03 | Maintenance causes an accepted facility-failure cancellation. The owning Driver can read state and recorded reason in the existing authorized projection. Foreign Driver is denied. Ticket or appeal submission is unnecessary. Compensation rights are preserved. | NOT RUN |
+| AC-140 | FR-AUTH-04/06, BR-AUTH-01 | Assigned Operator can perform a documented Operator action within an eligible site. Reject unassigned, cross-tenant, Owner impersonation and unrelated Admin operation attempts. | NOT RUN |
+| AC-141 | FR-AUTH-05/06, UC-AUTH-02 | Compare User lock and disable across Accounts to Account disable of the selected Account. Validate reason, scope, transition, seeded Admin protection, atomic revocation/audit and scoped post-commit logout. Missed SignalR or audit projection never rolls back the change. Verify the existing 15-minute TOKEN model. | NOT RUN |
+| AC-142 | FR-AUTH-05/06, UC-AUTH-02 | Unlock User, re-enable User and re-enable Account. Remove only the intended restriction. Independent verification, review, provisioning, MFA and business state remain in force. Revoked sessions, removed assignments and business history stay as recorded. | NOT RUN |
+| AC-143 | FR-AUTH-10/11, UC-AUTH-06 | Apply existing SEC-02 evidence, scoped reset, sole seeded Admin, no fallback bypass and session-invalidation criteria. The scenario remains deferred until after the final presentation. | NOT RUN |

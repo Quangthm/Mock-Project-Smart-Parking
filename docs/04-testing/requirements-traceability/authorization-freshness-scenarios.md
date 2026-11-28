@@ -34,3 +34,7 @@
 | AF-014 | Account becomes locked during user checkout; operational/device exit and payment facts continue | Apply the separately approved safety/obligation contract: no physical stranding, invented customer actor, erased debt or speculative irreversible payment/barrier action. Missing detailed safety design blocks implementation/acceptance of that path, not unrelated work. | NOT RUN |
 
 Real PostgreSQL/broker tests are necessary when claims depend on concurrency, outbox atomicity, routing, restart or delayed delivery. Pure state tests can cover deterministic joins; they do not prove transport durability. Numeric defaults are approved engineering budgets, not measured latency promises or a replacement for Payment's existing business-attempt limits.
+
+## November fixed-role and Admin coverage
+
+[AC-140–142](acceptance-scenarios.md#28-november-mvp-alignment) specify real ownership and assignment guards, scoped local Admin restrictions and after-commit SignalR behavior. The original TOKEN and six REQUEST family scenarios remain applicable. Execution is **NOT RUN**.

@@ -64,6 +64,12 @@ PAYMENT_PENDING (Chờ khách thanh toán - Khóa thời gian tính tiền)
 
 ---
 
+### Issued fines and appeal ordering — 28 November approved target
+
+Operations durably freezes the parking obligation and issued fine amounts for the attempt before the S2S preparation request. The cutoff and appeal decision commit have a definitive order independent of Payment order ID and QR readiness. Monthly/yearly fee coverage leaves issued fines in force. Pending appeal leaves the fine payable and checkout available.
+
+Before the cutoff, apply an authorized correction or waiver to subsequent preparation. After it, keep the frozen amount and prepared order and record the outstanding adjustment. An accepted appeal and verified collection permit an authorized eligible refund request. Definitive unpaid termination moves the correction to the next valid preparation. Pending and unknown outcomes retain the adjustment without a speculative refund or conflicting order. See [C01–C10](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout) and the [implementation gaps](../../05-project-management/handoffs/2026-11-28-mvp-service-owner-handoff.md). The existing S2S examples describe the existing wire design. Fine identity, attribution and cutoff implementation remain open.
+
 ## 2. API Specification: Chu kỳ Khởi tạo Check-out & Thanh toán
 
 ```mermaid

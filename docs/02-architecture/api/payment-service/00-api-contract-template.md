@@ -40,7 +40,7 @@
 
 ### 1.3 Xác thực & Phân quyền (Authentication & Authorization) `[Conditional: nếu endpoint có bảo mật]`
 - **Cơ chế xác thực (Auth Scheme):** [Bearer JWT / Internal Service Key / Anonymous / Webhook HMAC]
-- **Quyền hạn bắt buộc (Required Roles / Permissions):** [Liệt kê các Role hoặc Permission cần thiết, ví dụ: `LOT_POLICY_MANAGE`, `SERVICE_INTERNAL`, `DRIVER`]
+- **Vai trò và phạm vi bắt buộc (Role and scope):** Document the applicable fixed role, actual resource scope and declared freshness, or the service authentication contract for internal calls.
 - **Phạm vi tài nguyên (Resource Scope):** [Kiểm tra quyền sở hữu theo Tenant ID, Site ID hoặc Account ID để chống truy cập chéo dữ liệu]
 
 ### 1.4 Chính sách Idempotency (Idempotency Policy) `[Conditional: áp dụng cho API mutating/ghi dữ liệu hoặc có tác động tài chính]`

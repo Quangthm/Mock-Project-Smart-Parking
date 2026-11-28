@@ -17,12 +17,12 @@ Owner is approved and controls the target organization/lots.
 
 1. Approved, successfully provisioned Owner creates a pending Operator in the owned organization; persist the invitation even if email delivery fails.
 2. Operator follows email activation, verifies contact and completes mandatory consented VNeID simulation. The fake API returns a GUID substitute bound to that user and persisted in the User & Access database; the GUID is not a government identity number or an authentication token. Password setup is optional; an eligible verified channel supports OTP login.
-3. Owner assigns/revokes owned-lot permissions; no Admin approval per hire, immediate active account or cross-owner grant.
+3. Owner assigns/revokes access to owned lots; no Admin approval per hire, immediate active account or cross-owner grant.
 4. Subsequent normal login completes current account/MFA checks; commands, private replays and subscriptions enforce their declared [freshness and local scope policy](../srs/authorization-operation-classification.md).
 
 ## Alternatives and failures
 
-Cross-owner assignment, self-promotion and broader-than-Owner grants are rejected; revocation preserves historical attribution and already-authorized durable financial work.
+Cross-owner assignment, self-promotion and unowned or ineligible lot assignments are rejected; revocation preserves historical attribution and already-authorized durable financial work.
 
 ## Postconditions
 

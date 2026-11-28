@@ -1,3 +1,5 @@
+> Historical branch verification guidance. The [28 November amendment](../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#a-fixed-roles-and-resource-scope) supersedes legacy configurable action-flag expectations for the approved MVP target. See [AC-140](../requirements-traceability/acceptance-scenarios.md#28-november-mvp-alignment).
+
 # SPARK-244 Realtime Operator Layout Monitoring — Manual Test Guide
 
 Manual verification run-book for the SPARK-244 operator realtime monitoring slice, authored against branch `feat/SPARK-244-realtime-monitoring`. This is the human companion to:

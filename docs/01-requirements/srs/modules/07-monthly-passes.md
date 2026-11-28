@@ -128,3 +128,7 @@ For monthly and yearly products, at E stop coverage/new entry entitlement, not p
 
 
 Design/implementation owners and exit criteria: [V11-DES-05 (Q05)](../../../05-project-management/decision-log/deferred-and-implementation-register.md#v11-design-and-implementation-actions). Requirement approval does not imply an approved wire contract or completed implementation.
+
+## Issued fines at covered checkout
+
+Monthly and yearly parking fee coverage leaves independently issued fines in force. Operations applies the approved checkout financial cutoff and appeal ordering. See [C10](../../../05-project-management/decision-log/2026-11-28-mvp-decisions-amendment.md#c-appeals-and-checkout).
