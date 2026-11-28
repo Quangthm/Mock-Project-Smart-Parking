@@ -781,6 +781,545 @@
           }
         }
       ]
+    },
+    {
+      "name": "MVP · Preflight and identity",
+      "item": [
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000033",
+          "name": "33 Local service health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{healthBaseUrl}}/health",
+            "description": "Public. Repeat for the four configured local API URLs. A 200 confirms reachability."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000034",
+          "name": "34 Seed account password sign-in",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{userBaseUrl}}/api/auth/login",
+            "description": "Manual only. Use a seeded Driver, Owner or Operator email and a local secret password. Copy data.accessToken to the appropriate local role variable after completed authentication. Complete any challenge through the existing application.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{fixtureEmail}}\",\n  \"password\": \"{{fixturePassword}}\",\n  \"turnstileToken\": \"{{turnstileToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = { email: pm.variables.get('fixtureEmail'), password: pm.variables.get('fixturePassword') };",
+                  "const token = pm.variables.get('turnstileToken');",
+                  "if (token) body.turnstileToken = token;",
+                  "pm.request.body.update(JSON.stringify(body));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Session or MFA challenge', () => {const body = pm.response.json(); pm.expect(body.success).to.eql(true); if (!body.mfaRequired) pm.expect(body.data.accessToken).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000035",
+          "name": "35 Registered vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{userBaseUrl}}/api/vehicles",
+            "description": "Use the selected Driver token. Primary Drivers have three fixture CARs and Driver 06 has one.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.success).to.eql(true); pm.expect(body.data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MVP · Geography and interval baseline",
+      "item": [
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000036",
+          "name": "36 Seed geography and ranking matrix",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&radiusKm={{mvpRadiusKm}}&keyword=MVPSEED&sort={{mvpSort}}",
+            "description": "Public. Copy coordinates, radius and the expected ordered site codes from the manual guide. MVPSEED limits the test to this dataset."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.success).to.eql(true); const codes = ['01','02','03','04','05']; const sites = Object.fromEntries(codes.map(n => [pm.variables.get(`mvp${n}SiteId`), n])); pm.expect(body.data.items.map(item => sites[item.siteId])).to.eql(pm.variables.get('expectedMvpSites').split(',')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000037",
+          "name": "37 Five-site interval baseline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/parking-search?lat={{lat}}&lon={{lon}}&vehicleType=CAR&radiusKm=50&keyword=MVPSEED&startAt={{startAt}}&endAt={{endAt}}",
+            "description": "Public. Use the comparison origin and actual installed T+5h through T+6h. Compare counts to the offline table when the live schedule aligns with T."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.items).to.have.lengthOf(5); body.data.items.forEach(item => pm.expect(item.availability.kind).to.eql('interval')); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MVP · Reservations and sessions",
+      "item": [
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000038",
+          "name": "38 Own reservation page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations?pageSize=10",
+            "description": "Driver. Uses creation-time ordering. For continuation use 39 with the last row's createdAt and reservationId.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data).to.be.an('array'); pm.expect(body.data.length).to.be.at.most(10); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000039",
+          "name": "39 Own reservation continuation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations?pageSize=10&before={{historyBefore}}&beforeId={{historyBeforeId}}",
+            "description": "Same Driver as 38. Both values come from the final item of 38. Clear them before switching accounts.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data).to.be.an('array'); pm.expect(body.data.map(x => x.reservationId)).not.to.include(pm.variables.get('historyBeforeId')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000040",
+          "name": "40 Own reservation detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/me/reservations/{{scenarioReservationId}}",
+            "description": "Use owning Driver. Defaults to Driver 01's zero reservation. Switch fixture and role together for replacement, mismatch, overstay or pending.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.reservationId).to.eql(pm.variables.get('scenarioReservationId')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000041",
+          "name": "41 Own current vehicle location",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/sessions/current/location",
+            "description": "Driver. Use Driver 05 for the mismatch. The response describes the Account-attributed session, not the unlocated walk-in.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.sessionId).to.be.a('string'); pm.expect(body.data.location).to.be.an('object'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000042",
+          "name": "42 Assigned-site session history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/parking-sessions?siteId={{mvpSiteId}}",
+            "description": "Assigned Operator. Repeat per site. Compare linked and walk-in rows and the null location of the unlocated MVP-04 walk-in.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000043",
+          "name": "43 Assigned-site operator layout",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{facilityBaseUrl}}/api/parking-lots/{{mvpSiteId}}/operational-layout",
+            "description": "Assigned Operator. Use MVP-05 to compare the occupied scanned bay and the expected allocation. Read only.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.slots).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MVP · Local financial reads and monthly coverage",
+      "item": [
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000044",
+          "name": "44 Monthly CAR offer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/v1/sites/{{mvpSiteId}}/pass-offers?vehicleType=CAR",
+            "description": "Public. Verify the applicable monthly fixture price and availability-only terms."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.offers).to.be.an('array'); pm.expect(body.data.yearlyBlockedByQ05).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000045",
+          "name": "45 Assigned-site monthly coverage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{operationBaseUrl}}/api/checkout/monthly-coverage?siteId={{mvpSiteId}}&plateNumber={{coveragePlate}}",
+            "description": "Assigned Operator. Repeat with the covered pair or a wrong plate or wrong site with a correctly scoped Operator. Uses the real clock and the entitlement interval.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{operatorBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); const covered = pm.variables.get('expectedCovered') === 'true'; pm.expect(body.data.isCovered).to.eql(covered); pm.expect(body.data.amountDueVnd).to.eql(covered ? 0 : null); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000046",
+          "name": "46 Own reservation order state",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{scenarioOrderId}}/reservation",
+            "description": "Owning Driver. Local lookup only. Zero and positive settled orders are PAID. The pending order is PAYABLE until deadline then CLOSED.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.state).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000047",
+          "name": "47 Settled invoice by order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{paymentBaseUrl}}/api/v1/payments/orders/{{invoiceOrderId}}/invoice",
+            "description": "Use the owning Driver for the zero reservation or assigned MVP-01 Operator for the CASH walk-in. For the Operator variant, select its local token in this request.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.data.invoiceIdentity.invoiceId).to.eql(pm.variables.get('expectedInvoiceId')); pm.expect(body.data.financialStatus.isSettled).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000048",
+          "name": "48 Own invoice history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{paymentBaseUrl}}/api/v1/payments/invoices/my-history?pageNumber=1&pageSize=10",
+            "description": "Driver or customer with the supported Payment role. Driver 01 should see the zero receipt and monthly purchase invoice when using the seeded Account.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{driverBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.items).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "fdc27200-0fc4-5e10-8c00-000000000049",
+          "name": "49 Owner monthly pass revenue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{paymentBaseUrl}}/api/v1/payments/owners/lots/{{mvpSiteId}}/pass-revenue-summary?productType=MONTHLY",
+            "description": "Owning Owner with lot-management permission. Default MVP-01 synthetic monthly collections are 600000 VND.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ownerBearerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response contract', () => { const body = pm.response.json(); pm.expect(body.success).to.eql(true); pm.expect(body.data).to.be.an('object'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

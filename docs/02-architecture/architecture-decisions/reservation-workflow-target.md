@@ -4,6 +4,8 @@
 
 ## Current SPARK-273 status (2026-11-26)
 
+The [implementation register](../../05-project-management/decision-log/deferred-and-implementation-register.md#mvp-seed-production-follow-ups--28-november-2026) tracks the production follow-ups identified during the MVP seed rehearsal, including checkout prepayment, allocation and lifecycle writers.
+
 - Operations `OrderId` is nullable by design. Positive admission atomically commits `PENDING_PAYMENT`, concrete hold, exact H and durable order-creation intent; Payment creates the payable order independently. Operations may still report null `OrderId` after Payment creates the order and binds it only on authoritative successful settlement. Payment is the source of checkout readiness; `OrderId`/`HoldExpiresAt` alone are not readiness evidence.
 - Coverage binding and authoritative accepted commercial evidence are evaluated in the committed admission handler. Zero-deposit accepted evidence commits `CONFIRMED` immediately with no unpaid H; only specifically deferred subscription functionality remains pending. Coverage, tariff and policy revisions remain meaningful.
 - Checkpoint chronology: B4 retired the `ADMISSION` token path, C retired the remaining reservation-specific `CONFIRMATION` acquire/complete/abort token workflow, and D retired the remaining authorization and unpaid hold-expiry polling workers. HTTP slot metadata lookup and messaging-based interval-aware Facility eligibility remain.

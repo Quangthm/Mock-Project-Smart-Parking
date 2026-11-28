@@ -2,6 +2,10 @@
 
 The canonical discovery route is `GET /api/parking-search` on Operations. Its authorization classification is PUBLIC. It accepts no body and returns JSON with `Cache-Control: no-store`. Search provides observed availability for a published site and category. Reservation admission makes the final booking decision.
 
+For reproducible requests using the five prepared MVP sites, see the [SPARK-272 manual rehearsal guide](../../04-testing/postman/SPARK-272-manual-test-guide.md). It includes the seeded coordinates, radius and ranking examples, and offline expectations for current and interval availability.
+
+The [implementation register](../../05-project-management/decision-log/deferred-and-implementation-register.md#mvp-seed-production-follow-ups--28-november-2026) tracks outstanding reservation protection, occupancy projection and Payment site-binding work.
+
 ## Query
 
 | Parameter | Requirement |
