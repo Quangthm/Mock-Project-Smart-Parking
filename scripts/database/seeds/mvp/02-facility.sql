@@ -44,6 +44,11 @@ CREATE TEMP VIEW bay_input AS SELECT f.tenant_id,f.site_id,f.zone,b.* FROM floor
 CREATE TEMP TABLE e_parking_slots AS SELECT id,tenant_id,site_id,zone AS spatial_unit_id,code AS slot_code,kind AS slot_type,
     'CAR'::text AS supported_vehicle_type,'AVAILABLE'::text AS physical_state,
     CASE WHEN backup THEN 'BACKUP'::text END AS reservation_state,NULL::timestamptz AS deleted_at FROM bay_input;
+-- Match an already established C phase during the foundation check. The
+-- separate C transaction verifies the timestamps and owns every physical write.
+UPDATE e_parking_slots e SET physical_state='OCCUPIED'
+FROM parking_slots p JOIN lifecycle_occupancy o USING(id)
+WHERE e.id=o.id AND p.site_id=o.site_id AND p.tenant_id=o.tenant_id AND p.physical_state='OCCUPIED';
 SELECT pg_temp.require(NOT EXISTS(SELECT FROM parking_slots p JOIN e_parking_slots e USING(id)
     WHERE p.reservation_state IN ('RESERVED','PROTECTED')), 'Live slot protection requires reconciliation');
 SELECT pg_temp.sync('parking_slots','id',ARRAY['reservation_state']);
@@ -89,4 +94,31 @@ SELECT format('Facility persisted: %s sites, %s grants (%s initial), %s floors, 
     (SELECT count(*) FROM parking_slots JOIN e_parking_slots USING(id)),
     (SELECT count(*) FROM parking_slots p JOIN e_parking_slots e USING(id) WHERE p.reservation_state='BACKUP'))
 FROM run_context WHERE mode='verify';
+
+-- CHECKPOINT C
+SELECT pg_temp.require(current_database()='smartpark_facility' AND current_user='smartpark_facility','Unexpected FacilityDb identity');
+LOCK TABLE parking_slots,structure_maintenance_windows IN SHARE ROW EXCLUSIVE MODE;
+SELECT pg_temp.require((SELECT count(*)=12 FROM lifecycle_occupancy),'Expected twelve located C sessions');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM structure_maintenance_windows w JOIN site_input s ON s.id=w.site_id
+    WHERE w.cancelled_at IS NULL AND upper(w.service_window) > (SELECT (j->>'begins')::timestamptz FROM lifecycle_manifest)),
+    'Fixture lifecycle intersects a maintenance window or requires availability reconciliation');
+SELECT pg_temp.require(
+    CASE WHEN (SELECT mode='verify' FROM run_context) THEN
+        (SELECT count(*)=12 FROM lifecycle_occupancy o JOIN parking_slots p USING(id)
+            WHERE p.site_id=o.site_id AND p.tenant_id=o.tenant_id AND p.deleted_at IS NULL
+            AND p.physical_state='OCCUPIED' AND p.reservation_state IS NULL AND p.updated_at=o.updated_at)
+    WHEN current_setting('mvp.operations_established')::bool THEN
+        (SELECT count(*)=12 FROM lifecycle_occupancy o JOIN prior_occupancy prior USING(id) JOIN parking_slots p USING(id)
+            WHERE p.site_id=o.site_id AND p.tenant_id=o.tenant_id AND p.deleted_at IS NULL
+            AND p.physical_state='OCCUPIED' AND p.reservation_state IS NULL AND p.updated_at=prior.updated_at)
+    WHEN (SELECT mode='check' FROM run_context) AND NOT EXISTS(SELECT FROM parking_sites p JOIN site_input s USING(id)) THEN true
+    ELSE
+        (SELECT count(*)=12 FROM lifecycle_occupancy o JOIN parking_slots p USING(id)
+            WHERE p.site_id=o.site_id AND p.tenant_id=o.tenant_id AND p.deleted_at IS NULL
+            AND p.physical_state='AVAILABLE' AND p.reservation_state IS NULL)
+    END,
+    'C occupancy is missing, ambiguous or progressed. Inspect the exact Operations scans and Facility state before recovery.');
+UPDATE parking_slots p SET physical_state='OCCUPIED',updated_at=o.updated_at
+FROM lifecycle_occupancy o,run_context c
+WHERE p.id=o.id AND c.mode='apply' AND (p.physical_state,p.updated_at) IS DISTINCT FROM ('OCCUPIED',o.updated_at);
 

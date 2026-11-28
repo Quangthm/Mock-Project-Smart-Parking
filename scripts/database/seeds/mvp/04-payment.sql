@@ -95,3 +95,33 @@ SELECT pg_temp.require((SELECT count(*)=3 AND sum(o.final_amount)=2250000 AND bo
 WHERE (SELECT mode='verify' FROM run_context);
 SELECT format('Payment verified: %s fixture monthly invoices, %s VND',count(*),sum(i.final_amount))
 FROM invoices i JOIN purchase_input p ON p.invoice=i.id HAVING (SELECT mode='verify' FROM run_context);
+
+-- CHECKPOINT C
+SELECT pg_temp.require(current_database()='smartpark_payment' AND current_user='smartpark_payment','Unexpected PaymentDb identity');
+LOCK TABLE reservation_quotes,payment_orders,payment_transactions,invoices,tariffs,policy_revisions IN SHARE ROW EXCLUSIVE MODE;
+UPDATE run_context SET established=EXISTS(SELECT FROM reservation_quotes
+    WHERE id=(SELECT (j->>'quote_anchor')::uuid FROM lifecycle_manifest));
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM lifecycle_manifest m,jsonb_populate_recordset(NULL::payment_orders,m.j->'payment_orders') e
+    JOIN payment_orders p ON p.id<>e.id AND (p.order_code=e.order_code OR p.idempotency_key=e.idempotency_key
+    OR p.quote_id=e.quote_id OR (p.reference_type=e.reference_type AND p.reference_id=e.reference_id))),
+    'C order code, quote, idempotency or logical reference collision');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM lifecycle_manifest m,jsonb_populate_recordset(NULL::payment_transactions,m.j->'payment_transactions') e
+    JOIN payment_transactions p ON p.id<>e.id AND (p.payment_order_id=e.payment_order_id OR
+    (p.payment_method=e.payment_method AND (p.gateway_transaction_id=e.gateway_transaction_id OR p.provider_collection_reference=e.provider_collection_reference)))),
+    'C checkout-link or collection collision');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM lifecycle_manifest m,jsonb_populate_recordset(NULL::invoices,m.j->'invoices') e
+    JOIN invoices p ON p.id<>e.id AND (p.invoice_number=e.invoice_number OR p.payment_order_id=e.payment_order_id)),
+    'C invoice number or order collision');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM
+    jsonb_populate_recordset(NULL::reservation_quotes,pg_temp.lifecycle_rows('reservation_quotes')) q
+    WHERE NOT EXISTS(SELECT FROM tariffs t JOIN policy_revisions r ON r.policy_id=t.id
+        WHERE t.id=q.tariff_id AND t.site_id=q.site_id AND t.tenant_id=q.tenant_id
+        AND t.is_active AND t.deleted_at IS NULL AND t.vehicle_type='CAR'
+        AND r.id=q.tariff_revision_id AND r.policy_type='TARIFF' AND r.effective_from<=q.created_at
+        AND (r.effective_to IS NULL OR q.end_time<=r.effective_to))),
+    'Reviewed C quote is outside the installed tariff revision')
+WHERE (SELECT mode<>'check' FROM run_context) AND NOT current_setting('mvp.prior_timeline')::bool;
+SELECT pg_temp.sync_lifecycle('reservation_quotes');
+SELECT pg_temp.sync_lifecycle('payment_orders');
+SELECT pg_temp.sync_lifecycle('payment_transactions');
+SELECT pg_temp.sync_lifecycle('invoices');

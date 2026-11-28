@@ -81,3 +81,13 @@ SELECT format('User persisted: %s tenants, %s Owner, %s Operator, %s Driver acco
     count(*) FILTER (WHERE a.role_code='DRIVER'),(SELECT count(*) FROM vehicles JOIN e_vehicles USING(id)))
 FROM accounts a JOIN e_accounts e USING(id) HAVING (SELECT mode='verify' FROM run_context);
 
+-- CHECKPOINT C
+SELECT pg_temp.require(current_database()='smartpark_user' AND current_user='smartpark_user','Unexpected UserDb identity');
+LOCK TABLE account_access_decisions IN SHARE ROW EXCLUSIVE MODE;
+UPDATE run_context SET established=EXISTS(SELECT FROM account_access_decisions
+    WHERE id=(SELECT (j->>'user_anchor')::uuid FROM lifecycle_manifest));
+SELECT pg_temp.require(NOT EXISTS (
+    SELECT FROM lifecycle_manifest m,jsonb_populate_recordset(NULL::account_access_decisions,m.j->'account_access_decisions') e
+    JOIN account_access_decisions d ON d.workflow_id=e.workflow_id AND d.id<>e.id
+), 'Competing User admission decision');
+SELECT pg_temp.sync_lifecycle('account_access_decisions');

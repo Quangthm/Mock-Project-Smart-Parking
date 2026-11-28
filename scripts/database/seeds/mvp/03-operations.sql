@@ -91,3 +91,44 @@ SELECT format('Operations verified: %s monthly coverage records at T',count(*))
 FROM subscribed_vehicles v JOIN purchase_input p ON v.subscription_id=p.subscription CROSS JOIN run_context
 WHERE v.active_at<=t AND t<v.expire_at HAVING (SELECT mode='verify' FROM run_context);
 
+-- CHECKPOINT C
+SELECT pg_temp.require(current_database()='smartpark_operations' AND current_user='smartpark_operations','Unexpected OperationsDb identity');
+LOCK TABLE reservation_requests,reservations,reservation_cancellation_evidence,parking_sessions,slot_allocations,operational_policies
+    IN SHARE ROW EXCLUSIVE MODE;
+UPDATE run_context SET established=EXISTS(SELECT FROM reservation_requests
+    WHERE id=(SELECT (j->>'workflow_anchor')::uuid FROM lifecycle_manifest));
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM reservations r JOIN site_input s ON s.id=r.site_id
+    WHERE NOT EXISTS(SELECT FROM lifecycle_manifest m,jsonb_array_elements(m.j->'reservations') e WHERE (e->>'id')::uuid=r.id))
+    AND NOT EXISTS(SELECT FROM parking_sessions p JOIN site_input s ON s.id=p.site_id
+    WHERE NOT EXISTS(SELECT FROM lifecycle_manifest m,jsonb_array_elements(m.j->'parking_sessions') e WHERE (e->>'id')::uuid=p.id))
+    AND NOT EXISTS(SELECT FROM slot_allocations a JOIN site_input s ON s.id=a.site_id
+    WHERE NOT EXISTS(SELECT FROM lifecycle_manifest m,jsonb_array_elements(m.j->'slot_allocations') e WHERE (e->>'id')::uuid=a.id)),
+    'Nonfixture commitments, sessions or allocations on the fixture sites require reconciliation');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM
+    jsonb_populate_recordset(NULL::parking_sessions,pg_temp.lifecycle_rows('parking_sessions')) e
+    JOIN parking_sessions p ON p.normalized_plate=e.normalized_plate AND p.id<>e.id
+    WHERE p.exit_time IS NULL AND e.exit_time IS NULL),
+    'Fixture plate already has an open session');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM
+    jsonb_populate_recordset(NULL::reservation_requests,pg_temp.lifecycle_rows('reservation_requests')) e
+    JOIN reservation_requests r ON (r.account_id,r.operation,r.idempotency_key)=(e.account_id,e.operation,e.idempotency_key)
+    WHERE r.id<>e.id), 'Competing reservation request idempotency key');
+SELECT pg_temp.require(NOT EXISTS(SELECT FROM jsonb_populate_recordset(NULL::reservations,pg_temp.lifecycle_rows('reservations')) e
+    WHERE NOT EXISTS(SELECT FROM operational_policies p
+        WHERE p.id=(e.accepted_operational_policy_snapshot#>>'{Platform,Id}')::uuid AND p.is_active AND p.site_id IS NULL
+        AND p.version=(e.accepted_operational_policy_snapshot#>>'{Platform,Version}')::int
+        AND p.effective_from<=e.created_at-interval '30 seconds'
+        AND (p.effective_until IS NULL OR greatest(e.created_at,e.confirmed_at,e.cancelled_at)<p.effective_until))
+    OR ((SELECT mode<>'check' FROM run_context) AND NOT current_setting('mvp.prior_timeline')::bool
+        AND NOT EXISTS(SELECT FROM operational_policies p
+        WHERE p.id=(e.accepted_operational_policy_snapshot#>>'{Site,Id}')::uuid AND p.is_active AND p.site_id=e.site_id
+        AND p.tenant_id=e.tenant_id AND p.version=(e.accepted_operational_policy_snapshot#>>'{Site,Version}')::int
+        AND p.effective_from<=e.created_at-interval '30 seconds'
+        AND (p.effective_until IS NULL OR greatest(e.created_at,e.confirmed_at,e.cancelled_at)<p.effective_until)))),
+    'C policy revision is outside its installed effective window');
+SELECT pg_temp.sync_lifecycle('reservation_requests');
+SELECT pg_temp.sync_lifecycle('reservations');
+SELECT pg_temp.sync_lifecycle('reservation_cancellation_evidence');
+SELECT pg_temp.sync_lifecycle('parking_sessions');
+SELECT pg_temp.sync_lifecycle('slot_allocations');
+
