@@ -7,9 +7,41 @@ const ts = require('../../FE/node_modules/typescript');
 
 const orderId = 'a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d';
 const transactionId = 'f7d3a2b1-5e8c-4a3d-9c2b-1a2b3c4d5e6f';
+class DemoPaymentUnavailableError extends Error {}
 
-function checkoutView(paymentApi, props) {
-  const source = fs.readFileSync(path.join(__dirname, '../../FE/src/roles/driver/payments/PaymentCheckout.tsx'), 'utf8');
+test('Driver demo payment posts only the authenticated order path', async () => {
+  const f = fixture({}, {
+    ok: true,
+    json: async () => ({ success: true, demo: true, data: { orderId, status: 'SUCCESS', isAuthoritative: true } }),
+  });
+  await f.api.paymentApi.demoPay(orderId.toUpperCase());
+  assert.equal(f.calls.length, 1);
+  assert.ok(f.calls[0].url.endsWith(`/orders/${orderId}/demo-pay`));
+  assert.equal(f.calls[0].init.method, 'POST');
+  assert.equal(f.calls[0].init.headers.Authorization, 'Bearer test-token');
+  assert.equal(f.calls[0].init.body, undefined);
+});
+
+test('Driver demo payment requires a matching authoritative demo result', async () => {
+  const confirmed = { orderId, status: 'SUCCESS', isAuthoritative: true };
+  for (const [demo, data] of [
+    [true, { ...confirmed, orderId: transactionId }],
+    [true, { ...confirmed, status: 'PENDING' }],
+    [true, { ...confirmed, isAuthoritative: false }],
+    [false, confirmed],
+  ]) {
+    const f = fixture({}, { ok: true, json: async () => ({ success: true, demo, data }) });
+    await assert.rejects(f.api.paymentApi.demoPay(orderId), /did not confirm/);
+  }
+  const disabled = fixture({}, { ok: false, status: 404, json: async () => null });
+  await assert.rejects(disabled.api.paymentApi.demoPay(orderId), disabled.api.DemoPaymentUnavailableError);
+  const missing = fixture({}, { ok: false, status: 404, json: async () => ({ errorCode: 'ORDER_NOT_FOUND' }) });
+  await assert.rejects(missing.api.paymentApi.demoPay(orderId), /order was not found/);
+});
+
+function checkoutView(paymentApi, props, env = { DEV: false }) {
+  const source = fs.readFileSync(path.join(__dirname, '../../FE/src/roles/driver/payments/PaymentCheckout.tsx'), 'utf8')
+    .replaceAll('import.meta.env.', 'env.');
   const script = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
@@ -37,14 +69,16 @@ function checkoutView(paymentApi, props) {
     },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     'qrcode.react': { QRCodeSVG: 'qr-svg' },
+    '../../../components/icon/UntitledIcon': { UntitledIcon: 'icon' },
     '../../../lib/paymentApi': { paymentApi, isPaymentOrderId: id => id === orderId || id.toLowerCase() === orderId,
+      DemoPaymentUnavailableError,
       classifyPaymentStatus: ({ status }) => status === 'PENDING' ? 'pending' : 'failed' },
     '../../../lib/serverRefresh': { useServerRefresh() {} },
     '../../../lib/authApi': { getSessionGeneration: () => 1 },
     '../../../assets/payment-qr.png': { default: '' },
     './payment-checkout.css': {},
   };
-  const context = { exports: {}, URLSearchParams, window: { location: { search: '?orderId=' + orderId }, setInterval() {} },
+  const context = { exports: {}, env, Error, URLSearchParams, window: { location: { search: '?orderId=' + orderId }, setInterval() {} },
     require: name => imports[name] };
   vm.runInNewContext(script, context);
   function flatten(node) {
@@ -59,6 +93,61 @@ function checkoutView(paymentApi, props) {
     return flatten(tree);
   };
 }
+
+test('Driver QR still generates automatically and ByPass works after success or gateway failure', async () => {
+  const expiresAt = '2099-01-01T00:00:00Z';
+  const props = { showMethodPicker: false, reservationOrderId: orderId, holdExpiresAt: expiresAt };
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  const demoButton = (nodes, label = 'ByPass') => nodes.find(node =>
+    node.type === 'button' && Array.isArray(node.props.children) && node.props.children.includes(label));
+  for (const withQr of [false, true]) {
+    let qrCalls = 0;
+    const demoCalls = [];
+    let confirmDemo;
+    const pending = new Promise(resolve => { confirmDemo = resolve; });
+    const render = checkoutView({
+      rememberedCheckout: () => null,
+      checkout: async () => {
+        qrCalls++;
+        if (!withQr) throw new Error('QR gateway unavailable');
+        return { paymentTransactionId: transactionId, qrCode: 'QR', amount: 25000, expiresAt };
+      },
+      demoPay: id => { demoCalls.push(id); return pending; },
+      status: () => assert.fail('Reservation demo payment should not request transaction status'),
+    }, props, { DEV: false, VITE_ENABLE_DEMO_PAYMENT: 'true' });
+    render();
+    await flush();
+    assert.equal(qrCalls, 1);
+    assert.equal(render().some(node => node.type === 'qr-svg'), withQr);
+    const button = demoButton(render());
+    button.props.onClick();
+    button.props.onClick();
+    assert.deepEqual(demoCalls, [orderId]);
+    assert.equal(demoButton(render(), 'Confirming…').props.disabled, true);
+    confirmDemo();
+    await flush();
+    const settled = render();
+    assert.ok(settled.some(node => node.props?.role === 'status' && node.props.children === 'Demo payment confirmed'));
+    assert.equal(demoButton(settled), undefined);
+    assert.equal(settled.some(node => node.type === 'qr-svg' || node.type === 'form'), false);
+    assert.equal(qrCalls, 1);
+  }
+  assert.equal(demoButton(checkoutView({}, { ...props, holdExpiresAt: '2000-01-01' }, { DEV: true })()), undefined);
+  assert.equal(demoButton(checkoutView({}, {}, { DEV: true })()), undefined);
+  const disabled = checkoutView({
+    rememberedCheckout: () => null,
+    checkout: async () => ({ paymentTransactionId: transactionId, qrCode: 'QR', amount: 25000, expiresAt }),
+    demoPay: async () => { throw new DemoPaymentUnavailableError('Demo payment is disabled'); },
+  }, props, { DEV: true });
+  disabled();
+  await flush();
+  demoButton(disabled()).props.onClick();
+  await flush();
+  const unavailable = disabled();
+  assert.equal(demoButton(unavailable), undefined);
+  assert.ok(unavailable.some(node => node.props?.role === 'alert' && node.props.children === 'Demo payment is disabled'));
+  assert.ok(unavailable.some(node => node.type === 'qr-svg'));
+});
 
 test('reservation generates QR once, standalone and expired orders do not auto-start', async () => {
   const calls = [];

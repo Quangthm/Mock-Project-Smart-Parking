@@ -30,13 +30,18 @@ export interface PaymentStatusResponse {
   isAuthoritative: boolean
 }
 
-type Envelope<T> = { success: boolean; data?: T; code?: string; traceId?: string }
+type Envelope<T> = { success: boolean; data?: T; demo?: boolean; code?: string; errorCode?: string; traceId?: string }
+
+export class DemoPaymentUnavailableError extends Error {
+  constructor() { super("Demo payment is disabled on this server.") }
+}
 
 const paymentErrorMessages = new Map<string, string>([
   ["ORDER_NOT_FOUND", "This payment order was not found. Check the order ID."],
   ["ORDER_NOT_READY", "The payment order is still being prepared. Wait for it to become ready."],
   ["ORDER_ALREADY_PAID", "This order has already been paid. Check your reservation status."],
   ["ORDER_EXPIRED", "This payment order has expired. Check the reservation before starting a new booking."],
+  ["ORDER_CANCELLED", "This payment order has been cancelled. Check your reservation status."],
   ["QUOTE_HOLD_EXPIRED", "The reservation payment deadline has passed. Check the reservation status."],
   ["PAYMENT_RETRY_LIMIT_EXCEEDED", "This order has reached its payment attempt limit."],
   ["ZERO_AMOUNT_ORDER", "This order has no amount due and does not require a QR code."],
@@ -83,7 +88,7 @@ export function classifyPaymentStatus(status: PaymentStatusResponse): "success" 
   return "pending"
 }
 
-async function paymentRequest<T>(path: string, init: RequestInit): Promise<T> {
+async function paymentRequest<T>(path: string, init: RequestInit, demo = false): Promise<T> {
   const token = await ensureAccessToken()
   if (!token) throw new Error("Please sign in before paying.")
   let response: Response
@@ -98,8 +103,10 @@ async function paymentRequest<T>(path: string, init: RequestInit): Promise<T> {
   }
   const payload = await response.json().catch(() => null) as Envelope<T> | null
   if (!response.ok || !payload?.success || !payload.data) {
-    const code = typeof payload?.code === "string" && /^[A-Z0-9_]{1,64}$/i.test(payload.code)
-      ? payload.code.toUpperCase() : ""
+    const rawCode = payload?.code ?? (demo ? payload?.errorCode : undefined)
+    const code = typeof rawCode === "string" && /^[A-Z0-9_]{1,64}$/i.test(rawCode)
+      ? rawCode.toUpperCase() : ""
+    if (demo && response.status === 404 && !code) throw new DemoPaymentUnavailableError()
     const trace = typeof payload?.traceId === "string" && /^[a-zA-Z0-9:_-]{1,96}$/.test(payload.traceId)
       ? payload.traceId : ""
     const message = paymentErrorMessages.get(code) ??
@@ -111,6 +118,7 @@ async function paymentRequest<T>(path: string, init: RequestInit): Promise<T> {
     const reference = [code || (response.status ? `HTTP ${response.status}` : ""), trace].filter(Boolean).join(" · ")
     throw new Error(reference ? `${message} Reference: ${reference}.` : message)
   }
+  if (demo && payload.demo !== true) throw new Error("Payment Service did not confirm the demo payment.")
   return payload.data
 }
 
@@ -220,6 +228,15 @@ export const paymentApi = {
     }))
     checkoutStorage?.setItem("sp_payos_latest_order", normalized)
     return result
+  },
+  async demoPay(orderId: string): Promise<void> {
+    const normalized = orderId.trim().toLowerCase()
+    if (!isPaymentOrderId(normalized)) throw new Error("Enter a valid payment order ID.")
+    const result = await paymentRequest<PaymentStatusResponse>(`/orders/${normalized}/demo-pay`, { method: "POST" }, true)
+    if (typeof result.orderId !== "string" || result.orderId.toLowerCase() !== normalized ||
+      result.status !== "SUCCESS" || result.isAuthoritative !== true) {
+      throw new Error("Payment Service did not confirm the demo payment for this order.")
+    }
   },
   status(transactionId: string): Promise<PaymentStatusResponse> {
     if (!isPaymentOrderId(transactionId)) throw new Error("Invalid payment transaction ID.")
