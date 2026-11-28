@@ -1,7 +1,7 @@
 #requires -Version 7.2
 <#
 .SYNOPSIS
-    Seed Checkpoint A of MVP-SEED-V1 in an explicitly authorized local Compose project.
+    Seed the MVP-SEED-V1 foundation and monthly commercial fixtures in an authorized local Compose project.
 .DESCRIPTION
     -Preview is offline: generate and validate the fixture without Docker or credentials.
     -IsolatedProject identifies the operator-authorized disposable Compose project.
@@ -130,22 +130,52 @@ function New-Inventory {
               plate="51M-$($digits.Substring(0,3)).$($digits.Substring(3))"; canonical="51M$digits"}
         }
     }
-    return @{ sites=@($sites); accounts=@($accounts); vehicles=@($vehicles) }
+    $commercial = foreach ($site in $sites) {
+        $index = [int]$site.n - 1
+        $late = @(15,$null,20,30,$null)[$index]
+        $grace = @(15,0,0,0,0)[$index]
+        $row = @{
+            site=$site.id; monthly=@(600000,750000,900000,750000,1000000)[$index]
+            quota=@($null,4,3,1,5)[$index]; late=$late; grace=$grace
+            rules=@{timeZoneId='Asia/Ho_Chi_Minh'; roundingMode='HALF_UP_THOUSAND'
+                timeBlocks=@(@{blockCode='ALL_DAY'; startTime='00:00'; endTime='00:00'; ratePerHourVnd=$site.rate})
+                discoveryEstimate=@{graceMinutes=$grace; minimumVnd=0}}
+        }
+        foreach ($key in 'tariff','tariffrev','sitepolicy','plan','planrev','term','termrev','auditrev') {
+            $row[$key] = Get-FixtureId "commercial/$($site.n)/$key/1"
+        }
+        if ($null -ne $row.quota) { $row.quotaid = Get-FixtureId "commercial/$($site.n)/quota/CAR" }
+        $row
+    }
+    $purchases = foreach ($n in '01','03','04') {
+        $row = @{site=Get-FixtureId "site/$n"; vehicle=Get-FixtureId "vehicle/$n/1"; account=Get-FixtureId "account/driver/$n"}
+        foreach ($key in 'subscription','purchase','cash','invoice') {
+            $row[$key] = Get-FixtureId "monthly/$n/vehicle/1/site/$n/$key"
+        }
+        $row
+    }
+    return @{ sites=@($sites); accounts=@($accounts); vehicles=@($vehicles); commercial=@($commercial); purchases=@($purchases) }
 
 }
 
 function Show-Inventory($Data) {
-    Write-Host "MVP-SEED-V1 / $seedNamespace | Checkpoint A | origin 10.775, 106.700 | keyword MVPSEED"
+    Write-Host "MVP-SEED-V1 / $seedNamespace | Checkpoints A+B | origin 10.775, 106.700 | keyword MVPSEED"
     foreach ($s in $Data.sites) {
         $source = if ($s.initial) { 'initial application evidence' } else { 'synthetic additional-site grant' }
         Write-Host "$($s.code) $($s.name) [$($s.id)] tenant $($s.tenant), owner$($s.owner), $($s.lat),$($s.lon) ($($s.metres)m)"
         Write-Host "  $($s.model), $($s.floors.Count) floors / zones, $($s.capacity) CAR bays, $source"
+        $c = $Data.commercial.Where({ $_.site -eq $s.id })[0]
+        Write-Host "  CAR hourly=$($s.rate) grace=$($c.grace) monthly=$($c.monthly) VND quota=$($c.quota ?? 'absent') late=$($c.late ?? 'disabled')"
+        Write-Host "  DiscoveryPricing:SiteTenants:$($s.id)=$($s.tenant) | DiscoveryPricing__SiteTenants__$($s.id)=$($s.tenant)"
         foreach ($floor in $s.floors) {
             foreach ($slot in $floor.slots.Where({ $_.backup })) { Write-Host "  BACKUP $($slot.code) $($slot.id)" }
         }
     }
     foreach ($a in $Data.accounts) { Write-Host "$($a.email) user=$($a.uid) account=$($a.id) tenant=$($a.tenant) site=$($a.site)" }
     foreach ($v in $Data.vehicles) { Write-Host "$($v.plate) $($v.id) account=$($v.account)" }
+    foreach ($p in $Data.purchases) {
+        Write-Host "Monthly subscription=$($p.subscription) vehicle=$($p.vehicle) site=$($p.site) order=$($p.purchase) transaction=$($p.cash) invoice=$($p.invoice)"
+    }
     Write-Host 'Owner model setup is browser-local. Verify the existing lot type/model and publication after saving; test Operator layout in the assigned site.'
 }
 
@@ -321,8 +351,8 @@ BEGIN
 END $$;
 '@
 
-function Get-DataSql([string]$Service, [string]$Mode) {
-    $scope = @{sites=$data.sites; vehicles=$data.vehicles; accounts=@($data.accounts | ForEach-Object {
+function Get-DataSql([string]$Service, [string]$Mode, [string]$Timeline=$appliedTime) {
+    $scope = @{sites=$data.sites; vehicles=$data.vehicles; commercial=$data.commercial; purchases=$data.purchases; accounts=@($data.accounts | ForEach-Object {
         $item = $_.Clone()
         if ($Service -ne 'user-db') { $item.Remove('hash') }
         $item
@@ -340,7 +370,7 @@ SET LOCAL timezone TO 'UTC';
 SET LOCAL lock_timeout TO '5s';
 SET LOCAL mvp.mode TO '$Mode';
 SET LOCAL mvp.reset TO '$resetValue';
-SET LOCAL mvp.reference TO '$appliedTime';
+SET LOCAL mvp.reference TO '$Timeline';
 SELECT pg_advisory_xact_lock(hashtextextended('MVP-SEED-V1',0));
 $commonSql
 SELECT pg_temp.require(EXISTS(SELECT FROM pg_extension WHERE extname='uuid-ossp'), 'Missing uuid-ossp base schema extension')
@@ -352,6 +382,21 @@ CREATE TEMP VIEW site_input AS SELECT s.* FROM manifest, jsonb_to_recordset(j->'
 CREATE TEMP VIEW person_input AS SELECT a.* FROM manifest,jsonb_to_recordset(j->'accounts') a(
     n text,id uuid,uid uuid,role text,email text,phone text,tenant uuid,site uuid,hash text);
 CREATE TEMP VIEW vehicle_input AS SELECT v.* FROM manifest,jsonb_to_recordset(j->'vehicles') v(id uuid,account uuid,plate text,canonical text);
+CREATE TEMP VIEW commercial_input AS
+    SELECT c.*,s.n,s.tenant,s.code,s.name,s.rate,a.uid AS actor,t-interval '90 days' AS inception
+    FROM manifest CROSS JOIN LATERAL jsonb_to_recordset(j->'commercial') c(site uuid,monthly integer,quota integer,
+        quotaid uuid,late integer,grace integer,rules jsonb,tariff uuid,tariffrev uuid,sitepolicy uuid,plan uuid,
+        planrev uuid,term uuid,termrev uuid,auditrev uuid)
+    JOIN site_input s ON s.id=c.site JOIN person_input a ON a.role='owner' AND a.n=s.owner CROSS JOIN run_context;
+CREATE TEMP VIEW purchase_input AS
+    SELECT c.*,p.account,p.vehicle,p.subscription,p.purchase,p.cash,p.invoice,v.plate,v.canonical,
+        t-interval '1 day' AS starts,
+        (((t-interval '1 day') AT TIME ZONE 'Asia/Ho_Chi_Minh') + interval '1 month') AT TIME ZONE 'Asia/Ho_Chi_Minh' AS ends
+    FROM manifest CROSS JOIN LATERAL jsonb_to_recordset(j->'purchases') p(site uuid,vehicle uuid,account uuid,
+        subscription uuid,purchase uuid,cash uuid,invoice uuid)
+    JOIN commercial_input c USING(site) JOIN vehicle_input v ON v.id=p.vehicle AND v.account=p.account CROSS JOIN run_context;
+SELECT pg_temp.require((SELECT count(*)=5 FROM commercial_input) AND (SELECT count(*)=3 AND sum(monthly)=2250000
+    AND bool_and(starts<=t AND t<ends) FROM purchase_input CROSS JOIN run_context),'Incomplete commercial manifest');
 CREATE TEMP VIEW owner_input AS SELECT s.*, a.uid,a.email,a.phone,'MVPSEED Owner '||a.n AS business,
     'T-'||replace(s.id::text,'-','') AS tenant_code,
     jsonb_build_object('name',s.name,'address',s.address,'lotType',s.type,'totalSlots',s.capacity,
@@ -402,9 +447,10 @@ if (!$IsolatedProject) {
     $IsolatedProject = Read-Host 'Name of the explicitly authorized isolated local Compose project (empty cancels)'
     if ($IsolatedProject -cnotmatch '^[a-z0-9][a-z0-9_-]*$') { throw 'An authorized isolated project is required.' }
 }
-$files = @{'user-db'='01-user.sql'; 'facility-db'='02-facility.sql'; 'operations-db'='03-operations.sql'}
-$services = @('user-db','facility-db','operations-db')
-if ($Reset) { $services += @('payment-db','notification-db','iot-db') }
+$files = @{'user-db'='01-user.sql'; 'facility-db'='02-facility.sql'; 'operations-db'='03-operations.sql'; 'payment-db'='04-payment.sql'}
+$applyOrder = @('user-db','facility-db','payment-db','operations-db')
+$services = $applyOrder
+if ($Reset) { $services += @('notification-db','iot-db') }
 $containers = @{}
 $compose = @('compose','--project-name',$IsolatedProject,'-f',(Join-Path $root 'compose.schema-integration.yml'))
 $mutex = [Threading.Mutex]::new($false,"SmartPark-MVP-SEED-V1-$IsolatedProject")
@@ -438,27 +484,59 @@ try {
     }
     $appliedTime = if ($requestedTime) { $requestedTime } elseif ($userAnchor) { $userAnchor } else { Format-Instant $started }
     $modeName = if ($Reset) { 'reset' } else { 'normal' }
-    Write-Host "Checkpoint A | project=$IsolatedProject | mode=$modeName | reference=$appliedTime | execution=$(Format-Instant $started)"
+    Write-Host "Checkpoint B | project=$IsolatedProject | mode=$modeName | reference=$appliedTime | execution=$(Format-Instant $started)"
+    # The immutable revision date identifies a local B commit, independently of A.
+    $firstCommercial = $data.commercial[0]
+    $revisionSources = [ordered]@{
+        'payment-db'=@('policy_revisions',$firstCommercial.tariffrev)
+        'operations-db'=@('parking_pass_plan_revisions',$firstCommercial.planrev)
+    }
+    $commercialTimes = @{}
+    foreach ($s in $revisionSources.Keys) {
+        $table,$key = $revisionSources[$s]
+        $commercialTimes[$s] = Invoke-Database $s "SELECT to_char((effective_from AT TIME ZONE 'UTC')+interval '90 days','YYYY-MM-DD`"T`"HH24:MI:SS.US`"Z`"') FROM public.$table WHERE id='$key';"
+    }
+    $payTime = $commercialTimes['payment-db']
+    $opsTime = $commercialTimes['operations-db']
+    if (($payTime -and !$facilityAnchor) -or ($opsTime -and !$payTime)) { throw 'Commercial phases exist out of order. Inspect before recovery.' }
+    $oldTimes = @(@($payTime,$opsTime,$facilityAnchor) | Where-Object { $_ -and $_ -ne $userAnchor } | Select-Object -Unique)
+    $outOfOrder = ($payTime -eq $userAnchor -and $payTime -and $facilityAnchor -ne $userAnchor) -or
+        ($opsTime -eq $userAnchor -and $opsTime -and $payTime -ne $userAnchor)
+    if ($outOfOrder -or $oldTimes.Count -gt 1 -or ($oldTimes.Count -and !($Reset -and $requestedTime -eq $userAnchor))) {
+        throw "Mixed commercial timelines: User=$userAnchor Facility=$facilityAnchor Payment=$payTime Operations=$opsTime. Inspect and explicitly resume at User T."
+    }
     $phase = 'credential preparation'
     New-PasswordHashes
+    if ($Reset) {
+        foreach ($s in $revisionSources.Keys) {
+            if ($commercialTimes[$s]) {
+                $phase = "$s original commercial timeline verification"
+                Invoke-Database $s (Get-DataSql $s 'verify' $commercialTimes[$s]) | Where-Object { $_ }
+            }
+        }
+    }
     foreach ($s in $services) {
         $phase = "$s preflight"
         Write-Host $phase
         Invoke-Database $s (Get-DataSql $s 'check') | Where-Object { $_ }
     }
-    foreach ($s in 'user-db','facility-db','operations-db') {
+    foreach ($s in $applyOrder) {
+        if ($s -eq 'operations-db') {
+            $phase = 'Payment verification before exposing Operations coverage'
+            Invoke-Database 'payment-db' (Get-DataSql 'payment-db' 'verify') | Where-Object { $_ }
+        }
         $phase = "$s apply"
         Write-Host $phase
         Invoke-Database $s (Get-DataSql $s 'apply') | Where-Object { $_ }
         $committed += $s
     }
-    foreach ($s in 'user-db','facility-db','operations-db') {
+    foreach ($s in $applyOrder) {
         $phase = "$s persisted-state verification"
         Invoke-Database $s (Get-DataSql $s 'verify') | Where-Object { $_ }
     }
     if ((Read-Anchor 'user-db') -ne $appliedTime -or (Read-Anchor 'facility-db') -ne $appliedTime) { throw 'Reference-time anchors disagree.' }
     Show-Inventory $data
-    Write-Host "Verified Checkpoint A foundation in $($committed -join ', '). No commercial or visit fixtures implemented."
+    Write-Host "Verified foundation and commercial rows against the shared manifest in $($committed -join ', '). Application acceptance requires configured services."
 } catch {
     Write-Warning "Stopped at $phase. Acknowledged commits: [$($committed -join ', ')]. Inspect before retrying an ambiguous commit."
     throw
