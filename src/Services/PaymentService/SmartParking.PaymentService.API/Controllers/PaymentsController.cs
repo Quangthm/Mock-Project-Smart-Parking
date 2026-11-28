@@ -4,17 +4,19 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SmartParking.PaymentService.API.Common;
 using SmartParking.PaymentService.Application.DTOs.Invoices;
 using SmartParking.PaymentService.Application.DTOs.Payments;
 using SmartParking.PaymentService.Application.Usecase.CollectCashPayment;
-using SmartParking.PaymentService.Application.Usecase.ConfirmCashPayment;
 using SmartParking.PaymentService.Application.Usecase.CreatePaymentOrder;
 using SmartParking.PaymentService.Application.Usecase.GetInvoice;
 using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Application.Usecase.InitiateCheckout;
 using SmartParking.PaymentService.Application.Usecase.PrepareParkingFeeOrder;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
+using SmartParking.PaymentService.Application.Usecase.SimulateDemoPayment;
+using SmartParking.PaymentService.Infrastructure.Options;
 
 namespace SmartParking.PaymentService.API.Controllers;
 
@@ -25,15 +27,18 @@ public class PaymentsController : ControllerBase
     private readonly IMediator _mediator;
     private readonly ILogger<PaymentsController> _logger;
     private readonly IHostEnvironment _environment;
+    private readonly PayOsOptions _payOsOptions;
 
     public PaymentsController(
         IMediator mediator,
         ILogger<PaymentsController> logger,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        IOptions<PayOsOptions>? payOsOptions = null)
     {
         _mediator = mediator;
         _logger = logger;
         _environment = environment;
+        _payOsOptions = payOsOptions?.Value ?? new PayOsOptions();
     }
 
     [HttpGet("reservations/{reservationId:guid}/checkout-state")]
@@ -69,13 +74,21 @@ public class PaymentsController : ControllerBase
 
     [HttpPost("orders/{orderId:guid}/demo-pay")]
     [Authorize]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> DemoPay(Guid orderId, CancellationToken cancellationToken)
     {
-        if (!_environment.IsDevelopment())
+        var demoBypassEnabled = _payOsOptions.EnableDemoBypass ?? _environment.IsDevelopment();
+        if (!demoBypassEnabled)
             return NotFound();
 
         var result = await _mediator.Send(
-            new ConfirmCashPaymentCommand(orderId, Domain.Enums.PaymentMethod.PAYOS),
+            new SimulateDemoPayOsPaymentCommand(orderId),
             cancellationToken);
         return Ok(new { success = true, data = result, demo = true });
     }

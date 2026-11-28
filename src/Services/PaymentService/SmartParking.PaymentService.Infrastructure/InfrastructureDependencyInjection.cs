@@ -37,6 +37,7 @@ public static class InfrastructureDependencyInjection
         services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
         services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
         services.AddScoped<IPaymentSucceededPublisher, PaymentSucceededPublisher>();
+        services.AddScoped<IPayOsWebhookSimulatorPort, PayOsWebhookSimulatorAdapter>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentActor, CurrentActorAdapter>();

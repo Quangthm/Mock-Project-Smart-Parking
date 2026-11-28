@@ -11,6 +11,7 @@ using SmartParking.PaymentService.Application.Usecase.CalculateParkingFee;
 using SmartParking.PaymentService.Application.Usecase.GetPaymentStatus;
 using SmartParking.PaymentService.Application.Usecase.InitiateCheckout;
 using SmartParking.PaymentService.Application.Usecase.ProcessWebhook;
+using SmartParking.PaymentService.Application.Usecase.SimulateDemoPayment;
 using SmartParking.PaymentService.Domain.Pricing;
 using SmartParking.PaymentService.Infrastructure;
 using SmartParking.PaymentService.Persistence;
@@ -55,11 +56,13 @@ public class DependencyInjectionTests
         Assert.NotNull(provider.GetService<IValidator<GetPaymentStatusQuery>>());
         Assert.NotNull(provider.GetService<IValidator<SmartParking.PaymentService.Application.Usecase.PrepareParkingFeeOrder.PrepareParkingFeeOrderCommand>>());
         Assert.NotNull(provider.GetService<IValidator<SmartParking.PaymentService.Application.Usecase.CollectCashPayment.CollectCashPaymentCommand>>());
+        Assert.NotNull(provider.GetService<IValidator<SimulateDemoPayOsPaymentCommand>>());
 
         // 4. CQRS Handlers
         Assert.NotNull(provider.GetService<IRequestHandler<CalculateParkingFeeQuery, PricingCalculationResult>>());
         Assert.NotNull(provider.GetService<IRequestHandler<InitiatePaymentCheckoutCommand, PaymentCheckoutResponseDto>>());
         Assert.NotNull(provider.GetService<IRequestHandler<ProcessPayOsWebhookCommand, ProcessPayOsWebhookResult>>());
+        Assert.NotNull(provider.GetService<IRequestHandler<SimulateDemoPayOsPaymentCommand, PaymentTransactionStatusDto>>());
         Assert.NotNull(provider.GetService<IRequestHandler<GetPaymentStatusQuery, PaymentTransactionStatusDto>>());
         Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.PrepareParkingFeeOrder.PrepareParkingFeeOrderCommand, SmartParking.PaymentService.Application.DTOs.Invoices.PrepareParkingFeeOrderResponseDto>>());
         Assert.NotNull(provider.GetService<IRequestHandler<SmartParking.PaymentService.Application.Usecase.CollectCashPayment.CollectCashPaymentCommand, SmartParking.PaymentService.Application.DTOs.Invoices.CustomerInvoiceResponseDto>>());
@@ -71,6 +74,10 @@ public class DependencyInjectionTests
         var tariffPort = provider.GetService<IParkingTariffPort>();
         Assert.NotNull(tariffPort);
         Assert.IsType<TariffPersistenceAdapter>(tariffPort);
+        using (var portScope = provider.CreateScope())
+        {
+            Assert.NotNull(portScope.ServiceProvider.GetService<IPayOsWebhookSimulatorPort>());
+        }
 
         // 6. Persistence Repositories & UnitOfWork
         using var scope = provider.CreateScope();

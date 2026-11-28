@@ -157,6 +157,7 @@ public sealed class PaymentExceptionMapper
 
             PaymentDomainException.OrderAlreadyPaid or
             "ORDER_ALREADY_PAID_ONLINE" or
+            "ORDER_CANCELLED" or
             "ORDER_INVALID_STATUS" or
             PaymentDomainException.IdempotencyPayloadMismatch or
             "IDEMPOTENCY_CONFLICT" or

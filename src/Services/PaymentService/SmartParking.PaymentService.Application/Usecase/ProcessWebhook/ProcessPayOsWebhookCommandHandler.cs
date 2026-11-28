@@ -203,7 +203,7 @@ public class ProcessPayOsWebhookCommandHandler : IRequestHandler<ProcessPayOsWeb
                 SiteId = order.SiteId,
                 ReferenceType = order.ReferenceType.ToString(),
                 ReferenceId = order.ReferenceId,
-                PlateNumber = invoice?.PricingSnapshot.PlateNumber,
+                PlateNumber = invoice?.PricingSnapshot.PlateNumber ?? order.PlateNumber,
                 AccountId = order.AccountId,
                 Amount = parseResult.AmountVnd,
                 ParkingFee = invoice?.BaseParkingFee ?? order.FinalAmount,

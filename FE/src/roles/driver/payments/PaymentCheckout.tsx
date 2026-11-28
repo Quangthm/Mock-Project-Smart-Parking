@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { UntitledIcon } from "../../../components/icon/UntitledIcon"
-import { Modal } from "../../../components/ui/Modal"
-import { classifyPaymentStatus, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
+import { classifyPaymentStatus, DemoPaymentUnavailableError, paymentApi, isPaymentOrderId, type CheckoutResponse } from "../../../lib/paymentApi"
 import { useServerRefresh } from "../../../lib/serverRefresh"
 import { getSessionGeneration } from "../../../lib/authApi"
 import qrLogo from "../../../assets/payment-qr.png"
@@ -72,6 +71,8 @@ export function PaymentCheckout({
   )
   const providedOrderId = reservationOrderId ?? bookingOrderId
   const orderId = providedOrderId ?? manualOrderId
+  const demoMode = !showMethodPicker && Boolean(providedOrderId) &&
+    (import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_PAYMENT === "true")
   const autoGenerate = !showMethodPicker && Boolean(providedOrderId)
   const [selected, setSelected] = useState(!showMethodPicker)
   const [busy, setBusy] = useState(false)
@@ -79,6 +80,10 @@ export function PaymentCheckout({
   const autoStartedFor = useRef<string | null>(null)
   const mounted = useRef(false)
   const [error, setError] = useState("")
+  const [demoBusy, setDemoBusy] = useState(false)
+  const [demoError, setDemoError] = useState("")
+  const [demoUnavailable, setDemoUnavailable] = useState(false)
+  const [demoConfirmed, setDemoConfirmed] = useState(false)
   const [checkout, setCheckout] = useState<CheckoutResponse | null>(null)
   const [status, setStatus] = useState<"pending" | "success" | "failed">("pending")
   const [demoOpen, setDemoOpen] = useState(false)
@@ -114,7 +119,7 @@ export function PaymentCheckout({
   }, 5000)
 
   const startCheckout = useCallback(async (automatic: boolean) => {
-    if (paymentConfirmed || !selected || !isPaymentOrderId(orderId) || submitting.current) return
+    if (paymentConfirmed || demoConfirmed || !selected || !isPaymentOrderId(orderId) || submitting.current) return
     const deadline = holdExpiresAt ? Date.parse(holdExpiresAt) : null
     if (automatic && deadline === null) {
       setError("The reservation payment deadline is unavailable. Refresh the reservation status.")
@@ -164,7 +169,7 @@ export function PaymentCheckout({
       submitting.current = false
       if (current()) setBusy(false)
     }
-  }, [paymentConfirmed, selected, orderId, holdExpiresAt, providedOrderId, reservationRequestId])
+  }, [paymentConfirmed, demoConfirmed, selected, orderId, holdExpiresAt, providedOrderId, reservationRequestId])
 
   useEffect(() => {
     if (paymentConfirmed || !autoGenerate || !isPaymentOrderId(orderId)) return
@@ -185,19 +190,54 @@ export function PaymentCheckout({
   }
 
   const holdExpired = !!holdExpiresAt && !(Date.parse(holdExpiresAt) > now)
+  const confirmed = paymentConfirmed || demoConfirmed
+  const canDemoPay = demoMode && !confirmed && !demoUnavailable && !holdExpired &&
+    status !== "success" && isPaymentOrderId(orderId)
+  const actionBusy = busy || demoBusy
+
+  async function demoPay() {
+    if (!canDemoPay || submitting.current) return
+    if (holdExpiresAt && !(Date.parse(holdExpiresAt) > Date.now())) {
+      setNow(Date.now())
+      return
+    }
+    const generation = getSessionGeneration()
+    const current = () => mounted.current && generation === getSessionGeneration()
+    submitting.current = true
+    setDemoBusy(true)
+    setDemoError("")
+    try {
+      await paymentApi.demoPay(orderId)
+      if (current()) setDemoConfirmed(true)
+    } catch (failure) {
+      if (current()) {
+        if (failure instanceof DemoPaymentUnavailableError) setDemoUnavailable(true)
+        setDemoError(failure instanceof Error ? failure.message : "Demo payment could not be confirmed.")
+      }
+    } finally {
+      submitting.current = false
+      if (current()) setDemoBusy(false)
+    }
+  }
+
   const expired = holdExpired || (checkout ? new Date(checkout.expiresAt).getTime() <= now : false)
   const payable = !!checkout && status === "pending" && !expired
   const showQr = payable && Boolean(checkout?.qrCode?.trim())
   const paymentStatus = status === "success" ? "Payment confirmed" : status === "failed" ? "Payment failed" : expired ? "Link expired" : "Awaiting confirmation"
+  const demoButton = canDemoPay && <button type="button" className="btn-outline payos-bypass-button" disabled={actionBusy}
+    aria-busy={demoBusy} title="Simulate payment without transferring money" onClick={() => void demoPay()}>
+    <UntitledIcon name="zap" size={16} />
+    {demoBusy ? "Confirming…" : "ByPass"}
+  </button>
 
   return <section className="card payos-checkout" aria-labelledby="payos-checkout-title">
     <header className="payos-checkout-heading">
       <h3 id="payos-checkout-title">Pay with payOS VietQR</h3>
-      {!paymentConfirmed && !checkout && !autoGenerate && <p>Generate a QR code for this payment order.</p>}
+      {!confirmed && !checkout && !autoGenerate && !demoMode && <p>Generate a QR code for this payment order.</p>}
     </header>
-    {paymentConfirmed ? <div className="payos-transfer-summary">
+    {confirmed ? <div className="payos-transfer-summary">
       <strong>Payment received</strong>
-      <span className="payos-transfer-status" data-status="success" role="status">Payment confirmed</span>
+      <span className="payos-transfer-status" data-status="success" role="status">{demoConfirmed ? "Demo payment confirmed" : "Payment confirmed"}</span>
     </div> : !checkout && !showMethodPicker && !isPaymentOrderId(orderId) ? <div className="payos-checkout-unavailable" role="status">
       <strong>QR payment is not available for this booking yet.</strong>
       <p>SmartParking needs a payment order from the booking service before it can request a real payOS QR code. Check your reservation status before trying again.</p>
@@ -215,10 +255,11 @@ export function PaymentCheckout({
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
       {holdExpired && <p role="status">The reservation payment deadline has passed.</p>}
       {autoGenerate
-        ? !holdExpired && (busy || !error
+        ? !holdExpired && !demoBusy && (busy || !error
           ? <p role="status">Generating payment QR…</p>
           : error && holdExpiresAt && <button type="submit" className="btn-primary payos-pay-button">Retry generating QR</button>)
-        : <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || busy || holdExpired}>{busy ? "Generating QR…" : "Generate payment QR"}</button>}
+        : <button type="submit" className="btn-primary payos-pay-button" disabled={!selected || !isPaymentOrderId(orderId) || actionBusy || holdExpired}>{busy ? "Generating QR…" : "Generate payment QR"}</button>}
+      {demoButton && <div className="payos-checkout-actions">{demoButton}</div>}
     </form> : <div className="payos-checkout-details" data-qr={showQr}>
       {showQr && <figure className="payos-qr-panel">
         <div><QRCodeSVG value={checkout.qrCode} size={232} marginSize={4} title="Scan this payOS VietQR to pay" /></div>
@@ -241,8 +282,8 @@ export function PaymentCheckout({
         </dl>
       </div>
       <div className="payos-checkout-actions">
-        {payable && <button type="button" className="btn-primary" onClick={() => window.location.assign(checkout.checkoutUrl)}>Open payOS checkout</button>}
-        <button type="button" className="btn-outline" onClick={async () => {
+        {payable && <button type="button" className="btn-primary" disabled={actionBusy} onClick={() => window.location.assign(checkout.checkoutUrl)}>Open payOS checkout</button>}
+        <button type="button" className="btn-outline" disabled={actionBusy} onClick={async () => {
           try {
             const result = await paymentApi.status(checkout.paymentTransactionId)
             if (result.orderId.toLowerCase() !== orderId.trim().toLowerCase()) throw new Error("Payment Service returned a different order.")
@@ -250,9 +291,11 @@ export function PaymentCheckout({
             setError("")
           } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not check payment status. Please try again.") }
         }}>Check payment status</button>
+        {demoButton}
       </div>
       {error && <p role="alert" className="payos-checkout-error">{error}</p>}
     </div>}
-    {!paymentConfirmed && <p className="payos-checkout-note">SmartParking confirms payment only after Payment Service verifies the transaction. Scanning the QR alone does not mark it paid.</p>}
+    {!confirmed && demoError && <p role="alert" className="payos-checkout-error">{demoError}</p>}
+    {!confirmed && <p className="payos-checkout-note">SmartParking confirms payment only after Payment Service verifies the transaction. Scanning the QR alone does not mark it paid.</p>}
   </section>
 }
