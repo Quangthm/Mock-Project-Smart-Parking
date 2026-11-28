@@ -699,6 +699,14 @@ if (!$SkipDatabase) {
             else { Write-Host "    $runnerLine" -ForegroundColor DarkGray }
         }
     }
+    if ($RecreateDb) {
+        $frontendResetDirectory = Join-Path $taskRoot 'FE/.cache'
+        $null = [IO.Directory]::CreateDirectory($frontendResetDirectory)
+        [IO.File]::WriteAllText(
+            (Join-Path $frontendResetDirectory 'db-reset-id'),
+            [Guid]::NewGuid().ToString('N')
+        )
+    }
 }
 
 Write-Host '[5/7] Configuring user-secrets for User, Facility, Operation, Payment, Notification...' -ForegroundColor Cyan
